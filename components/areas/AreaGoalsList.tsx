@@ -17,7 +17,9 @@ export function AreaGoalsList({ goals }: AreaGoalsListProps) {
       </div>
 
       {goals.length === 0 ? (
-        <p className="px-5 py-8 text-sm text-neutral-500">Inga mål registrerade.</p>
+        <p className="px-5 py-8 text-sm text-neutral-500">
+          Inga mål ännu.
+        </p>
       ) : (
         <ul className="divide-y divide-neutral-100">
           {goals.map((goal) => (
@@ -26,7 +28,10 @@ export function AreaGoalsList({ goals }: AreaGoalsListProps) {
                 <div className="min-w-0">
                   <p className="font-medium text-neutral-900">{goal.title}</p>
                   <p className="mt-1 text-xs text-neutral-500">
-                    {goal.owner} · Deadline {formatDateSv(goal.deadline)}
+                    {goal.owner ?? "Ej angiven"}
+                    {goal.deadline
+                      ? ` · Deadline ${formatDateSv(goal.deadline)}`
+                      : null}
                   </p>
                 </div>
                 <StatusPill status={goal.status} />
@@ -34,12 +39,12 @@ export function AreaGoalsList({ goals }: AreaGoalsListProps) {
               <div className="mt-3">
                 <div className="mb-1 flex justify-between text-xs text-neutral-500">
                   <span>Progress</span>
-                  <span>{goal.progress} %</span>
+                  <span>{goal.progress ?? 0} %</span>
                 </div>
                 <div className="h-1.5 overflow-hidden rounded-full bg-neutral-100">
                   <div
                     className="h-full rounded-full bg-[#5b5bd6]"
-                    style={{ width: `${goal.progress}%` }}
+                    style={{ width: `${goal.progress ?? 0}%` }}
                   />
                 </div>
               </div>

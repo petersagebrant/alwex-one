@@ -1,15 +1,15 @@
 import type { Metadata } from "next";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { AreaCardGrid } from "@/components/areas/AreaCardGrid";
-import { getBusinessAreaSummaries } from "@/data/mock";
+import { getBusinessAreas } from "@/services/businessAreas";
 
 export const metadata: Metadata = {
   title: "Affärsområden | Alwex One",
   description: "Översikt över Alwex affärsområden, mål och aktiviteter",
 };
 
-export default function AreasPage() {
-  const areas = getBusinessAreaSummaries();
+export default async function AreasPage() {
+  const areas = await getBusinessAreas();
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-[#f7f8fa] text-neutral-900">
@@ -27,7 +27,13 @@ export default function AreasPage() {
           </div>
         </div>
 
-        <AreaCardGrid areas={areas} />
+        {areas.length === 0 ? (
+          <p className="text-sm text-neutral-500">
+            Inga verksamheter finns ännu.
+          </p>
+        ) : (
+          <AreaCardGrid areas={areas} />
+        )}
       </main>
     </div>
   );

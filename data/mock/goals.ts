@@ -1,6 +1,14 @@
-import type { Goal } from "@/types";
+type MockGoal = {
+  id: string;
+  areaSlug: string;
+  title: string;
+  owner: string;
+  deadline: string;
+  status: "Grön" | "Gul" | "Röd";
+  progress: number;
+};
 
-export const goals: Goal[] = [
+export const goals: MockGoal[] = [
   {
     id: "g-kf-1",
     areaSlug: "kyl-frys",

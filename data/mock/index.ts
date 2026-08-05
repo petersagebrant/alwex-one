@@ -2,7 +2,6 @@ import type {
   Activity,
   BusinessArea,
   BusinessAreaSummary,
-  Goal,
   HistoryEvent,
   Kpi,
 } from "@/types";
@@ -38,7 +37,7 @@ export function getBusinessAreaBySlug(slug: string): BusinessArea | undefined {
   return businessAreas.find((area) => area.slug === slug);
 }
 
-export function getGoalsByArea(slug: string): Goal[] {
+export function getGoalsByArea(slug: string) {
   return goals.filter((goal) => goal.areaSlug === slug);
 }
 

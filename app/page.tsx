@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 type StatusTone = "Grön" | "Gul" | "Röd";
 
 type KpiCard = {
@@ -259,15 +261,25 @@ export default function Home() {
 
         <section aria-labelledby="areas-heading" className="space-y-4">
           <div>
-            <h2
-              id="areas-heading"
-              className="text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl"
-            >
-              Affärsområden
-            </h2>
-            <p className="mt-1 text-sm text-slate-600">
-              Status, ansvar och målbild per affärsområde.
-            </p>
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h2
+                  id="areas-heading"
+                  className="text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl"
+                >
+                  Affärsområden
+                </h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  Status, ansvar och målbild per affärsområde.
+                </p>
+              </div>
+              <Link
+                href="/areas"
+                className="text-sm font-medium text-slate-700 underline-offset-4 hover:underline"
+              >
+                Visa alla
+              </Link>
+            </div>
           </div>
 
           <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -294,12 +306,12 @@ export default function Home() {
                     {area.comment}
                   </p>
 
-                  <button
-                    type="button"
+                  <Link
+                    href={`/areas/${area.id}`}
                     className="mt-5 inline-flex w-full items-center justify-center rounded-xl bg-[#0b1220] px-4 py-2.5 text-sm font-semibold text-white transition duration-200 hover:bg-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 active:scale-[0.99]"
                   >
                     Öppna målbild
-                  </button>
+                  </Link>
                 </article>
               </li>
             ))}

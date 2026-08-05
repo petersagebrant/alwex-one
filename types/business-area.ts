@@ -1,0 +1,10 @@
+import type { StatusTone } from "./status";
+
+export type BusinessArea = {
+  slug: string;
+  name: string;
+  description: string;
+  manager: string;
+  status: StatusTone;
+  updatedAt: string;
+};

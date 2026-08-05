@@ -13,8 +13,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Alwex Målportal",
-  description: "Dashboard för mål och uppföljning per affärsområde",
+  title: {
+    default: "Alwex One",
+    template: "%s | Alwex One",
+  },
+  description: "Ledning, målstyrning och verksamhetsuppföljning",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

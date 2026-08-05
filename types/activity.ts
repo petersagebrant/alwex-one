@@ -1,11 +1,33 @@
-import type { StatusTone } from "./status";
+export type ActivityStatus =
+  | "Ej påbörjad"
+  | "Pågår"
+  | "Klar"
+  | "Försenad";
+
+export type ActivityPriority = "Låg" | "Normal" | "Hög";
 
 export type Activity = {
   id: string;
-  areaSlug: string;
+  businessAreaId: string;
+  goalId: string | null;
   title: string;
-  owner: string;
-  dueDate: string;
-  status: "Öppen" | "Pågår" | "Klar";
-  priority: StatusTone;
+  description: string | null;
+  owner: string | null;
+  status: ActivityStatus;
+  priority: ActivityPriority;
+  deadline: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateActivityInput = {
+  businessAreaId: string;
+  goalId?: string | null;
+  title: string;
+  description?: string;
+  owner?: string;
+  status: ActivityStatus;
+  priority: ActivityPriority;
+  deadline?: string;
 };

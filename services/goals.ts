@@ -4,7 +4,10 @@ import {
   insertGoal,
 } from "@/lib/supabase/goals";
 import { fetchBusinessAreas } from "@/lib/supabase/business-areas";
+import { recordAuditLog } from "@/services/auditLog";
 import type { CreateGoalInput, Goal, StatusTone } from "@/types";
+
+const DEFAULT_ACTOR = "Peter Sagebrant";
 
 function toStatusTone(value: string): StatusTone {
   if (value === "Grön" || value === "Gul" || value === "Röd") {
@@ -93,6 +96,15 @@ export async function createGoal(input: CreateGoalInput): Promise<Goal> {
     current_value: input.currentValue?.trim() || null,
     deadline: input.deadline || null,
     progress,
+  });
+
+  await recordAuditLog({
+    entityType: "goal",
+    entityId: row.id,
+    action: "created",
+    description: `Skapade målet "${row.title}"`,
+    actorName: input.owner?.trim() || DEFAULT_ACTOR,
+    businessAreaId: row.business_area_id,
   });
 
   return mapGoalRow(row);

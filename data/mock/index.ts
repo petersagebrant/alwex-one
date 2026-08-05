@@ -1,5 +1,4 @@
 import type {
-  Activity,
   BusinessArea,
   BusinessAreaSummary,
   HistoryEvent,
@@ -45,7 +44,7 @@ export function getKpisByArea(slug: string): Kpi[] {
   return kpis.filter((kpi) => kpi.areaSlug === slug);
 }
 
-export function getActivitiesByArea(slug: string): Activity[] {
+export function getActivitiesByArea(slug: string) {
   return activities.filter((activity) => activity.areaSlug === slug);
 }
 

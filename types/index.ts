@@ -1,7 +1,23 @@
 export type { StatusTone } from "./status";
 export type { BusinessArea } from "./business-area";
 export type { Goal, CreateGoalInput } from "./goal";
-export type { Activity } from "./activity";
+export type {
+  Activity,
+  ActivityStatus,
+  ActivityPriority,
+  CreateActivityInput,
+} from "./activity";
+export type {
+  ActivityComment,
+  CreateActivityCommentInput,
+} from "./activity-comment";
+export type {
+  Decision,
+  DecisionStatus,
+  CreateDecisionInput,
+  UpdateDecisionInput,
+} from "./decision";
+export type { AuditLogEntry, CreateAuditLogInput } from "./audit-log";
 export type { Kpi } from "./kpi";
 export type { HistoryEvent } from "./history";
 

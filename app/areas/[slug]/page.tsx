@@ -7,13 +7,13 @@ import { AreaGoalsList } from "@/components/areas/AreaGoalsList";
 import { AreaHistoryList } from "@/components/areas/AreaHistoryList";
 import { AreaKpiList } from "@/components/areas/AreaKpiList";
 import {
-  getActivitiesByArea,
   getAllAreaSlugs,
   getBusinessAreaBySlug,
   getHistoryByArea,
   getKpisByArea,
 } from "@/data/mock";
 import { fetchBusinessAreaBySlug } from "@/lib/supabase/business-areas";
+import { getActivitiesByBusinessAreaId } from "@/services/activities";
 import { getGoalsByBusinessAreaId } from "@/services/goals";
 
 type AreaDetailPageProps = {
@@ -48,9 +48,11 @@ export default async function AreaDetailPage({ params }: AreaDetailPageProps) {
   const areaGoals = dbArea
     ? await getGoalsByBusinessAreaId(dbArea.id)
     : [];
+  const areaActivities = dbArea
+    ? await getActivitiesByBusinessAreaId(dbArea.id)
+    : [];
 
   const areaKpis = getKpisByArea(slug);
-  const areaActivities = getActivitiesByArea(slug);
   const areaHistory = getHistoryByArea(slug);
 
   return (

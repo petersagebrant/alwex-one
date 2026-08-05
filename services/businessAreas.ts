@@ -4,7 +4,10 @@ import {
   fetchBusinessAreas,
   insertBusinessArea,
 } from "@/lib/supabase/business-areas";
+import { recordAuditLog } from "@/services/auditLog";
 import type { BusinessAreaSummary, StatusTone } from "@/types";
+
+const DEFAULT_ACTOR = "Peter Sagebrant";
 
 function toStatusTone(value: string): StatusTone {
   if (value === "Grön" || value === "Gul" || value === "Röd") {
@@ -82,11 +85,20 @@ export async function createBusinessArea(
 
   const slug = await uniqueSlug(slugifyName(name));
 
-  await insertBusinessArea({
+  const row = await insertBusinessArea({
     name,
     slug,
     description: data.description.trim(),
     manager: data.manager.trim(),
     status: data.status,
+  });
+
+  await recordAuditLog({
+    entityType: "business_area",
+    entityId: row.id,
+    action: "created",
+    description: `Skapade affärsområdet "${row.name}"`,
+    actorName: data.manager.trim() || DEFAULT_ACTOR,
+    businessAreaId: row.id,
   });
 }

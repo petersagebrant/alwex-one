@@ -1,6 +1,14 @@
-import type { Activity } from "@/types";
+type MockActivity = {
+  id: string;
+  areaSlug: string;
+  title: string;
+  owner: string;
+  dueDate: string;
+  status: "Öppen" | "Pågår" | "Klar";
+  priority: "Grön" | "Gul" | "Röd";
+};
 
-export const activities: Activity[] = [
+export const activities: MockActivity[] = [
   {
     id: "a-kf-1",
     areaSlug: "kyl-frys",

@@ -48,13 +48,185 @@ export default async function Home() {
     actionGoals,
     upcomingDecisions,
     recentEvents,
+    vdFocus,
   } = await getDashboardData();
+
+  const vdCardToneClass: Record<string, string> = {
+    red: "border-rose-200/80 bg-rose-50/70",
+    yellow: "border-amber-200/80 bg-amber-50/70",
+    green: "border-emerald-200/80 bg-emerald-50/70",
+  };
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-[#eef2f6] font-sans text-slate-800">
       <AppHeader current="home" />
 
       <main className="mx-auto w-full max-w-7xl flex-1 space-y-8 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+        <section
+          aria-labelledby="vd-focus-heading"
+          className={`rounded-2xl border p-5 shadow-[0_6px_18px_rgba(15,23,42,0.05)] sm:p-6 ${vdCardToneClass[vdFocus.cardTone] ?? "border-slate-200/80 bg-white"}`}
+        >
+          <h2
+            id="vd-focus-heading"
+            className="text-lg font-semibold tracking-tight text-slate-900 sm:text-xl"
+          >
+            VD:s uppmärksamhet idag
+          </h2>
+          <p className="mt-2 text-sm text-slate-700">God morgon Peter.</p>
+
+          <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-xl border border-slate-200/70 bg-white/80 px-3 py-3">
+              <dt className="text-xs text-slate-500">KPI att följa upp</dt>
+              <dd className="mt-1 text-xl font-semibold text-slate-900">
+                {vdFocus.summary.kpiFollowUpCount}
+              </dd>
+            </div>
+            <div className="rounded-xl border border-slate-200/70 bg-white/80 px-3 py-3">
+              <dt className="text-xs text-slate-500">Försenade aktiviteter</dt>
+              <dd className="mt-1 text-xl font-semibold text-slate-900">
+                {vdFocus.summary.delayedActivityCount}
+              </dd>
+            </div>
+            <div className="rounded-xl border border-slate-200/70 bg-white/80 px-3 py-3">
+              <dt className="text-xs text-slate-500">Öppna beslut</dt>
+              <dd className="mt-1 text-xl font-semibold text-slate-900">
+                {vdFocus.summary.openDecisionCount}
+              </dd>
+            </div>
+            <div className="rounded-xl border border-slate-200/70 bg-white/80 px-3 py-3">
+              <dt className="text-xs text-slate-500">AO med röd status</dt>
+              <dd className="mt-1 text-xl font-semibold text-slate-900">
+                {vdFocus.summary.redAreaCount}
+              </dd>
+            </div>
+          </dl>
+
+          {vdFocus.kpis.length > 0 ? (
+            <div className="mt-6">
+              <h3 className="text-sm font-semibold text-slate-900">
+                KPI som kräver uppföljning
+              </h3>
+              <ul className="mt-3 divide-y divide-slate-200/80 overflow-hidden rounded-xl border border-slate-200/70 bg-white/80">
+                {vdFocus.kpis.map((kpi) => (
+                  <li
+                    key={kpi.id}
+                    className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-medium text-slate-900">{kpi.name}</p>
+                      <p className="mt-1 text-xs text-slate-600">
+                        {kpi.area} · Ansvarig {kpi.owner} · Trend {kpi.trend}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <StatusPill status={kpi.status} />
+                      <Link
+                        href={kpi.href}
+                        className="text-sm font-medium text-slate-700 underline-offset-4 hover:underline"
+                      >
+                        Öppna KPI
+                      </Link>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {vdFocus.delayedActivities.length > 0 ? (
+            <div className="mt-6">
+              <h3 className="text-sm font-semibold text-slate-900">
+                Försenade aktiviteter
+              </h3>
+              <ul className="mt-3 divide-y divide-slate-200/80 overflow-hidden rounded-xl border border-slate-200/70 bg-white/80">
+                {vdFocus.delayedActivities.map((activity) => (
+                  <li
+                    key={activity.id}
+                    className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-medium text-slate-900">
+                        {activity.title}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-600">
+                        {activity.area} · {activity.owner} · Deadline{" "}
+                        {activity.deadline}
+                      </p>
+                    </div>
+                    <Link
+                      href={activity.href}
+                      className="shrink-0 text-sm font-medium text-slate-700 underline-offset-4 hover:underline"
+                    >
+                      Öppna aktivitet
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {vdFocus.openDecisions.length > 0 ? (
+            <div className="mt-6">
+              <h3 className="text-sm font-semibold text-slate-900">
+                Öppna beslut
+              </h3>
+              <ul className="mt-3 divide-y divide-slate-200/80 overflow-hidden rounded-xl border border-slate-200/70 bg-white/80">
+                {vdFocus.openDecisions.map((decision) => (
+                  <li
+                    key={decision.id}
+                    className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-medium text-slate-900">
+                        {decision.title}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-600">
+                        {decision.area} · {decision.owner} · Förfaller{" "}
+                        {decision.dueDate}
+                      </p>
+                    </div>
+                    <Link
+                      href={decision.href}
+                      className="shrink-0 text-sm font-medium text-slate-700 underline-offset-4 hover:underline"
+                    >
+                      Öppna beslut
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {vdFocus.kpis.length === 0 &&
+          vdFocus.delayedActivities.length === 0 &&
+          vdFocus.openDecisions.length === 0 ? (
+            <p className="mt-6 text-sm text-slate-700">
+              Inga kritiska händelser idag.
+            </p>
+          ) : null}
+
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link
+              href="/admin/activities?new=1"
+              className="inline-flex items-center justify-center rounded-xl bg-[#0b1220] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+            >
+              Ny aktivitet
+            </Link>
+            <Link
+              href="/admin/kpis?new=1"
+              className="inline-flex items-center justify-center rounded-xl bg-[#0b1220] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+            >
+              Ny KPI
+            </Link>
+            <Link
+              href="/admin/decisions?new=1"
+              className="inline-flex items-center justify-center rounded-xl bg-[#0b1220] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+            >
+              Nytt beslut
+            </Link>
+          </div>
+        </section>
+
         <section aria-labelledby="kpi-heading">
           <h2 id="kpi-heading" className="sr-only">
             Nyckeltal

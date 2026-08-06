@@ -5,6 +5,7 @@ import { getAllActivityComments } from "@/services/activityComments";
 import { getRecentAuditLog } from "@/services/auditLog";
 import { getUpcomingDecisions } from "@/services/decisions";
 import { getGoals } from "@/services/goals";
+import { getKPIs } from "@/services/kpis";
 import type { StatusTone } from "@/types";
 
 export type DashboardKpi = {
@@ -56,6 +57,49 @@ export type DashboardRecentEvent = {
   href: string | null;
 };
 
+export type DashboardVdFocusTone = "red" | "yellow" | "green";
+
+export type DashboardVdFocusKpi = {
+  id: string;
+  name: string;
+  area: string;
+  status: StatusTone;
+  trend: string;
+  owner: string;
+  href: string;
+};
+
+export type DashboardVdFocusActivity = {
+  id: string;
+  title: string;
+  area: string;
+  owner: string;
+  deadline: string;
+  href: string;
+};
+
+export type DashboardVdFocusDecision = {
+  id: string;
+  title: string;
+  area: string;
+  owner: string;
+  dueDate: string;
+  href: string;
+};
+
+export type DashboardVdFocus = {
+  cardTone: DashboardVdFocusTone;
+  summary: {
+    kpiFollowUpCount: number;
+    delayedActivityCount: number;
+    openDecisionCount: number;
+    redAreaCount: number;
+  };
+  kpis: DashboardVdFocusKpi[];
+  delayedActivities: DashboardVdFocusActivity[];
+  openDecisions: DashboardVdFocusDecision[];
+};
+
 export type DashboardData = {
   kpis: DashboardKpi[];
   businessAreas: DashboardArea[];
@@ -63,6 +107,7 @@ export type DashboardData = {
   actionGoals: DashboardActionGoal[];
   upcomingDecisions: DashboardDecisionItem[];
   recentEvents: DashboardRecentEvent[];
+  vdFocus: DashboardVdFocus;
 };
 
 function toStatusTone(value: string): StatusTone {
@@ -77,15 +122,25 @@ function countStatus(count: number, zeroTone: StatusTone = "Gul"): StatusTone {
 }
 
 export async function getDashboardData(): Promise<DashboardData> {
-  const [areaRows, goals, activities, comments, upcoming, recentEvents] =
-    await Promise.all([
-      fetchBusinessAreas(),
-      getGoals(),
-      getActivities(),
-      getAllActivityComments(),
-      getUpcomingDecisions(5),
-      getRecentAuditLog(10),
-    ]);
+  const [
+    areaRows,
+    goals,
+    activities,
+    comments,
+    openDecisions,
+    recentEvents,
+    allKpis,
+  ] = await Promise.all([
+    fetchBusinessAreas(),
+    getGoals(),
+    getActivities(),
+    getAllActivityComments(),
+    getUpcomingDecisions(1000),
+    getRecentAuditLog(10),
+    getKPIs().catch(() => []),
+  ]);
+
+  const upcoming = openDecisions.slice(0, 5);
 
   const completedGoals = goals.filter((goal) => goal.status === "Grön");
   const ongoingActivities = activities.filter(
@@ -197,6 +252,63 @@ export async function getDashboardData(): Promise<DashboardData> {
   const delayedCount = delayedActivities.length;
   const areasWithRedGoalsCount = redGoalsByArea.size;
 
+  const areaManagers = new Map(
+    areaRows.map((area) => [area.id, area.manager ?? "Ej angiven"]),
+  );
+
+  const followUpKpis = allKpis.filter(
+    (kpi) => kpi.status === "Gul" || kpi.status === "Röd",
+  );
+  const redAreaCount = areaRows.filter(
+    (area) => toStatusTone(area.status) === "Röd",
+  ).length;
+  const waitingDecisionCount = openDecisions.length;
+
+  const hasCritical =
+    delayedCount > 0 ||
+    followUpKpis.some((kpi) => kpi.status === "Röd") ||
+    redAreaCount > 0;
+  const hasFollowUp =
+    followUpKpis.some((kpi) => kpi.status === "Gul") ||
+    waitingDecisionCount > 0;
+
+  const vdFocus: DashboardVdFocus = {
+    cardTone: hasCritical ? "red" : hasFollowUp ? "yellow" : "green",
+    summary: {
+      kpiFollowUpCount: followUpKpis.length,
+      delayedActivityCount: delayedCount,
+      openDecisionCount: waitingDecisionCount,
+      redAreaCount,
+    },
+    kpis: followUpKpis.map((kpi) => ({
+      id: kpi.id,
+      name: kpi.name,
+      area: kpi.businessAreaName,
+      status: kpi.status,
+      trend: kpi.trend,
+      owner: areaManagers.get(kpi.businessAreaId) ?? "Ej angiven",
+      href: `/admin/kpis?edit=${kpi.id}`,
+    })),
+    delayedActivities: delayedActivities.map((activity) => ({
+      id: activity.id,
+      title: activity.title,
+      area: areaNames.get(activity.businessAreaId) ?? "Okänt område",
+      owner: activity.owner ?? "Ej angiven",
+      deadline: activity.deadline
+        ? formatDateSv(activity.deadline)
+        : "—",
+      href: `/activities/${activity.id}`,
+    })),
+    openDecisions: openDecisions.map((decision) => ({
+      id: decision.id,
+      title: decision.title,
+      area: decision.businessAreaName,
+      owner: decision.owner ?? "Ej angiven",
+      dueDate: decision.dueDate ? formatDateSv(decision.dueDate) : "—",
+      href: `/admin/decisions?edit=${decision.id}`,
+    })),
+  };
+
   return {
     kpis: [
       {
@@ -279,5 +391,6 @@ export async function getDashboardData(): Promise<DashboardData> {
       description: event.description,
       href: event.href,
     })),
+    vdFocus,
   };
 }

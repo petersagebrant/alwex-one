@@ -5,6 +5,13 @@ type AreaKpiListProps = {
   kpis: KPI[];
 };
 
+function formatValue(value: string | null, unit: string | null): string {
+  if (!value) {
+    return "—";
+  }
+  return unit ? `${value} ${unit}` : value;
+}
+
 export function AreaKpiList({ kpis }: AreaKpiListProps) {
   return (
     <section className="rounded-xl border border-neutral-200 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
@@ -20,31 +27,42 @@ export function AreaKpiList({ kpis }: AreaKpiListProps) {
           Inga KPI registrerade ännu.
         </p>
       ) : (
-        <ul className="grid grid-cols-1 gap-px bg-neutral-100 sm:grid-cols-2">
-          {kpis.map((kpi) => (
-            <li key={kpi.id} className="bg-white px-5 py-4">
-              <div className="flex items-start justify-between gap-3">
-                <p className="text-xs font-medium text-neutral-500">
-                  {kpi.name}
-                </p>
-                <StatusPill status={kpi.status} />
-              </div>
-              <p className="mt-2 text-xl font-semibold tracking-tight text-neutral-900">
-                {kpi.currentValue ?? "—"}
-                {kpi.unit ? (
-                  <span className="ml-1 text-sm font-medium text-neutral-500">
-                    {kpi.unit}
-                  </span>
-                ) : null}
-              </p>
-              <p className="mt-1 text-xs text-neutral-500">
-                Mål: {kpi.targetValue ?? "—"}
-                {kpi.unit ? ` ${kpi.unit}` : ""}
-                {` · Trend: ${kpi.trend}`}
-              </p>
-            </li>
-          ))}
-        </ul>
+        <div className="overflow-x-auto px-5 py-4">
+          <table className="min-w-full border-separate border-spacing-0 text-left text-sm">
+            <thead>
+              <tr className="bg-neutral-50 text-neutral-600">
+                <th className="rounded-l-lg px-3 py-2.5 font-semibold">KPI</th>
+                <th className="px-3 py-2.5 font-semibold">Utfall</th>
+                <th className="px-3 py-2.5 font-semibold">Mål</th>
+                <th className="px-3 py-2.5 font-semibold">Trend</th>
+                <th className="rounded-r-lg px-3 py-2.5 font-semibold">
+                  Status
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {kpis.map((kpi) => (
+                <tr key={kpi.id}>
+                  <td className="border-b border-neutral-100 px-3 py-3 font-medium text-neutral-900">
+                    {kpi.name}
+                  </td>
+                  <td className="border-b border-neutral-100 px-3 py-3 text-neutral-700">
+                    {formatValue(kpi.currentValue, kpi.unit)}
+                  </td>
+                  <td className="border-b border-neutral-100 px-3 py-3 text-neutral-700">
+                    {formatValue(kpi.targetValue, kpi.unit)}
+                  </td>
+                  <td className="border-b border-neutral-100 px-3 py-3 text-neutral-700">
+                    {kpi.trend}
+                  </td>
+                  <td className="border-b border-neutral-100 px-3 py-3">
+                    <StatusPill status={kpi.status} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </section>
   );

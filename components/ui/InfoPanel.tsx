@@ -7,6 +7,7 @@ export type InfoPanelProps = {
   variant?: InfoPanelVariant;
   footer?: ReactNode;
   showLabel?: boolean;
+  compact?: boolean;
   className?: string;
 };
 
@@ -30,13 +31,16 @@ export function InfoPanel({
   variant = "info",
   footer,
   showLabel = true,
+  compact = false,
   className = "",
 }: InfoPanelProps) {
   const eyebrow = showLabel ? variantLabel[variant] : null;
 
   return (
     <section
-      className={`rounded-2xl border p-5 shadow-[0_6px_18px_rgba(15,23,42,0.05)] sm:p-6 ${variantClass[variant]} ${className}`}
+      className={`rounded-2xl border shadow-[0_6px_18px_rgba(15,23,42,0.05)] ${
+        compact ? "p-4" : "p-5 sm:p-6"
+      } ${variantClass[variant]} ${className}`}
     >
       {eyebrow ? (
         <p className="text-xs font-medium tracking-wide text-slate-500 uppercase">
@@ -44,15 +48,25 @@ export function InfoPanel({
         </p>
       ) : null}
       <h2
-        className={`text-lg font-semibold tracking-tight text-slate-900 sm:text-xl ${eyebrow ? "mt-1" : ""}`}
+        className={`font-semibold tracking-tight text-slate-900 ${
+          compact ? "text-base sm:text-lg" : "text-lg sm:text-xl"
+        } ${eyebrow ? "mt-1" : ""}`}
       >
         {title}
       </h2>
-      <div className="mt-3 text-sm leading-relaxed text-slate-700">
+      <div
+        className={`text-sm text-slate-700 ${
+          compact ? "mt-2 leading-snug" : "mt-3 leading-relaxed"
+        }`}
+      >
         {children}
       </div>
       {footer ? (
-        <div className="mt-5 rounded-xl border border-slate-200/70 bg-white/80 px-4 py-3 text-xs text-slate-600">
+        <div
+          className={`rounded-xl border border-slate-200/70 bg-white/80 text-xs text-slate-600 ${
+            compact ? "mt-3 px-3 py-2" : "mt-5 px-4 py-3"
+          }`}
+        >
           {footer}
         </div>
       ) : null}

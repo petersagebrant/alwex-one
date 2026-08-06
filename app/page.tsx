@@ -8,6 +8,7 @@ import {
   type UiStatus,
 } from "@/components/ui";
 import { getDashboardData } from "@/services/dashboard";
+import { getKPIs } from "@/services/kpis";
 import { formatDateTimeSv } from "@/lib/format/date";
 import type { StatusTone } from "@/types";
 
@@ -25,19 +26,71 @@ function toUiStatus(status: StatusTone): UiStatus {
   return status;
 }
 
+function formatKpiValue(
+  value: string | null | undefined,
+  unit: string | null | undefined,
+): string {
+  if (!value) {
+    return "—";
+  }
+  return unit ? `${value} ${unit}` : value;
+}
+
+function yesterdayChangeIconClass(text: string): string {
+  if (text.includes("%") || text.toLowerCase().includes("kpi")) {
+    return "bg-sky-500";
+  }
+  if (text.toLowerCase().includes("aktivitet")) {
+    return "bg-amber-500";
+  }
+  if (text.toLowerCase().includes("beslut")) {
+    return "bg-emerald-500";
+  }
+  return "bg-slate-400";
+}
+
 export default async function Home() {
-  const {
-    kpis,
-    businessAreas,
-    attentionItems,
-    actionGoals,
-    upcomingDecisions,
-    recentEvents,
-    vdFocus,
-    sinceLoginChanges,
-    vdAssistant,
-    yesterdayChanges,
-  } = await getDashboardData();
+  const [data, kpiDetails] = await Promise.all([
+    getDashboardData(),
+    getKPIs().catch(() => []),
+  ]);
+  const kpis = data?.kpis ?? [];
+  const businessAreas = data?.businessAreas ?? [];
+  const attentionItems = data?.attentionItems ?? [];
+  const actionGoals = data?.actionGoals ?? [];
+  const upcomingDecisions = data?.upcomingDecisions ?? [];
+  const recentEvents = data?.recentEvents ?? [];
+  const vdFocus = data?.vdFocus ?? {
+    cardTone: "green" as const,
+    summary: {
+      kpiFollowUpCount: 0,
+      delayedActivityCount: 0,
+      openDecisionCount: 0,
+      redAreaCount: 0,
+    },
+    kpis: [],
+    delayedActivities: [],
+    openDecisions: [],
+  };
+  const sinceLoginChanges = data?.sinceLoginChanges ?? [];
+  const vdAssistant = data?.vdAssistant ?? {
+    greeting: "",
+    intro: "",
+    highlights: [],
+    recommendation: "",
+    riskLevel: "Låg" as const,
+    riskLabel: "Låg",
+    analyzedAtLabel: "",
+  };
+  const yesterdayChanges = data?.yesterdayChanges ?? [];
+  const assistantHighlights =
+    vdAssistant.highlights ??
+    (vdAssistant as { situationLines?: string[] }).situationLines ??
+    [];
+  const focusKpis = vdFocus.kpis ?? [];
+  const kpiDetailById = new Map(
+    (kpiDetails ?? []).map((kpi) => [kpi.id, kpi]),
+  );
 
   const vdCardToneClass: Record<string, string> = {
     red: "!border-rose-200/80 !bg-rose-50/70",
@@ -63,30 +116,32 @@ export default async function Home() {
     <div className="flex min-h-full flex-1 flex-col bg-[#eef2f6] font-sans text-slate-800">
       <AppHeader current="home" />
 
-      <main className="mx-auto w-full max-w-7xl flex-1 space-y-8 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+      <main className="mx-auto w-full max-w-[1440px] flex-1 space-y-6 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         <InfoPanel
           title="VD-assistent"
           variant="ai-summary"
           showLabel={false}
+          compact
           className={assistantToneClass[vdAssistant.riskLevel]}
           footer={
-            <>
-              Analysen skapades:
-              <span className="mt-0.5 block text-sm font-medium text-slate-800">
+            <p className="text-xs text-slate-500">
+              Senast analyserad{" "}
+              <span className="font-medium text-slate-700">
                 {vdAssistant.analyzedAtLabel}
               </span>
-            </>
+            </p>
           }
         >
-          <div className="space-y-4 leading-relaxed">
-            <p>{vdAssistant.greeting}</p>
-            <p>{vdAssistant.intro}</p>
-            <div className="space-y-1.5">
-              {vdAssistant.highlights.map((line) => (
-                <p key={line}>• {line}</p>
-              ))}
-            </div>
-            <p>{vdAssistant.recommendation}</p>
+          <div className="space-y-2">
+            <p className="text-sm text-slate-700">{vdAssistant.greeting}</p>
+            <p className="text-sm text-slate-600">
+              {(assistantHighlights ?? []).length > 0
+                ? (assistantHighlights ?? []).join(" ")
+                : vdAssistant.intro}
+            </p>
+            <p className="text-sm font-semibold text-slate-900">
+              {vdAssistant.recommendation}
+            </p>
           </div>
         </InfoPanel>
 
@@ -94,16 +149,33 @@ export default async function Home() {
           title="Vad har förändrats sedan igår?"
           variant="info"
           showLabel={false}
+          compact
           className="!border-slate-200/80 !bg-white"
         >
-          {yesterdayChanges.length === 0 ? (
-            <p>Inga förändringar registrerade ännu.</p>
+          {(yesterdayChanges ?? []).length === 0 ? (
+            <p className="text-sm text-slate-600">
+              Inga förändringar registrerade ännu.
+            </p>
           ) : (
-            <div className="space-y-1.5">
-              {yesterdayChanges.map((change) => (
-                <p key={change.id}>• {change.text}</p>
+            <ul className="divide-y divide-slate-100">
+              {(yesterdayChanges ?? []).map((change) => (
+                <li
+                  key={change.id}
+                  className="flex items-center gap-3 py-2 first:pt-0 last:pb-0"
+                >
+                  <span
+                    aria-hidden
+                    className={`h-2.5 w-2.5 shrink-0 rounded-full ${yesterdayChangeIconClass(change.text)}`}
+                  />
+                  <p className="min-w-0 flex-1 text-sm font-medium text-slate-800">
+                    {change.text}
+                  </p>
+                  <time className="shrink-0 text-xs text-slate-500">
+                    Sedan igår
+                  </time>
+                </li>
               ))}
-            </div>
+            </ul>
           )}
         </InfoPanel>
 
@@ -111,106 +183,131 @@ export default async function Home() {
           title="VD:s uppmärksamhet idag"
           variant="warning"
           showLabel={false}
+          compact
           className={vdCardToneClass[vdFocus.cardTone]}
         >
-          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="rounded-xl border border-slate-200/70 bg-white/80 px-3 py-3">
-              <dt className="text-xs text-slate-500">KPI att följa upp</dt>
-              <dd className="mt-1 text-xl font-semibold text-slate-900">
+          <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="rounded-lg border border-slate-200/70 bg-white/80 px-3 py-2">
+              <dt className="text-[11px] text-slate-500">KPI att följa upp</dt>
+              <dd className="mt-0.5 text-lg font-semibold text-slate-900">
                 {vdFocus.summary.kpiFollowUpCount}
               </dd>
             </div>
-            <div className="rounded-xl border border-slate-200/70 bg-white/80 px-3 py-3">
-              <dt className="text-xs text-slate-500">Försenade aktiviteter</dt>
-              <dd className="mt-1 text-xl font-semibold text-slate-900">
+            <div className="rounded-lg border border-slate-200/70 bg-white/80 px-3 py-2">
+              <dt className="text-[11px] text-slate-500">
+                Försenade aktiviteter
+              </dt>
+              <dd className="mt-0.5 text-lg font-semibold text-slate-900">
                 {vdFocus.summary.delayedActivityCount}
               </dd>
             </div>
-            <div className="rounded-xl border border-slate-200/70 bg-white/80 px-3 py-3">
-              <dt className="text-xs text-slate-500">Öppna beslut</dt>
-              <dd className="mt-1 text-xl font-semibold text-slate-900">
+            <div className="rounded-lg border border-slate-200/70 bg-white/80 px-3 py-2">
+              <dt className="text-[11px] text-slate-500">Öppna beslut</dt>
+              <dd className="mt-0.5 text-lg font-semibold text-slate-900">
                 {vdFocus.summary.openDecisionCount}
               </dd>
             </div>
-            <div className="rounded-xl border border-slate-200/70 bg-white/80 px-3 py-3">
-              <dt className="text-xs text-slate-500">
+            <div className="rounded-lg border border-slate-200/70 bg-white/80 px-3 py-2">
+              <dt className="text-[11px] text-slate-500">
                 Affärsområden med röd status
               </dt>
-              <dd className="mt-1 text-xl font-semibold text-slate-900">
+              <dd className="mt-0.5 text-lg font-semibold text-slate-900">
                 {vdFocus.summary.redAreaCount}
               </dd>
             </div>
           </dl>
 
-          {vdFocus.kpis.length > 0 ? (
-            <div className="mt-6">
+          {(focusKpis ?? []).length > 0 ? (
+            <div className="mt-4">
               <SectionHeader title="KPI som kräver uppföljning" />
-              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {vdFocus.kpis.map((kpi) => (
-                  <article
-                    key={kpi.id}
-                    className="flex h-full flex-col rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_6px_18px_rgba(15,23,42,0.05)]"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <h3 className="text-lg font-semibold tracking-tight text-slate-900">
-                        {kpi.name}
-                      </h3>
-                      <StatusBadge status={toUiStatus(kpi.status)} />
-                    </div>
-
-                    <dl className="mt-4 space-y-2 text-sm text-slate-600">
-                      <div className="flex items-baseline justify-between gap-3">
-                        <dt>Affärsområde</dt>
-                        <dd className="font-medium text-slate-800">
-                          {kpi.area}
-                        </dd>
-                      </div>
-                      <div className="flex items-baseline justify-between gap-3">
-                        <dt>Trend</dt>
-                        <dd className="font-medium text-slate-800">
-                          {kpi.trend}
-                        </dd>
-                      </div>
-                      <div className="flex items-baseline justify-between gap-3">
-                        <dt>Ansvarig</dt>
-                        <dd className="font-medium text-slate-800">
-                          {kpi.owner}
-                        </dd>
-                      </div>
-                    </dl>
-
-                    <Link
-                      href={kpi.href}
-                      className="mt-5 inline-flex w-full items-center justify-center rounded-xl bg-[#0b1220] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+              <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
+                {(focusKpis ?? []).map((kpi) => {
+                  const detail = kpiDetailById.get(kpi.id);
+                  return (
+                    <article
+                      key={kpi.id}
+                      className="flex h-full flex-col rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,0.05)]"
                     >
-                      Öppna KPI
-                    </Link>
-                  </article>
-                ))}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h3 className="text-xl font-semibold tracking-tight text-slate-900">
+                            {kpi.name}
+                          </h3>
+                          <p className="mt-0.5 text-sm text-slate-500">
+                            {kpi.area}
+                          </p>
+                        </div>
+                        <StatusBadge status={toUiStatus(kpi.status)} />
+                      </div>
+
+                      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm text-slate-600">
+                        <div>
+                          <dt className="text-xs text-slate-500">
+                            Aktuellt värde
+                          </dt>
+                          <dd className="mt-0.5 text-base font-semibold text-slate-900">
+                            {formatKpiValue(
+                              detail?.currentValue,
+                              detail?.unit,
+                            )}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs text-slate-500">Målvärde</dt>
+                          <dd className="mt-0.5 text-base font-semibold text-slate-900">
+                            {formatKpiValue(
+                              detail?.targetValue,
+                              detail?.unit,
+                            )}
+                          </dd>
+                        </div>
+                        <div className="flex items-baseline justify-between gap-2 col-span-2 border-t border-slate-100 pt-2">
+                          <dt>Trend</dt>
+                          <dd className="font-medium text-slate-800">
+                            {kpi.trend}
+                          </dd>
+                        </div>
+                        <div className="flex items-baseline justify-between gap-2 col-span-2">
+                          <dt>Ansvarig</dt>
+                          <dd className="font-medium text-slate-800">
+                            {kpi.owner}
+                          </dd>
+                        </div>
+                      </dl>
+
+                      <Link
+                        href={kpi.href}
+                        className="mt-4 inline-flex w-full items-center justify-center rounded-xl bg-[#0b1220] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+                      >
+                        Öppna KPI
+                      </Link>
+                    </article>
+                  );
+                })}
               </div>
             </div>
           ) : (
-            <p className="mt-6 text-sm text-slate-700">
+            <p className="mt-4 text-sm text-slate-700">
               Inga KPI kräver uppföljning just nu.
             </p>
           )}
 
-          <div className="mt-6 flex flex-wrap gap-3">
+          <div className="mt-4 flex flex-wrap gap-2">
             <Link
               href="/admin/activities?new=1"
-              className="inline-flex items-center justify-center rounded-xl bg-[#0b1220] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+              className="inline-flex items-center justify-center rounded-xl bg-[#0b1220] px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
             >
               Ny aktivitet
             </Link>
             <Link
               href="/admin/kpis?new=1"
-              className="inline-flex items-center justify-center rounded-xl bg-[#0b1220] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+              className="inline-flex items-center justify-center rounded-xl bg-[#0b1220] px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
             >
               Ny KPI
             </Link>
             <Link
               href="/admin/decisions?new=1"
-              className="inline-flex items-center justify-center rounded-xl bg-[#0b1220] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+              className="inline-flex items-center justify-center rounded-xl bg-[#0b1220] px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
             >
               Nytt beslut
             </Link>
@@ -223,11 +320,11 @@ export default async function Home() {
           showLabel={false}
           className="!border-slate-200/80 !bg-white"
         >
-          {sinceLoginChanges.length === 0 ? (
+          {(sinceLoginChanges ?? []).length === 0 ? (
             <p>Inga viktiga förändringar sedan senaste inloggningen.</p>
           ) : (
             <ul className="divide-y divide-slate-100">
-              {sinceLoginChanges.map((item) => (
+              {(sinceLoginChanges ?? []).map((item) => (
                 <li
                   key={item.id}
                   className="flex flex-col gap-3 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between"
@@ -266,7 +363,7 @@ export default async function Home() {
             Nyckeltal
           </h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {kpis.map((kpi) => (
+            {(kpis ?? []).map((kpi) => (
               <SummaryCard
                 key={kpi.id}
                 title={kpi.label}
@@ -293,7 +390,7 @@ export default async function Home() {
           />
 
           <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {businessAreas.map((area) => (
+            {(businessAreas ?? []).map((area) => (
               <li key={area.id}>
                 <Link
                   href={`/areas/${area.slug}`}
@@ -352,13 +449,13 @@ export default async function Home() {
         >
           <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_6px_18px_rgba(15,23,42,0.05)] sm:p-6">
             <SectionHeader title="Kräver ledningens uppmärksamhet" />
-            {attentionItems.length === 0 ? (
+            {(attentionItems ?? []).length === 0 ? (
               <p className="mt-4 text-sm text-slate-600">
                 Inga affärsområden kräver uppmärksamhet just nu.
               </p>
             ) : (
               <ul className="mt-4 divide-y divide-slate-100">
-                {attentionItems.map((item) => (
+                {(attentionItems ?? []).map((item) => (
                   <li
                     key={item.id}
                     className="flex items-start gap-3 py-3 first:pt-0 last:pb-0"
@@ -387,13 +484,13 @@ export default async function Home() {
 
           <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_6px_18px_rgba(15,23,42,0.05)] sm:p-6">
             <SectionHeader title="Kommande beslut" />
-            {upcomingDecisions.length === 0 ? (
+            {(upcomingDecisions ?? []).length === 0 ? (
               <p className="mt-4 text-sm text-slate-600">
                 Inga beslutspunkter registrerade ännu.
               </p>
             ) : (
               <ul className="mt-4 divide-y divide-slate-100">
-                {upcomingDecisions.map((item) => (
+                {(upcomingDecisions ?? []).map((item) => (
                   <li
                     key={item.id}
                     className="flex items-start gap-3 py-3 first:pt-0 last:pb-0"
@@ -425,7 +522,7 @@ export default async function Home() {
           <SectionHeader title="Mål som kräver åtgärd" />
 
           <div className="mt-4 overflow-x-auto">
-            {actionGoals.length === 0 ? (
+            {(actionGoals ?? []).length === 0 ? (
               <p className="text-sm text-slate-600">
                 Inga mål kräver åtgärd just nu.
               </p>
@@ -445,7 +542,7 @@ export default async function Home() {
                   </tr>
                 </thead>
                 <tbody>
-                  {actionGoals.map((row) => (
+                  {(actionGoals ?? []).map((row) => (
                     <tr
                       key={row.id}
                       className="border-b border-slate-100 last:border-b-0"
@@ -476,13 +573,13 @@ export default async function Home() {
         <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_6px_18px_rgba(15,23,42,0.05)] sm:p-6">
           <SectionHeader title="Senaste händelser" />
 
-          {recentEvents.length === 0 ? (
+          {(recentEvents ?? []).length === 0 ? (
             <p className="mt-4 text-sm text-slate-600">
               Inga händelser registrerade ännu.
             </p>
           ) : (
             <ul className="mt-4 divide-y divide-slate-100">
-              {recentEvents.map((event) => (
+              {(recentEvents ?? []).map((event) => (
                 <li
                   key={event.id}
                   className="flex items-start gap-3 py-3 first:pt-0 last:pb-0"

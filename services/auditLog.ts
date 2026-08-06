@@ -57,6 +57,10 @@ function resolveHref(
         : "/admin/decisions";
     case "activity_comment":
       return entry.entityId ? `/activities/${entry.entityId}` : null;
+    case "kpi":
+      return entry.entityId
+        ? `/admin/kpis?edit=${entry.entityId}`
+        : "/admin/kpis";
     default:
       return null;
   }

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AppHeader } from "@/components/layout/AppHeader";
-import { StatusPill } from "@/components/common/StatusPill";
+import { StatusBadge } from "@/components/ui";
 import { getBusinessAreaOptions } from "@/services/businessAreas";
 import { getKPIById, getKPIs } from "@/services/kpis";
 import type { KPIListItem } from "@/services/kpis";
@@ -21,6 +21,16 @@ const trendClass: Record<string, string> = {
   Oförändrad: "bg-neutral-100 text-neutral-700",
   Ner: "bg-rose-50 text-rose-700",
 };
+
+function TrendBadge({ trend }: { trend: string }) {
+  return (
+    <span
+      className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ${trendClass[trend] ?? trendClass.Oförändrad}`}
+    >
+      {trend}
+    </span>
+  );
+}
 
 function KpiFormFields({
   areas,
@@ -323,39 +333,33 @@ export default async function AdminKpisPage({
           ) : (
             <ul className="divide-y divide-neutral-100">
               {kpis.map((kpi) => (
-                <li key={kpi.id} className="px-5 py-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-medium text-neutral-900">{kpi.name}</p>
-                      <p className="mt-1 text-xs text-neutral-500">
-                        {kpi.businessAreaName}
-                        {kpi.category ? ` · ${kpi.category}` : null}
-                        {kpi.currentValue
-                          ? ` · ${kpi.currentValue}${kpi.unit ? ` ${kpi.unit}` : ""}`
-                          : null}
-                        {kpi.targetValue
-                          ? ` · Mål ${kpi.targetValue}${kpi.unit ? ` ${kpi.unit}` : ""}`
-                          : null}
-                      </p>
+                <li key={kpi.id}>
+                  <Link
+                    href={`/admin/kpis/${kpi.id}`}
+                    className="block cursor-pointer px-5 py-4 transition hover:bg-neutral-50 hover:shadow-[inset_3px_0_0_0_#111827]"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-medium text-neutral-900">
+                          {kpi.name}
+                        </p>
+                        <p className="mt-1 text-xs text-neutral-500">
+                          {kpi.businessAreaName}
+                          {kpi.category ? ` · ${kpi.category}` : null}
+                          {kpi.currentValue
+                            ? ` · ${kpi.currentValue}${kpi.unit ? ` ${kpi.unit}` : ""}`
+                            : null}
+                          {kpi.targetValue
+                            ? ` · Mål ${kpi.targetValue}${kpi.unit ? ` ${kpi.unit}` : ""}`
+                            : null}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <StatusBadge status={kpi.status} />
+                        <TrendBadge trend={kpi.trend} />
+                      </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <StatusPill status={kpi.status} />
-                      <span
-                        className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ${trendClass[kpi.trend] ?? trendClass.Oförändrad}`}
-                      >
-                        {kpi.trend}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="mt-3">
-                    <Link
-                      href={`/admin/kpis?edit=${kpi.id}`}
-                      className="text-sm font-medium text-neutral-700 underline-offset-4 hover:underline"
-                    >
-                      Ändra
-                    </Link>
-                  </div>
+                  </Link>
                 </li>
               ))}
             </ul>

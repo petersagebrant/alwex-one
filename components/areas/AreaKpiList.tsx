@@ -1,5 +1,6 @@
+import Link from "next/link";
 import type { KPI } from "@/types";
-import { StatusPill } from "@/components/common/StatusPill";
+import { StatusBadge } from "@/components/ui";
 
 type AreaKpiListProps = {
   kpis: KPI[];
@@ -42,21 +43,43 @@ export function AreaKpiList({ kpis }: AreaKpiListProps) {
             </thead>
             <tbody>
               {kpis.map((kpi) => (
-                <tr key={kpi.id}>
+                <tr key={kpi.id} className="group">
                   <td className="border-b border-neutral-100 px-3 py-3 font-medium text-neutral-900">
-                    {kpi.name}
+                    <Link
+                      href={`/admin/kpis/${kpi.id}`}
+                      className="hover:underline"
+                    >
+                      {kpi.name}
+                    </Link>
                   </td>
                   <td className="border-b border-neutral-100 px-3 py-3 text-neutral-700">
-                    {formatValue(kpi.currentValue, kpi.unit)}
+                    <Link
+                      href={`/admin/kpis/${kpi.id}`}
+                      className="block hover:text-neutral-900"
+                    >
+                      {formatValue(kpi.currentValue, kpi.unit)}
+                    </Link>
                   </td>
                   <td className="border-b border-neutral-100 px-3 py-3 text-neutral-700">
-                    {formatValue(kpi.targetValue, kpi.unit)}
+                    <Link
+                      href={`/admin/kpis/${kpi.id}`}
+                      className="block hover:text-neutral-900"
+                    >
+                      {formatValue(kpi.targetValue, kpi.unit)}
+                    </Link>
                   </td>
                   <td className="border-b border-neutral-100 px-3 py-3 text-neutral-700">
-                    {kpi.trend}
+                    <Link
+                      href={`/admin/kpis/${kpi.id}`}
+                      className="block hover:text-neutral-900"
+                    >
+                      {kpi.trend}
+                    </Link>
                   </td>
                   <td className="border-b border-neutral-100 px-3 py-3">
-                    <StatusPill status={kpi.status} />
+                    <Link href={`/admin/kpis/${kpi.id}`} className="inline-flex">
+                      <StatusBadge status={kpi.status} />
+                    </Link>
                   </td>
                 </tr>
               ))}

@@ -1,11 +1,16 @@
 import { fetchBusinessAreas } from "@/lib/supabase/business-areas";
-import { formatDateSv } from "@/lib/format/date";
+import { formatDateSv, formatDateTimeSv } from "@/lib/format/date";
 import { getActivities } from "@/services/activities";
 import { getAllActivityComments } from "@/services/activityComments";
 import { getRecentAuditLog } from "@/services/auditLog";
-import { getUpcomingDecisions } from "@/services/decisions";
+import { getDecisions } from "@/services/decisions";
 import { getGoals } from "@/services/goals";
 import { getKPIs } from "@/services/kpis";
+import {
+  buildSinceLoginChanges,
+  getSinceLoginCutoff,
+  type SinceLoginChange,
+} from "@/services/sinceLogin";
 import type { StatusTone } from "@/types";
 
 export type DashboardKpi = {
@@ -100,6 +105,17 @@ export type DashboardVdFocus = {
   openDecisions: DashboardVdFocusDecision[];
 };
 
+export type DashboardVdAssistantRisk = "Låg" | "Medel" | "Hög";
+
+export type DashboardVdAssistant = {
+  greeting: string;
+  situationLines: string[];
+  priorities: string[];
+  riskLevel: DashboardVdAssistantRisk;
+  riskLabel: string;
+  updatedAtLabel: string;
+};
+
 export type DashboardData = {
   kpis: DashboardKpi[];
   businessAreas: DashboardArea[];
@@ -108,6 +124,8 @@ export type DashboardData = {
   upcomingDecisions: DashboardDecisionItem[];
   recentEvents: DashboardRecentEvent[];
   vdFocus: DashboardVdFocus;
+  sinceLoginChanges: SinceLoginChange[];
+  vdAssistant: DashboardVdAssistant;
 };
 
 function toStatusTone(value: string): StatusTone {
@@ -121,13 +139,124 @@ function countStatus(count: number, zeroTone: StatusTone = "Gul"): StatusTone {
   return count > 0 ? "Grön" : zeroTone;
 }
 
+function swedishCountPhrase(
+  count: number,
+  one: string,
+  many: string,
+  none: string,
+): string {
+  if (count <= 0) {
+    return none;
+  }
+  if (count === 1) {
+    return one;
+  }
+  return many.replace("{n}", String(count));
+}
+
+function buildVdAssistant(input: {
+  kpiFollowUpCount: number;
+  yellowKpiCount: number;
+  redKpiCount: number;
+  delayedCount: number;
+  redAreaCount: number;
+  activeGoalCount: number;
+  ongoingActivityCount: number;
+  openDecisionCount: number;
+}): DashboardVdAssistant {
+  const situationLines = [
+    swedishCountPhrase(
+      input.kpiFollowUpCount,
+      "1 KPI kräver uppföljning.",
+      "{n} KPI kräver uppföljning.",
+      "Inga KPI kräver uppföljning.",
+    ),
+    swedishCountPhrase(
+      input.delayedCount,
+      "1 aktivitet är försenad.",
+      "{n} aktiviteter är försenade.",
+      "Inga försenade aktiviteter.",
+    ),
+    swedishCountPhrase(
+      input.redAreaCount,
+      "1 affärsområde har röd status.",
+      "{n} affärsområden har röd status.",
+      "Inga affärsområden har röd status.",
+    ),
+    swedishCountPhrase(
+      input.activeGoalCount,
+      "1 mål är aktivt.",
+      "{n} mål är aktiva.",
+      "Inga aktiva mål.",
+    ),
+    swedishCountPhrase(
+      input.ongoingActivityCount,
+      "1 aktivitet pågår.",
+      "{n} aktiviteter pågår.",
+      "Inga aktiviteter pågår.",
+    ),
+  ];
+
+  const priorities: string[] = [];
+
+  if (input.redKpiCount > 0) {
+    priorities.push("Följ upp KPI med röd status.");
+  } else if (input.yellowKpiCount > 0) {
+    priorities.push("Följ upp KPI med gul status.");
+  }
+
+  if (input.delayedCount > 0) {
+    priorities.push("Hantera försenade aktiviteter.");
+  } else {
+    priorities.push(
+      "Kontrollera att inga aktiviteter riskerar att bli försenade.",
+    );
+  }
+
+  if (input.redAreaCount > 0) {
+    priorities.push("Gå igenom affärsområden med röd status.");
+  }
+
+  if (input.openDecisionCount > 0) {
+    priorities.push("Driv öppna beslut framåt.");
+  }
+
+  if (priorities.length === 0) {
+    priorities.push("Fortsätt följa gröna läget och håll daglig översikt.");
+  }
+
+  const manyDelayed = input.delayedCount >= 2;
+  let riskLevel: DashboardVdAssistantRisk = "Låg";
+  if (input.redAreaCount > 0 || manyDelayed) {
+    riskLevel = "Hög";
+  } else if (input.kpiFollowUpCount > 0 || input.delayedCount > 0) {
+    riskLevel = "Medel";
+  }
+
+  const riskLabel =
+    riskLevel === "Hög"
+      ? "🔴 Hög"
+      : riskLevel === "Medel"
+        ? "🟡 Medel"
+        : "🟢 Låg";
+
+  return {
+    greeting: "God morgon Peter.",
+    situationLines,
+    priorities: priorities.slice(0, 4),
+    riskLevel,
+    riskLabel,
+    updatedAtLabel: formatDateTimeSv(new Date().toISOString()),
+  };
+}
+
 export async function getDashboardData(): Promise<DashboardData> {
   const [
     areaRows,
     goals,
     activities,
     comments,
-    openDecisions,
+    allDecisions,
     recentEvents,
     allKpis,
   ] = await Promise.all([
@@ -135,11 +264,18 @@ export async function getDashboardData(): Promise<DashboardData> {
     getGoals(),
     getActivities(),
     getAllActivityComments(),
-    getUpcomingDecisions(1000),
-    getRecentAuditLog(10),
+    getDecisions().catch(() => []),
+    getRecentAuditLog(30),
     getKPIs().catch(() => []),
   ]);
 
+  const openDecisions = allDecisions
+    .filter((decision) => decision.status !== "Klart")
+    .sort((a, b) => {
+      const aDate = a.dueDate ?? a.meetingDate ?? "9999-12-31";
+      const bDate = b.dueDate ?? b.meetingDate ?? "9999-12-31";
+      return aDate.localeCompare(bDate);
+    });
   const upcoming = openDecisions.slice(0, 5);
 
   const completedGoals = goals.filter((goal) => goal.status === "Grön");
@@ -259,10 +395,15 @@ export async function getDashboardData(): Promise<DashboardData> {
   const followUpKpis = allKpis.filter(
     (kpi) => kpi.status === "Gul" || kpi.status === "Röd",
   );
+  const yellowKpiCount = allKpis.filter((kpi) => kpi.status === "Gul").length;
+  const redKpiCount = allKpis.filter((kpi) => kpi.status === "Röd").length;
   const redAreaCount = areaRows.filter(
     (area) => toStatusTone(area.status) === "Röd",
   ).length;
   const waitingDecisionCount = openDecisions.length;
+  const activeGoalCount = goals.filter(
+    (goal) => goal.status === "Gul" || goal.status === "Röd",
+  ).length;
 
   const hasCritical =
     delayedCount > 0 ||
@@ -271,6 +412,17 @@ export async function getDashboardData(): Promise<DashboardData> {
   const hasFollowUp =
     followUpKpis.some((kpi) => kpi.status === "Gul") ||
     waitingDecisionCount > 0;
+
+  const vdAssistant = buildVdAssistant({
+    kpiFollowUpCount: followUpKpis.length,
+    yellowKpiCount,
+    redKpiCount,
+    delayedCount,
+    redAreaCount,
+    activeGoalCount,
+    ongoingActivityCount,
+    openDecisionCount: waitingDecisionCount,
+  });
 
   const vdFocus: DashboardVdFocus = {
     cardTone: hasCritical ? "red" : hasFollowUp ? "yellow" : "green",
@@ -287,7 +439,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       status: kpi.status,
       trend: kpi.trend,
       owner: areaManagers.get(kpi.businessAreaId) ?? "Ej angiven",
-      href: `/admin/kpis?edit=${kpi.id}`,
+      href: `/admin/kpis/${kpi.id}`,
     })),
     delayedActivities: delayedActivities.map((activity) => ({
       id: activity.id,
@@ -308,6 +460,17 @@ export async function getDashboardData(): Promise<DashboardData> {
       href: `/admin/decisions?edit=${decision.id}`,
     })),
   };
+
+  const sinceLoginChanges = buildSinceLoginChanges({
+    cutoff: getSinceLoginCutoff(),
+    auditEntries: recentEvents,
+    kpis: allKpis,
+    goals,
+    activities,
+    decisions: allDecisions,
+    areas: areaRows,
+    limit: 5,
+  });
 
   return {
     kpis: [
@@ -392,5 +555,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       href: event.href,
     })),
     vdFocus,
+    sinceLoginChanges,
+    vdAssistant,
   };
 }

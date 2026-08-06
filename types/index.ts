@@ -25,6 +25,10 @@ export type {
   CreateKPIInput,
   UpdateKPIInput,
 } from "./kpi";
+export type {
+  KPIHistory,
+  CreateKPIHistoryInput,
+} from "./kpi-history";
 export type { HistoryEvent } from "./history";
 
 export type BusinessAreaSummary = {

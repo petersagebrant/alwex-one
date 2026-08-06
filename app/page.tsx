@@ -1,20 +1,16 @@
 import Link from "next/link";
 import { AppHeader } from "@/components/layout/AppHeader";
+import {
+  InfoPanel,
+  MetricCard,
+  SectionHeader,
+  StatusBadge,
+  SummaryCard,
+  type UiStatus,
+} from "@/components/ui";
 import { getDashboardData } from "@/services/dashboard";
 import { formatDateTimeSv } from "@/lib/format/date";
 import type { StatusTone } from "@/types";
-
-const statusDot: Record<StatusTone, string> = {
-  Grön: "bg-emerald-500",
-  Gul: "bg-amber-400",
-  Röd: "bg-rose-500",
-};
-
-const statusBadge: Record<StatusTone, string> = {
-  Grön: "bg-emerald-50 text-emerald-800 ring-emerald-200/80",
-  Gul: "bg-amber-50 text-amber-900 ring-amber-200/80",
-  Röd: "bg-rose-50 text-rose-800 ring-rose-200/80",
-};
 
 const kpiHref: Record<string, string> = {
   "business-areas": "/areas",
@@ -26,18 +22,8 @@ const kpiHref: Record<string, string> = {
   "areas-with-red-goals": "/areas",
 };
 
-function StatusPill({ status }: { status: StatusTone }) {
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-semibold ring-1 ring-inset ${statusBadge[status]}`}
-    >
-      <span
-        aria-hidden
-        className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusDot[status]}`}
-      />
-      {status}
-    </span>
-  );
+function toUiStatus(status: StatusTone): UiStatus {
+  return status;
 }
 
 export default async function Home() {
@@ -49,12 +35,28 @@ export default async function Home() {
     upcomingDecisions,
     recentEvents,
     vdFocus,
+    sinceLoginChanges,
+    vdAssistant,
   } = await getDashboardData();
 
   const vdCardToneClass: Record<string, string> = {
-    red: "border-rose-200/80 bg-rose-50/70",
-    yellow: "border-amber-200/80 bg-amber-50/70",
-    green: "border-emerald-200/80 bg-emerald-50/70",
+    red: "!border-rose-200/80 !bg-rose-50/70",
+    yellow: "!border-amber-200/80 !bg-amber-50/70",
+    green: "!border-emerald-200/80 !bg-emerald-50/70",
+  };
+
+  const sinceLoginDot: Record<string, string> = {
+    red: "bg-rose-500",
+    yellow: "bg-amber-400",
+    blue: "bg-sky-500",
+    green: "bg-emerald-500",
+    slate: "bg-slate-400",
+  };
+
+  const assistantToneClass: Record<string, string> = {
+    Hög: "!border-rose-200/80 !bg-rose-50/40",
+    Medel: "!border-amber-200/80 !bg-amber-50/40",
+    Låg: "!border-emerald-200/80 !bg-emerald-50/40",
   };
 
   return (
@@ -62,17 +64,51 @@ export default async function Home() {
       <AppHeader current="home" />
 
       <main className="mx-auto w-full max-w-7xl flex-1 space-y-8 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
-        <section
-          aria-labelledby="vd-focus-heading"
-          className={`rounded-2xl border p-5 shadow-[0_6px_18px_rgba(15,23,42,0.05)] sm:p-6 ${vdCardToneClass[vdFocus.cardTone] ?? "border-slate-200/80 bg-white"}`}
+        <InfoPanel
+          title="VD-assistent"
+          variant="ai-summary"
+          showLabel={false}
+          className={assistantToneClass[vdAssistant.riskLevel]}
+          footer={
+            <>
+              Senast uppdaterad:
+              <span className="mt-0.5 block text-sm font-medium text-slate-800">
+                {vdAssistant.updatedAtLabel}
+              </span>
+            </>
+          }
         >
-          <h2
-            id="vd-focus-heading"
-            className="text-lg font-semibold tracking-tight text-slate-900 sm:text-xl"
-          >
-            VD:s uppmärksamhet idag
-          </h2>
-          <p className="mt-2 text-sm text-slate-700">God morgon Peter.</p>
+          <div className="space-y-4">
+            <p>{vdAssistant.greeting}</p>
+            <div>
+              <p className="font-medium text-slate-900">Här är nuläget:</p>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                {vdAssistant.situationLines.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <p className="font-medium text-slate-900">Prioritet idag:</p>
+              <ol className="mt-2 list-decimal space-y-1 pl-5">
+                {vdAssistant.priorities.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ol>
+            </div>
+            <p className="font-medium text-slate-900">
+              Risknivå: {vdAssistant.riskLabel}
+            </p>
+          </div>
+        </InfoPanel>
+
+        <InfoPanel
+          title="VD:s uppmärksamhet idag"
+          variant="warning"
+          showLabel={false}
+          className={vdCardToneClass[vdFocus.cardTone]}
+        >
+          <p>God morgon Peter.</p>
 
           <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="rounded-xl border border-slate-200/70 bg-white/80 px-3 py-3">
@@ -103,23 +139,18 @@ export default async function Home() {
 
           {vdFocus.kpis.length > 0 ? (
             <div className="mt-6">
-              <h3 className="text-sm font-semibold text-slate-900">
-                KPI som kräver uppföljning
-              </h3>
-              <ul className="mt-3 divide-y divide-slate-200/80 overflow-hidden rounded-xl border border-slate-200/70 bg-white/80">
+              <SectionHeader title="KPI som kräver uppföljning" />
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {vdFocus.kpis.map((kpi) => (
-                  <li
-                    key={kpi.id}
-                    className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="min-w-0">
-                      <p className="font-medium text-slate-900">{kpi.name}</p>
-                      <p className="mt-1 text-xs text-slate-600">
-                        {kpi.area} · Ansvarig {kpi.owner} · Trend {kpi.trend}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-3">
-                      <StatusPill status={kpi.status} />
+                  <div key={kpi.id} className="space-y-2">
+                    <MetricCard
+                      name={kpi.name}
+                      currentValue={kpi.area}
+                      trend={kpi.trend}
+                      status={toUiStatus(kpi.status)}
+                    />
+                    <div className="flex items-center justify-between gap-3 px-1 text-xs text-slate-600">
+                      <span>Ansvarig {kpi.owner}</span>
                       <Link
                         href={kpi.href}
                         className="text-sm font-medium text-slate-700 underline-offset-4 hover:underline"
@@ -127,17 +158,15 @@ export default async function Home() {
                         Öppna KPI
                       </Link>
                     </div>
-                  </li>
+                  </div>
                 ))}
-              </ul>
+              </div>
             </div>
           ) : null}
 
           {vdFocus.delayedActivities.length > 0 ? (
             <div className="mt-6">
-              <h3 className="text-sm font-semibold text-slate-900">
-                Försenade aktiviteter
-              </h3>
+              <SectionHeader title="Försenade aktiviteter" />
               <ul className="mt-3 divide-y divide-slate-200/80 overflow-hidden rounded-xl border border-slate-200/70 bg-white/80">
                 {vdFocus.delayedActivities.map((activity) => (
                   <li
@@ -167,9 +196,7 @@ export default async function Home() {
 
           {vdFocus.openDecisions.length > 0 ? (
             <div className="mt-6">
-              <h3 className="text-sm font-semibold text-slate-900">
-                Öppna beslut
-              </h3>
+              <SectionHeader title="Öppna beslut" />
               <ul className="mt-3 divide-y divide-slate-200/80 overflow-hidden rounded-xl border border-slate-200/70 bg-white/80">
                 {vdFocus.openDecisions.map((decision) => (
                   <li
@@ -225,7 +252,51 @@ export default async function Home() {
               Nytt beslut
             </Link>
           </div>
-        </section>
+        </InfoPanel>
+
+        <InfoPanel
+          title="Sedan du loggade in"
+          variant="info"
+          showLabel={false}
+          className="!border-slate-200/80 !bg-white"
+        >
+          {sinceLoginChanges.length === 0 ? (
+            <p>Inga viktiga förändringar sedan senaste inloggningen.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {sinceLoginChanges.map((item) => (
+                <li
+                  key={item.id}
+                  className="flex flex-col gap-3 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between"
+                >
+                  <div className="flex min-w-0 items-start gap-3">
+                    <span
+                      aria-hidden
+                      className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${sinceLoginDot[item.tone] ?? "bg-slate-400"}`}
+                    />
+                    <div className="min-w-0">
+                      <p className="font-medium text-slate-900">{item.title}</p>
+                      {item.detail ? (
+                        <p className="mt-0.5 text-sm text-slate-600">
+                          {item.detail}
+                        </p>
+                      ) : null}
+                      <p className="mt-1 text-xs text-slate-500">
+                        {item.occurredAtLabel}
+                      </p>
+                    </div>
+                  </div>
+                  <Link
+                    href={item.href}
+                    className="shrink-0 self-start text-sm font-medium text-slate-700 underline-offset-4 hover:underline sm:mt-0.5"
+                  >
+                    {item.linkLabel}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </InfoPanel>
 
         <section aria-labelledby="kpi-heading">
           <h2 id="kpi-heading" className="sr-only">
@@ -233,47 +304,30 @@ export default async function Home() {
           </h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {kpis.map((kpi) => (
-              <Link
+              <SummaryCard
                 key={kpi.id}
+                title={kpi.label}
+                value={kpi.value}
+                status={toUiStatus(kpi.status)}
                 href={kpiHref[kpi.id] ?? "/"}
-                className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_6px_18px_rgba(15,23,42,0.05)]"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <p className="text-sm font-medium text-slate-500">
-                    {kpi.label}
-                  </p>
-                  <StatusPill status={kpi.status} />
-                </div>
-                <p className="mt-3 text-2xl font-semibold tracking-tight text-slate-900 sm:text-[1.7rem]">
-                  {kpi.value}
-                </p>
-              </Link>
+              />
             ))}
           </div>
         </section>
 
         <section aria-labelledby="areas-heading" className="space-y-4">
-          <div>
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <h2
-                  id="areas-heading"
-                  className="text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl"
-                >
-                  Affärsområden
-                </h2>
-                <p className="mt-1 text-sm text-slate-600">
-                  Status, ansvar och målbild per affärsområde.
-                </p>
-              </div>
+          <SectionHeader
+            title="Affärsområden"
+            description="Status, ansvar och målbild per affärsområde."
+            action={
               <Link
                 href="/areas"
                 className="text-sm font-medium text-slate-700 underline-offset-4 hover:underline"
               >
                 Visa alla
               </Link>
-            </div>
-          </div>
+            }
+          />
 
           <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             {businessAreas.map((area) => (
@@ -286,7 +340,7 @@ export default async function Home() {
                     <h3 className="text-lg font-semibold tracking-tight text-slate-900">
                       {area.name}
                     </h3>
-                    <StatusPill status={area.status} />
+                    <StatusBadge status={toUiStatus(area.status)} />
                   </div>
 
                   <dl className="mt-4 space-y-2 text-sm">
@@ -334,9 +388,7 @@ export default async function Home() {
           className="grid grid-cols-1 gap-4 lg:grid-cols-2"
         >
           <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_6px_18px_rgba(15,23,42,0.05)] sm:p-6">
-            <h2 className="text-lg font-semibold tracking-tight text-slate-900">
-              Kräver ledningens uppmärksamhet
-            </h2>
+            <SectionHeader title="Kräver ledningens uppmärksamhet" />
             {attentionItems.length === 0 ? (
               <p className="mt-4 text-sm text-slate-600">
                 Inga affärsområden kräver uppmärksamhet just nu.
@@ -371,9 +423,7 @@ export default async function Home() {
           </article>
 
           <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_6px_18px_rgba(15,23,42,0.05)] sm:p-6">
-            <h2 className="text-lg font-semibold tracking-tight text-slate-900">
-              Kommande beslut
-            </h2>
+            <SectionHeader title="Kommande beslut" />
             {upcomingDecisions.length === 0 ? (
               <p className="mt-4 text-sm text-slate-600">
                 Inga beslutspunkter registrerade ännu.
@@ -408,16 +458,8 @@ export default async function Home() {
           </article>
         </section>
 
-        <section
-          aria-labelledby="actions-heading"
-          className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_6px_18px_rgba(15,23,42,0.05)] sm:p-6"
-        >
-          <h2
-            id="actions-heading"
-            className="text-lg font-semibold tracking-tight text-slate-900 sm:text-xl"
-          >
-            Mål som kräver åtgärd
-          </h2>
+        <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_6px_18px_rgba(15,23,42,0.05)] sm:p-6">
+          <SectionHeader title="Mål som kräver åtgärd" />
 
           <div className="mt-4 overflow-x-auto">
             {actionGoals.length === 0 ? (
@@ -458,7 +500,7 @@ export default async function Home() {
                         {row.deadline}
                       </td>
                       <td className="border-b border-slate-100 px-3 py-3">
-                        <StatusPill status={row.status} />
+                        <StatusBadge status={toUiStatus(row.status)} />
                       </td>
                     </tr>
                   ))}
@@ -468,16 +510,8 @@ export default async function Home() {
           </div>
         </section>
 
-        <section
-          aria-labelledby="events-heading"
-          className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_6px_18px_rgba(15,23,42,0.05)] sm:p-6"
-        >
-          <h2
-            id="events-heading"
-            className="text-lg font-semibold tracking-tight text-slate-900 sm:text-xl"
-          >
-            Senaste händelser
-          </h2>
+        <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_6px_18px_rgba(15,23,42,0.05)] sm:p-6">
+          <SectionHeader title="Senaste händelser" />
 
           {recentEvents.length === 0 ? (
             <p className="mt-4 text-sm text-slate-600">

@@ -70,6 +70,7 @@ export default async function KpiDetailPage({
 
   const chartPoints = history.map((entry) => ({
     value: entry.value,
+    status: entry.status,
     recordedAt: entry.recordedAt,
     label: formatDateSv(entry.recordedAt.slice(0, 10)),
   }));
@@ -166,10 +167,20 @@ export default async function KpiDetailPage({
         <section className="rounded-xl border border-neutral-200 bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-6">
           <SectionHeader
             title="Värde över tid"
-            description="Enkel översikt baserad på registrerad historik"
+            description="Utfall och målvärde baserat på kpi_history"
           />
           <div className="mt-4">
-            <KpiHistoryChart points={chartPoints} unit={kpi.unit} />
+            {history.length === 0 ? (
+              <InfoPanel title="Historik" variant="info" showLabel={false}>
+                Inga historiska värden registrerade ännu.
+              </InfoPanel>
+            ) : (
+              <KpiHistoryChart
+                points={chartPoints}
+                targetValue={kpi.targetValue}
+                unit={kpi.unit}
+              />
+            )}
           </div>
         </section>
 

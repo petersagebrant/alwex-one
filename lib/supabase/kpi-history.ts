@@ -56,3 +56,57 @@ export async function insertKpiHistory(
 
   return data;
 }
+
+export async function fetchKpiHistorySince(
+  cutoffIso: string,
+): Promise<KpiHistoryRow[]> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("kpi_history")
+    .select(kpiHistorySelect)
+    .gte("recorded_at", cutoffIso)
+    .order("recorded_at", { ascending: true });
+
+  if (error) {
+    throw new Error(`Kunde inte hämta KPI-historik: ${error.message}`);
+  }
+
+  return data ?? [];
+}
+
+export async function fetchRecentKpiHistoryForKpis(
+  kpiIds: string[],
+  limitPerKpi = 2,
+): Promise<KpiHistoryRow[]> {
+  if (kpiIds.length === 0) {
+    return [];
+  }
+
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("kpi_history")
+    .select(kpiHistorySelect)
+    .in("kpi_id", kpiIds)
+    .order("recorded_at", { ascending: false });
+
+  if (error) {
+    throw new Error(`Kunde inte hämta KPI-historik: ${error.message}`);
+  }
+
+  const rows = data ?? [];
+  const counts = new Map<string, number>();
+  const limited: KpiHistoryRow[] = [];
+
+  for (const row of rows) {
+    const count = counts.get(row.kpi_id) ?? 0;
+    if (count >= limitPerKpi) {
+      continue;
+    }
+    counts.set(row.kpi_id, count + 1);
+    limited.push(row);
+  }
+
+  return limited;
+}

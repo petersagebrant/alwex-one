@@ -6,6 +6,7 @@ import { getRecentAuditLog } from "@/services/auditLog";
 import { getDecisions } from "@/services/decisions";
 import { getGoals } from "@/services/goals";
 import { getKPIs } from "@/services/kpis";
+import { getKpiHistoryChangeLinesSince } from "@/services/kpiHistory";
 import {
   buildSinceLoginChanges,
   getSinceLoginCutoff,
@@ -109,11 +110,17 @@ export type DashboardVdAssistantRisk = "Låg" | "Medel" | "Hög";
 
 export type DashboardVdAssistant = {
   greeting: string;
-  situationLines: string[];
-  priorities: string[];
+  intro: string;
+  highlights: string[];
+  recommendation: string;
   riskLevel: DashboardVdAssistantRisk;
   riskLabel: string;
-  updatedAtLabel: string;
+  analyzedAtLabel: string;
+};
+
+export type DashboardYesterdayChange = {
+  id: string;
+  text: string;
 };
 
 export type DashboardData = {
@@ -126,6 +133,7 @@ export type DashboardData = {
   vdFocus: DashboardVdFocus;
   sinceLoginChanges: SinceLoginChange[];
   vdAssistant: DashboardVdAssistant;
+  yesterdayChanges: DashboardYesterdayChange[];
 };
 
 function toStatusTone(value: string): StatusTone {
@@ -154,75 +162,80 @@ function swedishCountPhrase(
   return many.replace("{n}", String(count));
 }
 
+function getYesterdayCutoff(): Date {
+  const todayMidnight = getSinceLoginCutoff();
+  return new Date(todayMidnight.getTime() - 24 * 60 * 60 * 1000);
+}
+
+function isAfter(iso: string | null | undefined, cutoff: Date): boolean {
+  if (!iso) {
+    return false;
+  }
+  const time = new Date(iso).getTime();
+  return Number.isFinite(time) && time >= cutoff.getTime();
+}
+
 function buildVdAssistant(input: {
   kpiFollowUpCount: number;
-  yellowKpiCount: number;
-  redKpiCount: number;
   delayedCount: number;
   redAreaCount: number;
-  activeGoalCount: number;
-  ongoingActivityCount: number;
+  yellowAreaNames: string[];
+  redAreaNames: string[];
   openDecisionCount: number;
+  topFollowUpKpi: { name: string; owner: string } | null;
 }): DashboardVdAssistant {
-  const situationLines = [
+  const highlights: string[] = [
     swedishCountPhrase(
       input.kpiFollowUpCount,
-      "1 KPI kräver uppföljning.",
-      "{n} KPI kräver uppföljning.",
-      "Inga KPI kräver uppföljning.",
+      "1 KPI behöver följas upp.",
+      "{n} KPI behöver följas upp.",
+      "Inga KPI behöver följas upp.",
     ),
     swedishCountPhrase(
       input.delayedCount,
       "1 aktivitet är försenad.",
       "{n} aktiviteter är försenade.",
-      "Inga försenade aktiviteter.",
-    ),
-    swedishCountPhrase(
-      input.redAreaCount,
-      "1 affärsområde har röd status.",
-      "{n} affärsområden har röd status.",
-      "Inga affärsområden har röd status.",
-    ),
-    swedishCountPhrase(
-      input.activeGoalCount,
-      "1 mål är aktivt.",
-      "{n} mål är aktiva.",
-      "Inga aktiva mål.",
-    ),
-    swedishCountPhrase(
-      input.ongoingActivityCount,
-      "1 aktivitet pågår.",
-      "{n} aktiviteter pågår.",
-      "Inga aktiviteter pågår.",
+      "Inga aktiviteter är försenade.",
     ),
   ];
 
-  const priorities: string[] = [];
-
-  if (input.redKpiCount > 0) {
-    priorities.push("Följ upp KPI med röd status.");
-  } else if (input.yellowKpiCount > 0) {
-    priorities.push("Följ upp KPI med gul status.");
-  }
-
-  if (input.delayedCount > 0) {
-    priorities.push("Hantera försenade aktiviteter.");
+  if (input.redAreaNames.length > 0) {
+    for (const name of input.redAreaNames.slice(0, 2)) {
+      highlights.push(`${name} har röd status.`);
+    }
+  } else if (input.yellowAreaNames.length > 0) {
+    const [first, ...rest] = input.yellowAreaNames;
+    highlights.push(`${first} har fortfarande gul status.`);
+    if (rest.length === 0) {
+      highlights.push(
+        "Inga andra affärsområden kräver din uppmärksamhet.",
+      );
+    } else {
+      highlights.push(
+        swedishCountPhrase(
+          rest.length,
+          "Ytterligare 1 affärsområde har gul status.",
+          "Ytterligare {n} affärsområden har gul status.",
+          "Inga andra affärsområden kräver din uppmärksamhet.",
+        ),
+      );
+    }
   } else {
-    priorities.push(
-      "Kontrollera att inga aktiviteter riskerar att bli försenade.",
-    );
+    highlights.push("Inga affärsområden kräver din uppmärksamhet.");
   }
 
-  if (input.redAreaCount > 0) {
-    priorities.push("Gå igenom affärsområden med röd status.");
-  }
-
-  if (input.openDecisionCount > 0) {
-    priorities.push("Driv öppna beslut framåt.");
-  }
-
-  if (priorities.length === 0) {
-    priorities.push("Fortsätt följa gröna läget och håll daglig översikt.");
+  let recommendation: string;
+  if (input.topFollowUpKpi) {
+    recommendation = `Min rekommendation är att idag börja med att följa upp KPI:n ${input.topFollowUpKpi.name} tillsammans med ${input.topFollowUpKpi.owner}.`;
+  } else if (input.delayedCount > 0) {
+    recommendation =
+      "Min rekommendation är att idag börja med de försenade aktiviteterna och säkra nästa steg med ansvariga.";
+  } else if (input.openDecisionCount > 0) {
+    recommendation =
+      "Min rekommendation är att idag driva de öppna besluten framåt så att de inte ligger still.";
+  } else {
+    recommendation =
+      "Min rekommendation är att behålla den dagliga översikten och följa upp eventuella gulmarkeringar i tid.";
   }
 
   const manyDelayed = input.delayedCount >= 2;
@@ -235,18 +248,19 @@ function buildVdAssistant(input: {
 
   const riskLabel =
     riskLevel === "Hög"
-      ? "🔴 Hög"
+      ? "Hög"
       : riskLevel === "Medel"
-        ? "🟡 Medel"
-        : "🟢 Låg";
+        ? "Medel"
+        : "Låg";
 
   return {
     greeting: "God morgon Peter.",
-    situationLines,
-    priorities: priorities.slice(0, 4),
+    intro: "Här är min sammanfattning av läget just nu.",
+    highlights,
+    recommendation,
     riskLevel,
     riskLabel,
-    updatedAtLabel: formatDateTimeSv(new Date().toISOString()),
+    analyzedAtLabel: formatDateTimeSv(new Date().toISOString()),
   };
 }
 
@@ -395,15 +409,14 @@ export async function getDashboardData(): Promise<DashboardData> {
   const followUpKpis = allKpis.filter(
     (kpi) => kpi.status === "Gul" || kpi.status === "Röd",
   );
-  const yellowKpiCount = allKpis.filter((kpi) => kpi.status === "Gul").length;
-  const redKpiCount = allKpis.filter((kpi) => kpi.status === "Röd").length;
-  const redAreaCount = areaRows.filter(
+  const redAreaRows = areaRows.filter(
     (area) => toStatusTone(area.status) === "Röd",
-  ).length;
+  );
+  const yellowAreaRows = areaRows.filter(
+    (area) => toStatusTone(area.status) === "Gul",
+  );
+  const redAreaCount = redAreaRows.length;
   const waitingDecisionCount = openDecisions.length;
-  const activeGoalCount = goals.filter(
-    (goal) => goal.status === "Gul" || goal.status === "Röd",
-  ).length;
 
   const hasCritical =
     delayedCount > 0 ||
@@ -413,15 +426,25 @@ export async function getDashboardData(): Promise<DashboardData> {
     followUpKpis.some((kpi) => kpi.status === "Gul") ||
     waitingDecisionCount > 0;
 
+  const topFollowUpKpi =
+    followUpKpis.find((kpi) => kpi.status === "Röd") ??
+    followUpKpis[0] ??
+    null;
+
   const vdAssistant = buildVdAssistant({
     kpiFollowUpCount: followUpKpis.length,
-    yellowKpiCount,
-    redKpiCount,
     delayedCount,
     redAreaCount,
-    activeGoalCount,
-    ongoingActivityCount,
+    yellowAreaNames: yellowAreaRows.map((area) => area.name),
+    redAreaNames: redAreaRows.map((area) => area.name),
     openDecisionCount: waitingDecisionCount,
+    topFollowUpKpi: topFollowUpKpi
+      ? {
+          name: topFollowUpKpi.name,
+          owner:
+            areaManagers.get(topFollowUpKpi.businessAreaId) ?? "ansvarig",
+        }
+      : null,
   });
 
   const vdFocus: DashboardVdFocus = {
@@ -471,6 +494,49 @@ export async function getDashboardData(): Promise<DashboardData> {
     areas: areaRows,
     limit: 5,
   });
+
+  const yesterdayCutoff = getYesterdayCutoff();
+  const kpiNames = new Map(allKpis.map((kpi) => [kpi.id, kpi.name]));
+  const kpiHistoryChanges = await getKpiHistoryChangeLinesSince(
+    yesterdayCutoff,
+    kpiNames,
+  );
+
+  const yesterdayChanges: DashboardYesterdayChange[] = [
+    ...kpiHistoryChanges,
+  ];
+
+  const newActivities = activities.filter((activity) =>
+    isAfter(activity.createdAt, yesterdayCutoff),
+  );
+  if (newActivities.length === 1) {
+    yesterdayChanges.push({
+      id: `activity-created-${newActivities[0].id}`,
+      text: "Ny aktivitet skapad",
+    });
+  } else if (newActivities.length > 1) {
+    yesterdayChanges.push({
+      id: "activities-created",
+      text: `${newActivities.length} nya aktiviteter skapade`,
+    });
+  }
+
+  const closedDecisions = allDecisions.filter(
+    (decision) =>
+      decision.status === "Klart" &&
+      isAfter(decision.updatedAt, yesterdayCutoff),
+  );
+  if (closedDecisions.length === 1) {
+    yesterdayChanges.push({
+      id: `decision-closed-${closedDecisions[0].id}`,
+      text: "Ett beslut stängt",
+    });
+  } else if (closedDecisions.length > 1) {
+    yesterdayChanges.push({
+      id: "decisions-closed",
+      text: `${closedDecisions.length} beslut stängda`,
+    });
+  }
 
   return {
     kpis: [
@@ -557,5 +623,6 @@ export async function getDashboardData(): Promise<DashboardData> {
     vdFocus,
     sinceLoginChanges,
     vdAssistant,
+    yesterdayChanges,
   };
 }

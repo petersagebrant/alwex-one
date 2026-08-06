@@ -2,7 +2,6 @@ import Link from "next/link";
 import { AppHeader } from "@/components/layout/AppHeader";
 import {
   InfoPanel,
-  MetricCard,
   SectionHeader,
   StatusBadge,
   SummaryCard,
@@ -37,6 +36,7 @@ export default async function Home() {
     vdFocus,
     sinceLoginChanges,
     vdAssistant,
+    yesterdayChanges,
   } = await getDashboardData();
 
   const vdCardToneClass: Record<string, string> = {
@@ -71,35 +71,40 @@ export default async function Home() {
           className={assistantToneClass[vdAssistant.riskLevel]}
           footer={
             <>
-              Senast uppdaterad:
+              Analysen skapades:
               <span className="mt-0.5 block text-sm font-medium text-slate-800">
-                {vdAssistant.updatedAtLabel}
+                {vdAssistant.analyzedAtLabel}
               </span>
             </>
           }
         >
-          <div className="space-y-4">
+          <div className="space-y-4 leading-relaxed">
             <p>{vdAssistant.greeting}</p>
-            <div>
-              <p className="font-medium text-slate-900">Här är nuläget:</p>
-              <ul className="mt-2 list-disc space-y-1 pl-5">
-                {vdAssistant.situationLines.map((line) => (
-                  <li key={line}>{line}</li>
-                ))}
-              </ul>
+            <p>{vdAssistant.intro}</p>
+            <div className="space-y-1.5">
+              {vdAssistant.highlights.map((line) => (
+                <p key={line}>• {line}</p>
+              ))}
             </div>
-            <div>
-              <p className="font-medium text-slate-900">Prioritet idag:</p>
-              <ol className="mt-2 list-decimal space-y-1 pl-5">
-                {vdAssistant.priorities.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ol>
-            </div>
-            <p className="font-medium text-slate-900">
-              Risknivå: {vdAssistant.riskLabel}
-            </p>
+            <p>{vdAssistant.recommendation}</p>
           </div>
+        </InfoPanel>
+
+        <InfoPanel
+          title="Vad har förändrats sedan igår?"
+          variant="info"
+          showLabel={false}
+          className="!border-slate-200/80 !bg-white"
+        >
+          {yesterdayChanges.length === 0 ? (
+            <p>Inga förändringar registrerade ännu.</p>
+          ) : (
+            <div className="space-y-1.5">
+              {yesterdayChanges.map((change) => (
+                <p key={change.id}>• {change.text}</p>
+              ))}
+            </div>
+          )}
         </InfoPanel>
 
         <InfoPanel
@@ -108,9 +113,7 @@ export default async function Home() {
           showLabel={false}
           className={vdCardToneClass[vdFocus.cardTone]}
         >
-          <p>God morgon Peter.</p>
-
-          <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="rounded-xl border border-slate-200/70 bg-white/80 px-3 py-3">
               <dt className="text-xs text-slate-500">KPI att följa upp</dt>
               <dd className="mt-1 text-xl font-semibold text-slate-900">
@@ -130,7 +133,9 @@ export default async function Home() {
               </dd>
             </div>
             <div className="rounded-xl border border-slate-200/70 bg-white/80 px-3 py-3">
-              <dt className="text-xs text-slate-500">AO med röd status</dt>
+              <dt className="text-xs text-slate-500">
+                Affärsområden med röd status
+              </dt>
               <dd className="mt-1 text-xl font-semibold text-slate-900">
                 {vdFocus.summary.redAreaCount}
               </dd>
@@ -142,95 +147,53 @@ export default async function Home() {
               <SectionHeader title="KPI som kräver uppföljning" />
               <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {vdFocus.kpis.map((kpi) => (
-                  <div key={kpi.id} className="space-y-2">
-                    <MetricCard
-                      name={kpi.name}
-                      currentValue={kpi.area}
-                      trend={kpi.trend}
-                      status={toUiStatus(kpi.status)}
-                    />
-                    <div className="flex items-center justify-between gap-3 px-1 text-xs text-slate-600">
-                      <span>Ansvarig {kpi.owner}</span>
-                      <Link
-                        href={kpi.href}
-                        className="text-sm font-medium text-slate-700 underline-offset-4 hover:underline"
-                      >
-                        Öppna KPI
-                      </Link>
+                  <article
+                    key={kpi.id}
+                    className="flex h-full flex-col rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_6px_18px_rgba(15,23,42,0.05)]"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <h3 className="text-lg font-semibold tracking-tight text-slate-900">
+                        {kpi.name}
+                      </h3>
+                      <StatusBadge status={toUiStatus(kpi.status)} />
                     </div>
-                  </div>
+
+                    <dl className="mt-4 space-y-2 text-sm text-slate-600">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <dt>Affärsområde</dt>
+                        <dd className="font-medium text-slate-800">
+                          {kpi.area}
+                        </dd>
+                      </div>
+                      <div className="flex items-baseline justify-between gap-3">
+                        <dt>Trend</dt>
+                        <dd className="font-medium text-slate-800">
+                          {kpi.trend}
+                        </dd>
+                      </div>
+                      <div className="flex items-baseline justify-between gap-3">
+                        <dt>Ansvarig</dt>
+                        <dd className="font-medium text-slate-800">
+                          {kpi.owner}
+                        </dd>
+                      </div>
+                    </dl>
+
+                    <Link
+                      href={kpi.href}
+                      className="mt-5 inline-flex w-full items-center justify-center rounded-xl bg-[#0b1220] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+                    >
+                      Öppna KPI
+                    </Link>
+                  </article>
                 ))}
               </div>
             </div>
-          ) : null}
-
-          {vdFocus.delayedActivities.length > 0 ? (
-            <div className="mt-6">
-              <SectionHeader title="Försenade aktiviteter" />
-              <ul className="mt-3 divide-y divide-slate-200/80 overflow-hidden rounded-xl border border-slate-200/70 bg-white/80">
-                {vdFocus.delayedActivities.map((activity) => (
-                  <li
-                    key={activity.id}
-                    className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="min-w-0">
-                      <p className="font-medium text-slate-900">
-                        {activity.title}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-600">
-                        {activity.area} · {activity.owner} · Deadline{" "}
-                        {activity.deadline}
-                      </p>
-                    </div>
-                    <Link
-                      href={activity.href}
-                      className="shrink-0 text-sm font-medium text-slate-700 underline-offset-4 hover:underline"
-                    >
-                      Öppna aktivitet
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-
-          {vdFocus.openDecisions.length > 0 ? (
-            <div className="mt-6">
-              <SectionHeader title="Öppna beslut" />
-              <ul className="mt-3 divide-y divide-slate-200/80 overflow-hidden rounded-xl border border-slate-200/70 bg-white/80">
-                {vdFocus.openDecisions.map((decision) => (
-                  <li
-                    key={decision.id}
-                    className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="min-w-0">
-                      <p className="font-medium text-slate-900">
-                        {decision.title}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-600">
-                        {decision.area} · {decision.owner} · Förfaller{" "}
-                        {decision.dueDate}
-                      </p>
-                    </div>
-                    <Link
-                      href={decision.href}
-                      className="shrink-0 text-sm font-medium text-slate-700 underline-offset-4 hover:underline"
-                    >
-                      Öppna beslut
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-
-          {vdFocus.kpis.length === 0 &&
-          vdFocus.delayedActivities.length === 0 &&
-          vdFocus.openDecisions.length === 0 ? (
+          ) : (
             <p className="mt-6 text-sm text-slate-700">
-              Inga kritiska händelser idag.
+              Inga KPI kräver uppföljning just nu.
             </p>
-          ) : null}
+          )}
 
           <div className="mt-6 flex flex-wrap gap-3">
             <Link

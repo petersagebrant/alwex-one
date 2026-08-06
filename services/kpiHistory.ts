@@ -1,5 +1,7 @@
 import {
   fetchKpiHistoryByKpiId,
+  fetchKpiHistorySince,
+  fetchRecentKpiHistoryForKpis,
   insertKpiHistory,
 } from "@/lib/supabase/kpi-history";
 import type { CreateKPIHistoryInput, KPIHistory, StatusTone } from "@/types";
@@ -29,6 +31,15 @@ function mapKpiHistoryRow(row: {
     recordedAt: row.recorded_at,
     createdAt: row.created_at,
   };
+}
+
+function parseNumericValue(value: string): number | null {
+  const normalized = value.replace(",", ".").replace(/[^\d.-]/g, "");
+  if (!normalized) {
+    return null;
+  }
+  const parsed = Number.parseFloat(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 export async function getKPIHistory(kpiId: string): Promise<KPIHistory[]> {
@@ -84,4 +95,86 @@ export async function addKPIHistoryEntry(
   });
 
   return mapKpiHistoryRow(row);
+}
+
+export type KpiHistoryChangeLine = {
+  id: string;
+  text: string;
+};
+
+export async function getKpiHistoryChangeLinesSince(
+  cutoff: Date,
+  kpiNames: Map<string, string>,
+): Promise<KpiHistoryChangeLine[]> {
+  try {
+    const recentRows = await fetchKpiHistorySince(cutoff.toISOString());
+    if (recentRows.length === 0) {
+      return [];
+    }
+
+    const kpiIds = [...new Set(recentRows.map((row) => row.kpi_id))];
+    const recentByKpi = await fetchRecentKpiHistoryForKpis(kpiIds, 2);
+    const byKpi = new Map<string, typeof recentByKpi>();
+
+    for (const row of recentByKpi) {
+      const list = byKpi.get(row.kpi_id) ?? [];
+      list.push(row);
+      byKpi.set(row.kpi_id, list);
+    }
+
+    const lines: KpiHistoryChangeLine[] = [];
+
+    for (const kpiId of kpiIds) {
+      const entries = byKpi.get(kpiId) ?? [];
+      if (entries.length === 0) {
+        continue;
+      }
+
+      const name = kpiNames.get(kpiId) ?? "KPI";
+      const latest = entries[0];
+      const previous = entries[1];
+
+      if (!previous) {
+        lines.push({
+          id: `kpi-history-${latest.id}`,
+          text: `${name} uppdaterad`,
+        });
+        continue;
+      }
+
+      const latestNum = parseNumericValue(latest.value);
+      const previousNum = parseNumericValue(previous.value);
+
+      if (latestNum === null || previousNum === null || previousNum === 0) {
+        lines.push({
+          id: `kpi-history-${latest.id}`,
+          text: `${name} uppdaterad`,
+        });
+        continue;
+      }
+
+      const changePercent =
+        ((latestNum - previousNum) / Math.abs(previousNum)) * 100;
+      const absolute = Math.abs(changePercent).toLocaleString("sv-SE", {
+        maximumFractionDigits: 1,
+        minimumFractionDigits: Number.isInteger(Math.abs(changePercent))
+          ? 0
+          : 1,
+      });
+      const sign = changePercent > 0 ? "+" : changePercent < 0 ? "−" : "";
+
+      lines.push({
+        id: `kpi-history-${latest.id}`,
+        text: `${name} ${sign}${absolute} %`,
+      });
+    }
+
+    return lines;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("kpi_history") || message.includes("schema cache")) {
+      return [];
+    }
+    throw error;
+  }
 }

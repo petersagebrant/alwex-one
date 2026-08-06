@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AppHeader } from "@/components/layout/AppHeader";
+import { VdDiaryTimeline } from "../components/dashboard/VdDiaryTimeline";
 import {
   InfoPanel,
   SectionHeader,
@@ -7,6 +8,7 @@ import {
   SummaryCard,
   type UiStatus,
 } from "@/components/ui";
+import { vdDiaryEvents } from "@/data/mock/vd-diary";
 import { getDashboardData } from "@/services/dashboard";
 import { getKPIs } from "@/services/kpis";
 import { formatDateTimeSv } from "@/lib/format/date";
@@ -177,6 +179,16 @@ export default async function Home() {
               ))}
             </ul>
           )}
+        </InfoPanel>
+
+        <InfoPanel
+          title="Historik"
+          variant="info"
+          showLabel={false}
+          compact
+          className="!border-slate-200/80 !bg-white"
+        >
+          <VdDiaryTimeline events={(vdDiaryEvents ?? []).slice(0, 15)} />
         </InfoPanel>
 
         <InfoPanel

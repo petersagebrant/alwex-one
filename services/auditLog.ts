@@ -46,20 +46,22 @@ function resolveHref(
       return "/areas";
     }
     case "goal":
-      return "/admin/goals";
+      return entry.entityId
+        ? `/admin/goals/${entry.entityId}`
+        : "/admin/goals";
     case "activity":
       return entry.entityId
         ? `/activities/${entry.entityId}`
         : "/admin/activities";
     case "decision":
       return entry.entityId
-        ? `/admin/decisions?edit=${entry.entityId}`
+        ? `/admin/decisions/${entry.entityId}`
         : "/admin/decisions";
     case "activity_comment":
       return entry.entityId ? `/activities/${entry.entityId}` : null;
     case "kpi":
       return entry.entityId
-        ? `/admin/kpis?edit=${entry.entityId}`
+        ? `/admin/kpis/${entry.entityId}`
         : "/admin/kpis";
     default:
       return null;

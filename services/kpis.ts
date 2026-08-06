@@ -6,6 +6,7 @@ import {
   insertKpi,
   updateKpiRow,
 } from "@/lib/supabase/kpis";
+import { recordAuditLog } from "@/services/auditLog";
 import type {
   CreateKPIInput,
   KPI,
@@ -13,6 +14,8 @@ import type {
   StatusTone,
   UpdateKPIInput,
 } from "@/types";
+
+const DEFAULT_ACTOR = "Peter Sagebrant";
 
 function toStatusTone(value: string): StatusTone {
   if (value === "Grön" || value === "Gul" || value === "Röd") {
@@ -125,6 +128,15 @@ export async function createKPI(input: CreateKPIInput): Promise<KPI> {
     trend: input.trend,
   });
 
+  await recordAuditLog({
+    entityType: "kpi",
+    entityId: row.id,
+    action: "created",
+    description: `Skapade KPI:n "${row.name}"`,
+    actorName: DEFAULT_ACTOR,
+    businessAreaId: row.business_area_id,
+  });
+
   return mapKpiRow(row);
 }
 
@@ -152,6 +164,15 @@ export async function updateKPI(input: UpdateKPIInput): Promise<KPI> {
     status: input.status,
     trend: input.trend,
     updated_at: new Date().toISOString(),
+  });
+
+  await recordAuditLog({
+    entityType: "kpi",
+    entityId: row.id,
+    action: "updated",
+    description: `Uppdaterade KPI:n "${row.name}"`,
+    actorName: DEFAULT_ACTOR,
+    businessAreaId: row.business_area_id,
   });
 
   return mapKpiRow(row);

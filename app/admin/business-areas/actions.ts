@@ -1,7 +1,10 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { createBusinessArea } from "@/services/businessAreas";
+import {
+  createBusinessArea,
+  updateBusinessArea,
+} from "@/services/businessAreas";
 import type { StatusTone } from "@/types";
 
 function isStatusTone(value: string): value is StatusTone {
@@ -40,4 +43,51 @@ export async function createBusinessAreaAction(formData: FormData) {
   }
 
   redirect("/areas");
+}
+
+export async function updateBusinessAreaAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  const name = String(formData.get("name") ?? "");
+  const manager = String(formData.get("manager") ?? "");
+  const description = String(formData.get("description") ?? "");
+  const statusValue = String(formData.get("status") ?? "");
+  const vdComment = String(formData.get("vdComment") ?? "");
+
+  const editPath = id
+    ? `/admin/business-areas?edit=${encodeURIComponent(id)}`
+    : "/admin/business-areas";
+
+  if (!id) {
+    redirect("/admin/business-areas?error=Saknar%20aff%C3%A4rsomr%C3%A5des-id.");
+  }
+
+  if (!name.trim()) {
+    redirect(`${editPath}&error=Namn%20%C3%A4r%20obligatoriskt.`);
+  }
+
+  if (!isStatusTone(statusValue)) {
+    redirect(`${editPath}&error=Ogiltig%20status.`);
+  }
+
+  let slug = "";
+
+  try {
+    const updated = await updateBusinessArea({
+      id,
+      name,
+      manager,
+      description,
+      status: statusValue,
+      vdComment,
+    });
+    slug = updated.slug;
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Kunde inte uppdatera affärsområdet.";
+    redirect(`${editPath}&error=${encodeURIComponent(message)}`);
+  }
+
+  redirect(`/areas/${encodeURIComponent(slug)}`);
 }

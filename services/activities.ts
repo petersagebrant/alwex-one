@@ -5,6 +5,7 @@ import {
   fetchActivityById,
   fetchAllActivities,
   insertActivity,
+  updateActivityRow,
 } from "@/lib/supabase/activities";
 import { fetchAllGoals } from "@/lib/supabase/goals";
 import { recordAuditLog } from "@/services/auditLog";
@@ -13,6 +14,7 @@ import type {
   ActivityPriority,
   ActivityStatus,
   CreateActivityInput,
+  UpdateActivityInput,
 } from "@/types";
 
 const DEFAULT_ACTOR = "Peter Sagebrant";
@@ -162,4 +164,51 @@ export async function getActivityById(
     businessAreaName: areaNames.get(row.business_area_id) ?? "Okänt område",
     goalTitle: row.goal_id ? (goalTitles.get(row.goal_id) ?? null) : null,
   };
+}
+
+export async function updateActivity(
+  input: UpdateActivityInput,
+): Promise<Activity> {
+  const title = input.title.trim();
+  if (!title) {
+    throw new Error("Titel är obligatorisk.");
+  }
+
+  if (!input.id) {
+    throw new Error("id är obligatoriskt.");
+  }
+
+  if (!input.businessAreaId) {
+    throw new Error("businessAreaId är obligatoriskt.");
+  }
+
+  const existing = await fetchActivityById(input.id);
+  const completedAt =
+    input.status === "Klar"
+      ? (existing?.completed_at ?? new Date().toISOString())
+      : null;
+
+  const row = await updateActivityRow(input.id, {
+    business_area_id: input.businessAreaId,
+    goal_id: input.goalId || null,
+    title,
+    description: input.description?.trim() || null,
+    owner: input.owner?.trim() || null,
+    status: input.status,
+    priority: input.priority,
+    deadline: input.deadline || null,
+    completed_at: completedAt,
+    updated_at: new Date().toISOString(),
+  });
+
+  await recordAuditLog({
+    entityType: "activity",
+    entityId: row.id,
+    action: "updated",
+    description: `Uppdaterade aktiviteten "${row.title}"`,
+    actorName: input.owner?.trim() || DEFAULT_ACTOR,
+    businessAreaId: row.business_area_id,
+  });
+
+  return mapActivityRow(row);
 }

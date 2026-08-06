@@ -31,3 +31,15 @@ export type CreateActivityInput = {
   priority: ActivityPriority;
   deadline?: string;
 };
+
+export type UpdateActivityInput = {
+  id: string;
+  businessAreaId: string;
+  goalId?: string | null;
+  title: string;
+  description?: string;
+  owner?: string;
+  status: ActivityStatus;
+  priority: ActivityPriority;
+  deadline?: string;
+};

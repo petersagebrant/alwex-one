@@ -1,11 +1,12 @@
 export type { StatusTone } from "./status";
-export type { BusinessArea } from "./business-area";
-export type { Goal, CreateGoalInput } from "./goal";
+export type { BusinessArea, UpdateBusinessAreaInput } from "./business-area";
+export type { Goal, CreateGoalInput, UpdateGoalInput } from "./goal";
 export type {
   Activity,
   ActivityStatus,
   ActivityPriority,
   CreateActivityInput,
+  UpdateActivityInput,
 } from "./activity";
 export type {
   ActivityComment,
@@ -30,6 +31,7 @@ export type {
   CreateKPIHistoryInput,
 } from "./kpi-history";
 export type { HistoryEvent } from "./history";
+export type { VdDiaryEvent, VdDiaryTone } from "./vd-diary";
 
 export type BusinessAreaSummary = {
   slug: string;

@@ -1,6 +1,7 @@
 import {
   fetchKpiHistoryByKpiId,
   fetchKpiHistorySince,
+  fetchRecentKpiHistory,
   fetchRecentKpiHistoryForKpis,
   insertKpiHistory,
 } from "@/lib/supabase/kpi-history";
@@ -95,6 +96,21 @@ export async function addKPIHistoryEntry(
   });
 
   return mapKpiHistoryRow(row);
+}
+
+export async function getRecentKpiHistoryEntries(
+  limit = 20,
+): Promise<KPIHistory[]> {
+  try {
+    const rows = await fetchRecentKpiHistory(limit);
+    return rows.map(mapKpiHistoryRow);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("kpi_history") || message.includes("schema cache")) {
+      return [];
+    }
+    throw error;
+  }
 }
 
 export type KpiHistoryChangeLine = {

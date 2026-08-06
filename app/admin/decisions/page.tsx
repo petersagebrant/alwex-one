@@ -312,31 +312,35 @@ export default async function AdminDecisionsPage({
           ) : (
             <ul className="divide-y divide-neutral-100">
               {decisions.map((decision) => (
-                <li key={decision.id} className="px-5 py-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-medium text-neutral-900">
-                        {decision.title}
-                      </p>
-                      <p className="mt-1 text-xs text-neutral-500">
-                        {decision.businessAreaName}
-                        {decision.owner ? ` · ${decision.owner}` : null}
-                        {decision.meetingDate
-                          ? ` · Möte ${formatDateSv(decision.meetingDate)}`
-                          : null}
-                        {decision.dueDate
-                          ? ` · Förfaller ${formatDateSv(decision.dueDate)}`
-                          : null}
-                      </p>
+                <li key={decision.id}>
+                  <Link
+                    href={`/admin/decisions/${decision.id}`}
+                    className="block cursor-pointer px-5 py-4 transition hover:bg-neutral-50 hover:shadow-[inset_3px_0_0_0_#111827]"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-medium text-neutral-900">
+                          {decision.title}
+                        </p>
+                        <p className="mt-1 text-xs text-neutral-500">
+                          {decision.businessAreaName}
+                          {decision.owner ? ` · ${decision.owner}` : null}
+                          {decision.meetingDate
+                            ? ` · Möte ${formatDateSv(decision.meetingDate)}`
+                            : null}
+                          {decision.dueDate
+                            ? ` · Förfaller ${formatDateSv(decision.dueDate)}`
+                            : null}
+                        </p>
+                      </div>
+                      <span
+                        className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ${statusClass[decision.status] ?? statusClass.Planerat}`}
+                      >
+                        {decision.status}
+                      </span>
                     </div>
-                    <span
-                      className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ${statusClass[decision.status] ?? statusClass.Planerat}`}
-                    >
-                      {decision.status}
-                    </span>
-                  </div>
-
-                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                  </Link>
+                  <div className="flex flex-wrap items-center gap-3 px-5 pb-4">
                     <Link
                       href={`/admin/decisions?edit=${decision.id}`}
                       className="text-sm font-medium text-neutral-700 underline-offset-4 hover:underline"

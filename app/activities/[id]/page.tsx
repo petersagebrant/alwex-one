@@ -54,7 +54,7 @@ export default async function ActivityDetailPage({
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-[#f7f8fa] text-neutral-900">
-      <AppHeader current="areas" />
+      <AppHeader current="activities" />
 
       <main className="mx-auto w-full max-w-3xl flex-1 space-y-4 px-4 py-6 sm:space-y-5 sm:px-6 sm:py-8 lg:px-8">
         <div className="flex flex-wrap items-center gap-2 text-sm text-neutral-500">
@@ -81,6 +81,12 @@ export default async function ActivityDetailPage({
               >
                 {activity.status}
               </span>
+              <Link
+                href={`/admin/activities?edit=${activity.id}`}
+                className="text-sm font-medium text-neutral-700 underline-offset-4 hover:underline"
+              >
+                Ändra
+              </Link>
             </div>
           </div>
 

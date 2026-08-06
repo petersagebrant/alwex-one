@@ -8,13 +8,20 @@ type GoalOption = { id: string; title: string; businessAreaId: string };
 type ActivityFormFieldsProps = {
   areas: AreaOption[];
   goals: GoalOption[];
+  initialBusinessAreaId?: string;
+  initialGoalId?: string | null;
 };
 
 const fieldClassName =
   "mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20";
 
-export function ActivityFormFields({ areas, goals }: ActivityFormFieldsProps) {
-  const [businessAreaId, setBusinessAreaId] = useState("");
+export function ActivityFormFields({
+  areas,
+  goals,
+  initialBusinessAreaId = "",
+  initialGoalId = "",
+}: ActivityFormFieldsProps) {
+  const [businessAreaId, setBusinessAreaId] = useState(initialBusinessAreaId);
 
   const filteredGoals = useMemo(
     () => goals.filter((goal) => goal.businessAreaId === businessAreaId),
@@ -59,7 +66,7 @@ export function ActivityFormFields({ areas, goals }: ActivityFormFieldsProps) {
         <select
           id="goalId"
           name="goalId"
-          defaultValue=""
+          defaultValue={initialGoalId ?? ""}
           disabled={!businessAreaId}
           className={fieldClassName}
         >

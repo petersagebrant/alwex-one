@@ -8,7 +8,6 @@ import {
   SummaryCard,
   type UiStatus,
 } from "@/components/ui";
-import { vdDiaryEvents } from "@/data/mock/vd-diary";
 import { getDashboardData } from "@/services/dashboard";
 import { getKPIs } from "@/services/kpis";
 import { formatDateTimeSv } from "@/lib/format/date";
@@ -85,6 +84,7 @@ export default async function Home() {
     analyzedAtLabel: "",
   };
   const yesterdayChanges = data?.yesterdayChanges ?? [];
+  const historyEvents = data?.historyEvents ?? [];
   const assistantHighlights =
     vdAssistant.highlights ??
     (vdAssistant as { situationLines?: string[] }).situationLines ??
@@ -188,7 +188,7 @@ export default async function Home() {
           compact
           className="!border-slate-200/80 !bg-white"
         >
-          <VdDiaryTimeline events={(vdDiaryEvents ?? []).slice(0, 15)} />
+          <VdDiaryTimeline events={historyEvents} />
         </InfoPanel>
 
         <InfoPanel
@@ -518,7 +518,7 @@ export default async function Home() {
                       </p>
                     </div>
                     <Link
-                      href={`/admin/decisions?edit=${item.id}`}
+                      href={`/admin/decisions/${item.id}`}
                       className="shrink-0 text-sm font-medium text-slate-700 underline-offset-4 hover:underline"
                     >
                       Öppna
@@ -560,7 +560,12 @@ export default async function Home() {
                       className="border-b border-slate-100 last:border-b-0"
                     >
                       <td className="border-b border-slate-100 px-3 py-3 font-medium text-slate-900">
-                        {row.goal}
+                        <Link
+                          href={`/admin/goals/${row.id}`}
+                          className="hover:underline"
+                        >
+                          {row.goal}
+                        </Link>
                       </td>
                       <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
                         {row.area}

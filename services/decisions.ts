@@ -167,6 +167,15 @@ export async function updateDecision(
     updated_at: new Date().toISOString(),
   });
 
+  await recordAuditLog({
+    entityType: "decision",
+    entityId: row.id,
+    action: "updated",
+    description: `Uppdaterade beslutet "${row.title}"`,
+    actorName: input.owner?.trim() || DEFAULT_ACTOR,
+    businessAreaId: row.business_area_id,
+  });
+
   return mapDecisionRow(row);
 }
 
@@ -185,6 +194,15 @@ export async function markDecisionComplete(id: string): Promise<Decision> {
     due_date: existing.due_date,
     status: "Klart",
     updated_at: new Date().toISOString(),
+  });
+
+  await recordAuditLog({
+    entityType: "decision",
+    entityId: row.id,
+    action: "completed",
+    description: `Avslutade beslutet "${row.title}"`,
+    actorName: row.owner?.trim() || DEFAULT_ACTOR,
+    businessAreaId: row.business_area_id,
   });
 
   return mapDecisionRow(row);

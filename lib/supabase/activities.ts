@@ -116,3 +116,36 @@ export async function fetchActivityById(
 
   return data;
 }
+
+export type UpdateActivityRowInput = {
+  business_area_id: string;
+  goal_id: string | null;
+  title: string;
+  description: string | null;
+  owner: string | null;
+  status: string;
+  priority: string;
+  deadline: string | null;
+  completed_at: string | null;
+  updated_at: string;
+};
+
+export async function updateActivityRow(
+  id: string,
+  input: UpdateActivityRowInput,
+): Promise<ActivityRow> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("activities")
+    .update(input)
+    .eq("id", id)
+    .select(activitySelect)
+    .single();
+
+  if (error) {
+    throw new Error(`Kunde inte uppdatera activity: ${error.message}`);
+  }
+
+  return data;
+}

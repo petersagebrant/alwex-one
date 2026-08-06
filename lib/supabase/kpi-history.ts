@@ -57,6 +57,24 @@ export async function insertKpiHistory(
   return data;
 }
 
+export async function fetchRecentKpiHistory(
+  limit = 20,
+): Promise<KpiHistoryRow[]> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("kpi_history")
+    .select(kpiHistorySelect)
+    .order("recorded_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    throw new Error(`Kunde inte hämta KPI-historik: ${error.message}`);
+  }
+
+  return data ?? [];
+}
+
 export async function fetchKpiHistorySince(
   cutoffIso: string,
 ): Promise<KpiHistoryRow[]> {

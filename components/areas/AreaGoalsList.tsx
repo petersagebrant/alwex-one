@@ -1,6 +1,7 @@
+import Link from "next/link";
 import type { Goal } from "@/types";
 import { formatDateSv } from "@/lib/format/date";
-import { StatusPill } from "@/components/common/StatusPill";
+import { StatusBadge } from "@/components/ui";
 
 type AreaGoalsListProps = {
   goals: Goal[];
@@ -17,37 +18,40 @@ export function AreaGoalsList({ goals }: AreaGoalsListProps) {
       </div>
 
       {goals.length === 0 ? (
-        <p className="px-5 py-8 text-sm text-neutral-500">
-          Inga mål ännu.
-        </p>
+        <p className="px-5 py-8 text-sm text-neutral-500">Inga mål ännu.</p>
       ) : (
         <ul className="divide-y divide-neutral-100">
           {goals.map((goal) => (
-            <li key={goal.id} className="px-5 py-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-medium text-neutral-900">{goal.title}</p>
-                  <p className="mt-1 text-xs text-neutral-500">
-                    {goal.owner ?? "Ej angiven"}
-                    {goal.deadline
-                      ? ` · Deadline ${formatDateSv(goal.deadline)}`
-                      : null}
-                  </p>
+            <li key={goal.id}>
+              <Link
+                href={`/admin/goals/${goal.id}`}
+                className="block cursor-pointer px-5 py-4 transition hover:bg-neutral-50"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-medium text-neutral-900">{goal.title}</p>
+                    <p className="mt-1 text-xs text-neutral-500">
+                      {goal.owner ?? "Ej angiven"}
+                      {goal.deadline
+                        ? ` · Deadline ${formatDateSv(goal.deadline)}`
+                        : null}
+                    </p>
+                  </div>
+                  <StatusBadge status={goal.status} />
                 </div>
-                <StatusPill status={goal.status} />
-              </div>
-              <div className="mt-3">
-                <div className="mb-1 flex justify-between text-xs text-neutral-500">
-                  <span>Progress</span>
-                  <span>{goal.progress ?? 0} %</span>
+                <div className="mt-3">
+                  <div className="mb-1 flex justify-between text-xs text-neutral-500">
+                    <span>Progress</span>
+                    <span>{goal.progress ?? 0} %</span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-neutral-100">
+                    <div
+                      className="h-full rounded-full bg-[#5b5bd6]"
+                      style={{ width: `${goal.progress ?? 0}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-neutral-100">
-                  <div
-                    className="h-full rounded-full bg-[#5b5bd6]"
-                    style={{ width: `${goal.progress ?? 0}%` }}
-                  />
-                </div>
-              </div>
+              </Link>
             </li>
           ))}
         </ul>

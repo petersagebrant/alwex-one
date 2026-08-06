@@ -3,18 +3,19 @@ import Link from "next/link";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { formatDateSv } from "@/lib/format/date";
 import { getBusinessAreaOptions } from "@/services/businessAreas";
-import { getActivities } from "@/services/activities";
+import { getActivities, getActivityById } from "@/services/activities";
+import type { ActivityListItem } from "@/services/activities";
 import { getGoals } from "@/services/goals";
 import { ActivityFormFields } from "./ActivityFormFields";
-import { createActivityAction } from "./actions";
+import { createActivityAction, updateActivityAction } from "./actions";
 
 export const metadata: Metadata = {
   title: "Administrera aktiviteter | Alwex One",
-  description: "Lista och skapa aktiviteter",
+  description: "Lista, skapa och uppdatera aktiviteter",
 };
 
 type AdminActivitiesPageProps = {
-  searchParams: Promise<{ new?: string; error?: string }>;
+  searchParams: Promise<{ new?: string; edit?: string; error?: string }>;
 };
 
 const statusClass: Record<string, string> = {
@@ -30,18 +31,136 @@ const priorityClass: Record<string, string> = {
   Hög: "bg-rose-50 text-rose-700",
 };
 
+function ActivityDetailFields({
+  activity,
+}: {
+  activity?: ActivityListItem | null;
+}) {
+  return (
+    <>
+      <div>
+        <label
+          htmlFor="title"
+          className="block text-xs font-medium text-neutral-500"
+        >
+          Titel
+        </label>
+        <input
+          id="title"
+          name="title"
+          type="text"
+          required
+          defaultValue={activity?.title ?? ""}
+          className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
+        />
+      </div>
+
+      <div>
+        <label
+          htmlFor="description"
+          className="block text-xs font-medium text-neutral-500"
+        >
+          Beskrivning
+        </label>
+        <textarea
+          id="description"
+          name="description"
+          rows={3}
+          defaultValue={activity?.description ?? ""}
+          className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
+        />
+      </div>
+
+      <div>
+        <label
+          htmlFor="owner"
+          className="block text-xs font-medium text-neutral-500"
+        >
+          Ansvarig
+        </label>
+        <input
+          id="owner"
+          name="owner"
+          type="text"
+          defaultValue={activity?.owner ?? ""}
+          className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
+        />
+      </div>
+
+      <div>
+        <label
+          htmlFor="deadline"
+          className="block text-xs font-medium text-neutral-500"
+        >
+          Deadline
+        </label>
+        <input
+          id="deadline"
+          name="deadline"
+          type="date"
+          defaultValue={activity?.deadline ?? ""}
+          className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
+        />
+      </div>
+
+      <div>
+        <label
+          htmlFor="priority"
+          className="block text-xs font-medium text-neutral-500"
+        >
+          Prioritet
+        </label>
+        <select
+          id="priority"
+          name="priority"
+          defaultValue={activity?.priority ?? "Normal"}
+          className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
+        >
+          <option value="Låg">Låg</option>
+          <option value="Normal">Normal</option>
+          <option value="Hög">Hög</option>
+        </select>
+      </div>
+
+      <div>
+        <label
+          htmlFor="status"
+          className="block text-xs font-medium text-neutral-500"
+        >
+          Status
+        </label>
+        <select
+          id="status"
+          name="status"
+          defaultValue={activity?.status ?? "Ej påbörjad"}
+          className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
+        >
+          <option value="Ej påbörjad">Ej påbörjad</option>
+          <option value="Pågår">Pågår</option>
+          <option value="Klar">Klar</option>
+          <option value="Försenad">Försenad</option>
+        </select>
+      </div>
+    </>
+  );
+}
+
 export default async function AdminActivitiesPage({
   searchParams,
 }: AdminActivitiesPageProps) {
   const params = await searchParams;
-  const showForm = params.new === "1";
+  const showCreate = params.new === "1";
+  const editId = params.edit?.trim() || null;
   const error = params.error;
 
-  const [activities, areas, goals] = await Promise.all([
+  const [activities, areas, goals, editingActivity] = await Promise.all([
     getActivities(),
     getBusinessAreaOptions(),
     getGoals(),
+    editId ? getActivityById(editId).catch(() => null) : Promise.resolve(null),
   ]);
+
+  const showEdit = Boolean(editId && editingActivity);
 
   const goalOptions = goals.map((goal) => ({
     id: goal.id,
@@ -71,7 +190,7 @@ export default async function AdminActivitiesPage({
             </p>
           </div>
 
-          {!showForm ? (
+          {!showCreate && !showEdit ? (
             <Link
               href="/admin/activities?new=1"
               className="inline-flex items-center justify-center rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-neutral-800"
@@ -81,7 +200,13 @@ export default async function AdminActivitiesPage({
           ) : null}
         </div>
 
-        {showForm ? (
+        {error && !showCreate && !showEdit ? (
+          <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+            {error}
+          </p>
+        ) : null}
+
+        {showCreate ? (
           <form
             action={createActivityAction}
             className="rounded-xl border border-neutral-200 bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-6"
@@ -98,106 +223,7 @@ export default async function AdminActivitiesPage({
 
             <div className="mt-4 space-y-4">
               <ActivityFormFields areas={areas} goals={goalOptions} />
-
-              <div>
-                <label
-                  htmlFor="title"
-                  className="block text-xs font-medium text-neutral-500"
-                >
-                  Titel
-                </label>
-                <input
-                  id="title"
-                  name="title"
-                  type="text"
-                  required
-                  className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="description"
-                  className="block text-xs font-medium text-neutral-500"
-                >
-                  Beskrivning
-                </label>
-                <textarea
-                  id="description"
-                  name="description"
-                  rows={3}
-                  className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="owner"
-                  className="block text-xs font-medium text-neutral-500"
-                >
-                  Ansvarig
-                </label>
-                <input
-                  id="owner"
-                  name="owner"
-                  type="text"
-                  className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="deadline"
-                  className="block text-xs font-medium text-neutral-500"
-                >
-                  Deadline
-                </label>
-                <input
-                  id="deadline"
-                  name="deadline"
-                  type="date"
-                  className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="priority"
-                  className="block text-xs font-medium text-neutral-500"
-                >
-                  Prioritet
-                </label>
-                <select
-                  id="priority"
-                  name="priority"
-                  defaultValue="Normal"
-                  className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
-                >
-                  <option value="Låg">Låg</option>
-                  <option value="Normal">Normal</option>
-                  <option value="Hög">Hög</option>
-                </select>
-              </div>
-
-              <div>
-                <label
-                  htmlFor="status"
-                  className="block text-xs font-medium text-neutral-500"
-                >
-                  Status
-                </label>
-                <select
-                  id="status"
-                  name="status"
-                  defaultValue="Ej påbörjad"
-                  className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
-                >
-                  <option value="Ej påbörjad">Ej påbörjad</option>
-                  <option value="Pågår">Pågår</option>
-                  <option value="Klar">Klar</option>
-                  <option value="Försenad">Försenad</option>
-                </select>
-              </div>
+              <ActivityDetailFields />
             </div>
 
             <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -217,6 +243,55 @@ export default async function AdminActivitiesPage({
           </form>
         ) : null}
 
+        {showEdit && editingActivity ? (
+          <form
+            action={updateActivityAction}
+            className="rounded-xl border border-neutral-200 bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-6"
+          >
+            <input type="hidden" name="id" value={editingActivity.id} />
+            <h2 className="text-sm font-semibold text-neutral-900">
+              Ändra aktivitet
+            </h2>
+
+            {error ? (
+              <p className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+                {error}
+              </p>
+            ) : null}
+
+            <div className="mt-4 space-y-4">
+              <ActivityFormFields
+                areas={areas}
+                goals={goalOptions}
+                initialBusinessAreaId={editingActivity.businessAreaId}
+                initialGoalId={editingActivity.goalId}
+              />
+              <ActivityDetailFields activity={editingActivity} />
+            </div>
+
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              <button
+                type="submit"
+                className="inline-flex items-center justify-center rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-neutral-800"
+              >
+                Spara ändringar
+              </button>
+              <Link
+                href={`/activities/${editingActivity.id}`}
+                className="text-sm font-medium text-neutral-600 hover:text-neutral-900"
+              >
+                Avbryt
+              </Link>
+            </div>
+          </form>
+        ) : null}
+
+        {editId && !editingActivity ? (
+          <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+            Aktiviteten hittades inte.
+          </p>
+        ) : null}
+
         <section className="rounded-xl border border-neutral-200 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
           <div className="border-b border-neutral-200 px-5 py-4">
             <h2 className="text-sm font-semibold text-neutral-900">
@@ -234,7 +309,7 @@ export default async function AdminActivitiesPage({
                 <li key={activity.id}>
                   <Link
                     href={`/activities/${activity.id}`}
-                    className="block px-5 py-4 transition hover:bg-neutral-50"
+                    className="block cursor-pointer px-5 py-4 transition hover:bg-neutral-50 hover:shadow-[inset_3px_0_0_0_#111827]"
                   >
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">

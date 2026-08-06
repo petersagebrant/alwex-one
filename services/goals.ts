@@ -1,11 +1,18 @@
 import {
   fetchAllGoals,
+  fetchGoalById,
   fetchGoalsByBusinessAreaId,
   insertGoal,
+  updateGoalRow,
 } from "@/lib/supabase/goals";
 import { fetchBusinessAreas } from "@/lib/supabase/business-areas";
 import { recordAuditLog } from "@/services/auditLog";
-import type { CreateGoalInput, Goal, StatusTone } from "@/types";
+import type {
+  CreateGoalInput,
+  Goal,
+  StatusTone,
+  UpdateGoalInput,
+} from "@/types";
 
 const DEFAULT_ACTOR = "Peter Sagebrant";
 
@@ -103,6 +110,65 @@ export async function createGoal(input: CreateGoalInput): Promise<Goal> {
     entityId: row.id,
     action: "created",
     description: `Skapade målet "${row.title}"`,
+    actorName: input.owner?.trim() || DEFAULT_ACTOR,
+    businessAreaId: row.business_area_id,
+  });
+
+  return mapGoalRow(row);
+}
+
+export async function getGoalById(id: string): Promise<GoalListItem | null> {
+  const row = await fetchGoalById(id);
+  if (!row) {
+    return null;
+  }
+
+  const areas = await fetchBusinessAreas();
+  const areaNames = new Map(areas.map((area) => [area.id, area.name]));
+
+  return {
+    ...mapGoalRow(row),
+    businessAreaName: areaNames.get(row.business_area_id) ?? "Okänt område",
+  };
+}
+
+export async function updateGoal(input: UpdateGoalInput): Promise<Goal> {
+  const title = input.title.trim();
+  if (!title) {
+    throw new Error("Titel är obligatorisk.");
+  }
+
+  if (!input.id) {
+    throw new Error("id är obligatoriskt.");
+  }
+
+  if (!input.businessAreaId) {
+    throw new Error("businessAreaId är obligatoriskt.");
+  }
+
+  const progress =
+    input.progress === undefined
+      ? null
+      : Math.min(100, Math.max(0, Math.round(input.progress)));
+
+  const row = await updateGoalRow(input.id, {
+    business_area_id: input.businessAreaId,
+    title,
+    description: input.description?.trim() || null,
+    owner: input.owner?.trim() || null,
+    status: input.status,
+    target_value: input.targetValue?.trim() || null,
+    current_value: input.currentValue?.trim() || null,
+    deadline: input.deadline || null,
+    progress,
+    updated_at: new Date().toISOString(),
+  });
+
+  await recordAuditLog({
+    entityType: "goal",
+    entityId: row.id,
+    action: "updated",
+    description: `Uppdaterade målet "${row.title}"`,
     actorName: input.owner?.trim() || DEFAULT_ACTOR,
     businessAreaId: row.business_area_id,
   });

@@ -26,3 +26,16 @@ export type CreateGoalInput = {
   deadline?: string;
   progress?: number;
 };
+
+export type UpdateGoalInput = {
+  id: string;
+  businessAreaId: string;
+  title: string;
+  description?: string;
+  owner?: string;
+  status: StatusTone;
+  targetValue?: string;
+  currentValue?: string;
+  deadline?: string;
+  progress?: number;
+};

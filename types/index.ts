@@ -18,7 +18,13 @@ export type {
   UpdateDecisionInput,
 } from "./decision";
 export type { AuditLogEntry, CreateAuditLogInput } from "./audit-log";
-export type { Kpi } from "./kpi";
+export type {
+  KPI,
+  Kpi,
+  KpiTrend,
+  CreateKPIInput,
+  UpdateKPIInput,
+} from "./kpi";
 export type { HistoryEvent } from "./history";
 
 export type BusinessAreaSummary = {

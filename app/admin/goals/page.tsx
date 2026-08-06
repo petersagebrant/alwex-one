@@ -30,7 +30,7 @@ export default async function AdminGoalsPage({
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-[#f7f8fa] text-neutral-900">
-      <AppHeader current="areas" />
+      <AppHeader current="goals" />
 
       <main className="mx-auto w-full max-w-4xl flex-1 space-y-6 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">

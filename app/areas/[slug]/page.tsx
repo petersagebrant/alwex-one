@@ -10,11 +10,11 @@ import {
   getAllAreaSlugs,
   getBusinessAreaBySlug,
   getHistoryByArea,
-  getKpisByArea,
 } from "@/data/mock";
 import { fetchBusinessAreaBySlug } from "@/lib/supabase/business-areas";
 import { getActivitiesByBusinessAreaId } from "@/services/activities";
 import { getGoalsByBusinessAreaId } from "@/services/goals";
+import { getKPIsByBusinessArea } from "@/services/kpis";
 
 type AreaDetailPageProps = {
   params: Promise<{ slug: string }>;
@@ -51,8 +51,10 @@ export default async function AreaDetailPage({ params }: AreaDetailPageProps) {
   const areaActivities = dbArea
     ? await getActivitiesByBusinessAreaId(dbArea.id)
     : [];
+  const areaKpis = dbArea
+    ? await getKPIsByBusinessArea(dbArea.id)
+    : [];
 
-  const areaKpis = getKpisByArea(slug);
   const areaHistory = getHistoryByArea(slug);
 
   return (

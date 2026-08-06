@@ -1,37 +1,33 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AppHeader } from "@/components/layout/AppHeader";
-import { formatDateSv } from "@/lib/format/date";
+import { StatusPill } from "@/components/common/StatusPill";
 import { getBusinessAreaOptions } from "@/services/businessAreas";
-import { getDecisionById, getDecisions } from "@/services/decisions";
-import type { DecisionListItem } from "@/services/decisions";
-import {
-  createDecisionAction,
-  markDecisionCompleteAction,
-  updateDecisionAction,
-} from "./actions";
+import { getKPIById, getKPIs } from "@/services/kpis";
+import type { KPIListItem } from "@/services/kpis";
+import { createKpiAction, updateKpiAction } from "./actions";
 
 export const metadata: Metadata = {
-  title: "Administrera beslut | Alwex One",
-  description: "Lista, skapa och uppdatera beslut",
+  title: "Administrera KPI | Alwex One",
+  description: "Lista, skapa och uppdatera nyckeltal",
 };
 
-type AdminDecisionsPageProps = {
+type AdminKpisPageProps = {
   searchParams: Promise<{ new?: string; edit?: string; error?: string }>;
 };
 
-const statusClass: Record<string, string> = {
-  Planerat: "bg-neutral-100 text-neutral-700",
-  Pågår: "bg-indigo-50 text-indigo-700",
-  Klart: "bg-emerald-50 text-emerald-700",
+const trendClass: Record<string, string> = {
+  Upp: "bg-emerald-50 text-emerald-700",
+  Oförändrad: "bg-neutral-100 text-neutral-700",
+  Ner: "bg-rose-50 text-rose-700",
 };
 
-function DecisionFormFields({
+function KpiFormFields({
   areas,
-  decision,
+  kpi,
 }: {
   areas: { id: string; name: string }[];
-  decision?: DecisionListItem | null;
+  kpi?: KPIListItem | null;
 }) {
   return (
     <>
@@ -46,7 +42,7 @@ function DecisionFormFields({
           id="businessAreaId"
           name="businessAreaId"
           required
-          defaultValue={decision?.businessAreaId ?? ""}
+          defaultValue={kpi?.businessAreaId ?? ""}
           className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
         >
           <option value="" disabled>
@@ -62,128 +58,149 @@ function DecisionFormFields({
 
       <div>
         <label
-          htmlFor="title"
+          htmlFor="name"
           className="block text-xs font-medium text-neutral-500"
         >
-          Titel
+          Namn
         </label>
         <input
-          id="title"
-          name="title"
+          id="name"
+          name="name"
           type="text"
           required
-          defaultValue={decision?.title ?? ""}
+          defaultValue={kpi?.name ?? ""}
           className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
         />
       </div>
 
       <div>
         <label
-          htmlFor="description"
+          htmlFor="category"
           className="block text-xs font-medium text-neutral-500"
         >
-          Beskrivning
-        </label>
-        <textarea
-          id="description"
-          name="description"
-          rows={3}
-          defaultValue={decision?.description ?? ""}
-          className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
-        />
-      </div>
-
-      <div>
-        <label
-          htmlFor="owner"
-          className="block text-xs font-medium text-neutral-500"
-        >
-          Ansvarig
+          Kategori
         </label>
         <input
-          id="owner"
-          name="owner"
+          id="category"
+          name="category"
           type="text"
-          defaultValue={decision?.owner ?? ""}
+          defaultValue={kpi?.category ?? ""}
           className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
         />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div>
+          <label
+            htmlFor="currentValue"
+            className="block text-xs font-medium text-neutral-500"
+          >
+            Nuvarande värde
+          </label>
+          <input
+            id="currentValue"
+            name="currentValue"
+            type="text"
+            defaultValue={kpi?.currentValue ?? ""}
+            className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
+          />
+        </div>
+
+        <div>
+          <label
+            htmlFor="targetValue"
+            className="block text-xs font-medium text-neutral-500"
+          >
+            Målvärde
+          </label>
+          <input
+            id="targetValue"
+            name="targetValue"
+            type="text"
+            defaultValue={kpi?.targetValue ?? ""}
+            className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
+          />
+        </div>
+
+        <div>
+          <label
+            htmlFor="unit"
+            className="block text-xs font-medium text-neutral-500"
+          >
+            Enhet
+          </label>
+          <input
+            id="unit"
+            name="unit"
+            type="text"
+            defaultValue={kpi?.unit ?? ""}
+            className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <label
-            htmlFor="meetingDate"
+            htmlFor="status"
             className="block text-xs font-medium text-neutral-500"
           >
-            Mötesdatum
+            Status
           </label>
-          <input
-            id="meetingDate"
-            name="meetingDate"
-            type="date"
-            defaultValue={decision?.meetingDate ?? ""}
+          <select
+            id="status"
+            name="status"
+            defaultValue={kpi?.status ?? "Gul"}
             className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
-          />
+          >
+            <option value="Grön">Grön</option>
+            <option value="Gul">Gul</option>
+            <option value="Röd">Röd</option>
+          </select>
         </div>
 
         <div>
           <label
-            htmlFor="dueDate"
+            htmlFor="trend"
             className="block text-xs font-medium text-neutral-500"
           >
-            Förfallodatum
+            Trend
           </label>
-          <input
-            id="dueDate"
-            name="dueDate"
-            type="date"
-            defaultValue={decision?.dueDate ?? ""}
+          <select
+            id="trend"
+            name="trend"
+            defaultValue={kpi?.trend ?? "Oförändrad"}
             className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
-          />
+          >
+            <option value="Upp">Upp</option>
+            <option value="Oförändrad">Oförändrad</option>
+            <option value="Ner">Ner</option>
+          </select>
         </div>
-      </div>
-
-      <div>
-        <label
-          htmlFor="status"
-          className="block text-xs font-medium text-neutral-500"
-        >
-          Status
-        </label>
-        <select
-          id="status"
-          name="status"
-          defaultValue={decision?.status ?? "Planerat"}
-          className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
-        >
-          <option value="Planerat">Planerat</option>
-          <option value="Pågår">Pågår</option>
-          <option value="Klart">Klart</option>
-        </select>
       </div>
     </>
   );
 }
 
-export default async function AdminDecisionsPage({
+export default async function AdminKpisPage({
   searchParams,
-}: AdminDecisionsPageProps) {
+}: AdminKpisPageProps) {
   const params = await searchParams;
   const showCreate = params.new === "1";
   const editId = params.edit?.trim() || null;
   const error = params.error;
 
-  const [decisions, areas, editingDecision] = await Promise.all([
-    getDecisions(),
+  const [kpis, areas, editingKpi] = await Promise.all([
+    getKPIs().catch(() => [] as KPIListItem[]),
     getBusinessAreaOptions(),
-    editId ? getDecisionById(editId) : Promise.resolve(null),
+    editId ? getKPIById(editId).catch(() => null) : Promise.resolve(null),
   ]);
 
-  const showEdit = Boolean(editId && editingDecision);
+  const showEdit = Boolean(editId && editingKpi);
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-[#f7f8fa] text-neutral-900">
-      <AppHeader current="decisions" />
+      <AppHeader current="kpis" />
 
       <main className="mx-auto w-full max-w-4xl flex-1 space-y-6 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -193,22 +210,22 @@ export default async function AdminDecisionsPage({
                 Affärsområden
               </Link>
               <span aria-hidden>/</span>
-              <span className="text-neutral-800">Beslut</span>
+              <span className="text-neutral-800">KPI</span>
             </div>
             <h1 className="mt-3 text-2xl font-semibold tracking-tight text-neutral-900">
-              Administrera beslut
+              Administrera KPI
             </h1>
             <p className="mt-1 text-sm text-neutral-500">
-              {decisions.length} beslut i databasen
+              {kpis.length} KPI i databasen
             </p>
           </div>
 
           {!showCreate && !showEdit ? (
             <Link
-              href="/admin/decisions?new=1"
+              href="/admin/kpis?new=1"
               className="inline-flex items-center justify-center rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-neutral-800"
             >
-              Nytt beslut
+              Ny KPI
             </Link>
           ) : null}
         </div>
@@ -221,12 +238,10 @@ export default async function AdminDecisionsPage({
 
         {showCreate ? (
           <form
-            action={createDecisionAction}
+            action={createKpiAction}
             className="rounded-xl border border-neutral-200 bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-6"
           >
-            <h2 className="text-sm font-semibold text-neutral-900">
-              Nytt beslut
-            </h2>
+            <h2 className="text-sm font-semibold text-neutral-900">Ny KPI</h2>
 
             {error ? (
               <p className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
@@ -235,7 +250,7 @@ export default async function AdminDecisionsPage({
             ) : null}
 
             <div className="mt-4 space-y-4">
-              <DecisionFormFields areas={areas} />
+              <KpiFormFields areas={areas} />
             </div>
 
             <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -246,7 +261,7 @@ export default async function AdminDecisionsPage({
                 Spara
               </button>
               <Link
-                href="/admin/decisions"
+                href="/admin/kpis"
                 className="text-sm font-medium text-neutral-600 hover:text-neutral-900"
               >
                 Avbryt
@@ -255,15 +270,13 @@ export default async function AdminDecisionsPage({
           </form>
         ) : null}
 
-        {showEdit && editingDecision ? (
+        {showEdit && editingKpi ? (
           <form
-            action={updateDecisionAction}
+            action={updateKpiAction}
             className="rounded-xl border border-neutral-200 bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-6"
           >
-            <input type="hidden" name="id" value={editingDecision.id} />
-            <h2 className="text-sm font-semibold text-neutral-900">
-              Ändra beslut
-            </h2>
+            <input type="hidden" name="id" value={editingKpi.id} />
+            <h2 className="text-sm font-semibold text-neutral-900">Ändra KPI</h2>
 
             {error ? (
               <p className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
@@ -272,7 +285,7 @@ export default async function AdminDecisionsPage({
             ) : null}
 
             <div className="mt-4 space-y-4">
-              <DecisionFormFields areas={areas} decision={editingDecision} />
+              <KpiFormFields areas={areas} kpi={editingKpi} />
             </div>
 
             <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -283,7 +296,7 @@ export default async function AdminDecisionsPage({
                 Spara ändringar
               </button>
               <Link
-                href="/admin/decisions"
+                href="/admin/kpis"
                 className="text-sm font-medium text-neutral-600 hover:text-neutral-900"
               >
                 Avbryt
@@ -292,68 +305,56 @@ export default async function AdminDecisionsPage({
           </form>
         ) : null}
 
-        {editId && !editingDecision ? (
+        {editId && !editingKpi ? (
           <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
-            Beslutet hittades inte.
+            KPI hittades inte.
           </p>
         ) : null}
 
         <section className="rounded-xl border border-neutral-200 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
           <div className="border-b border-neutral-200 px-5 py-4">
-            <h2 className="text-sm font-semibold text-neutral-900">
-              Alla beslut
-            </h2>
+            <h2 className="text-sm font-semibold text-neutral-900">Alla KPI</h2>
           </div>
 
-          {decisions.length === 0 ? (
+          {kpis.length === 0 ? (
             <p className="px-5 py-8 text-sm text-neutral-500">
-              Inga beslut ännu.
+              Inga KPI registrerade ännu.
             </p>
           ) : (
             <ul className="divide-y divide-neutral-100">
-              {decisions.map((decision) => (
-                <li key={decision.id} className="px-5 py-4">
+              {kpis.map((kpi) => (
+                <li key={kpi.id} className="px-5 py-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="font-medium text-neutral-900">
-                        {decision.title}
-                      </p>
+                      <p className="font-medium text-neutral-900">{kpi.name}</p>
                       <p className="mt-1 text-xs text-neutral-500">
-                        {decision.businessAreaName}
-                        {decision.owner ? ` · ${decision.owner}` : null}
-                        {decision.meetingDate
-                          ? ` · Möte ${formatDateSv(decision.meetingDate)}`
+                        {kpi.businessAreaName}
+                        {kpi.category ? ` · ${kpi.category}` : null}
+                        {kpi.currentValue
+                          ? ` · ${kpi.currentValue}${kpi.unit ? ` ${kpi.unit}` : ""}`
                           : null}
-                        {decision.dueDate
-                          ? ` · Förfaller ${formatDateSv(decision.dueDate)}`
+                        {kpi.targetValue
+                          ? ` · Mål ${kpi.targetValue}${kpi.unit ? ` ${kpi.unit}` : ""}`
                           : null}
                       </p>
                     </div>
-                    <span
-                      className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ${statusClass[decision.status] ?? statusClass.Planerat}`}
-                    >
-                      {decision.status}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <StatusPill status={kpi.status} />
+                      <span
+                        className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ${trendClass[kpi.trend] ?? trendClass.Oförändrad}`}
+                      >
+                        {kpi.trend}
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <div className="mt-3">
                     <Link
-                      href={`/admin/decisions?edit=${decision.id}`}
+                      href={`/admin/kpis?edit=${kpi.id}`}
                       className="text-sm font-medium text-neutral-700 underline-offset-4 hover:underline"
                     >
                       Ändra
                     </Link>
-                    {decision.status !== "Klart" ? (
-                      <form action={markDecisionCompleteAction}>
-                        <input type="hidden" name="id" value={decision.id} />
-                        <button
-                          type="submit"
-                          className="text-sm font-medium text-emerald-700 underline-offset-4 hover:underline"
-                        >
-                          Markera klart
-                        </button>
-                      </form>
-                    ) : null}
                   </div>
                 </li>
               ))}

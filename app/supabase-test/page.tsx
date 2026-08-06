@@ -1,3 +1,4 @@
+import { AppHeader } from "@/components/layout/AppHeader";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -33,23 +34,26 @@ export default async function SupabaseTestPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-full w-full max-w-2xl flex-1 flex-col justify-center px-4 py-16">
-      <div
-        className={`rounded-xl border p-6 ${
-          status === "ok"
-            ? "border-emerald-200 bg-emerald-50 text-emerald-900"
-            : "border-rose-200 bg-rose-50 text-rose-900"
-        }`}
-      >
-        <h1 className="text-lg font-semibold tracking-tight">{message}</h1>
-        {detail ? (
-          <p className="mt-3 text-sm leading-relaxed opacity-90">{detail}</p>
-        ) : (
-          <p className="mt-3 text-sm leading-relaxed opacity-90">
-            Miljövariabler är satta och klienten kunde nå Supabase Auth-API:t.
-          </p>
-        )}
-      </div>
-    </main>
+    <div className="flex min-h-full flex-1 flex-col bg-[#f7f8fa] text-neutral-900">
+      <AppHeader />
+      <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center px-4 py-16">
+        <div
+          className={`rounded-xl border p-6 ${
+            status === "ok"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+              : "border-rose-200 bg-rose-50 text-rose-900"
+          }`}
+        >
+          <h1 className="text-lg font-semibold tracking-tight">{message}</h1>
+          {detail ? (
+            <p className="mt-3 text-sm leading-relaxed opacity-90">{detail}</p>
+          ) : (
+            <p className="mt-3 text-sm leading-relaxed opacity-90">
+              Miljövariabler är satta och klienten kunde nå Supabase Auth-API:t.
+            </p>
+          )}
+        </div>
+      </main>
+    </div>
   );
 }

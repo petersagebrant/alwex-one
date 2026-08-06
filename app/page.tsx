@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AppHeader } from "@/components/layout/AppHeader";
 import { getDashboardData } from "@/services/dashboard";
 import { formatDateTimeSv } from "@/lib/format/date";
 import type { StatusTone } from "@/types";
@@ -51,33 +52,7 @@ export default async function Home() {
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-[#eef2f6] font-sans text-slate-800">
-      <header className="sticky top-0 z-30 border-b border-slate-900/30 bg-[#0b1220] text-white shadow-sm">
-        <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8 lg:py-0 lg:h-16">
-          <div className="min-w-0">
-            <p className="text-sm font-semibold tracking-[0.12em] text-white uppercase sm:text-[15px]">
-              ALWEX Ledningsportal
-            </p>
-            <p className="mt-0.5 text-xs text-slate-300 sm:text-sm">
-              Målbild och verksamhetsuppföljning
-            </p>
-          </div>
-
-          <div className="inline-flex max-w-full items-center gap-3 self-start rounded-xl border border-white/10 bg-white/5 px-3 py-2 lg:self-auto">
-            <span
-              aria-hidden
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-500/20 text-xs font-semibold text-sky-200"
-            >
-              PS
-            </span>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-white">
-                Peter Sagebrant, VD
-              </p>
-              <p className="text-[11px] text-slate-400">Inloggad</p>
-            </div>
-          </div>
-        </div>
-      </header>
+      <AppHeader current="home" />
 
       <main className="mx-auto w-full max-w-7xl flex-1 space-y-8 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         <section aria-labelledby="kpi-heading">

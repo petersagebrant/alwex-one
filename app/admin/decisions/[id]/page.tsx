@@ -79,7 +79,7 @@ export default async function DecisionDetailPage({
                 href={`/admin/decisions?edit=${decision.id}`}
                 className="text-sm font-medium text-neutral-700 underline-offset-4 hover:underline"
               >
-                Ändra beslut
+                Ändra
               </Link>
             </div>
           </div>

@@ -29,7 +29,7 @@ export async function generateMetadata({
   params,
 }: ActivityDetailPageProps): Promise<Metadata> {
   const { id } = await params;
-  const activity = await getActivityById(id);
+  const activity = await getActivityById(id).catch(() => null);
 
   return {
     title: activity
@@ -45,7 +45,7 @@ export default async function ActivityDetailPage({
   const { id } = await params;
   const { error } = await searchParams;
 
-  const activity = await getActivityById(id);
+  const activity = await getActivityById(id).catch(() => null);
   if (!activity) {
     notFound();
   }

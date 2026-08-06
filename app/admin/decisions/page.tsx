@@ -283,7 +283,7 @@ export default async function AdminDecisionsPage({
                 Spara ändringar
               </button>
               <Link
-                href="/admin/decisions"
+                href={`/admin/decisions/${editingDecision.id}`}
                 className="text-sm font-medium text-neutral-600 hover:text-neutral-900"
               >
                 Avbryt

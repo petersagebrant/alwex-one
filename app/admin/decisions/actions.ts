@@ -41,8 +41,10 @@ export async function createDecisionAction(formData: FormData) {
     redirect("/admin/decisions?new=1&error=Ogiltig%20status.");
   }
 
+  let createdId = "";
+
   try {
-    await createDecision({
+    const created = await createDecision({
       businessAreaId: fields.businessAreaId,
       title: fields.title,
       description: fields.description,
@@ -51,13 +53,14 @@ export async function createDecisionAction(formData: FormData) {
       dueDate: fields.dueDate || undefined,
       status: fields.statusValue,
     });
+    createdId = created.id;
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Kunde inte spara beslutet.";
     redirect(`/admin/decisions?new=1&error=${encodeURIComponent(message)}`);
   }
 
-  redirect("/admin/decisions");
+  redirect(`/admin/decisions/${encodeURIComponent(createdId)}`);
 }
 
 export async function updateDecisionAction(formData: FormData) {
@@ -105,7 +108,7 @@ export async function updateDecisionAction(formData: FormData) {
     );
   }
 
-  redirect("/admin/decisions");
+  redirect(`/admin/decisions/${encodeURIComponent(id)}`);
 }
 
 export async function markDecisionCompleteAction(formData: FormData) {

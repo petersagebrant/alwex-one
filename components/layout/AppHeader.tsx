@@ -9,7 +9,8 @@ export type AppNavKey =
   | "goals"
   | "activities"
   | "decisions"
-  | "kpis";
+  | "kpis"
+  | "assistant";
 
 type AppHeaderProps = {
   current?: AppNavKey;
@@ -22,6 +23,7 @@ const navItems: { key: AppNavKey; href: string; label: string }[] = [
   { key: "activities", href: "/admin/activities", label: "Aktiviteter" },
   { key: "decisions", href: "/admin/decisions", label: "Beslut" },
   { key: "kpis", href: "/admin/kpis", label: "KPI" },
+  { key: "assistant", href: "/assistant", label: "AI-assistent" },
 ];
 
 function initialsFromEmail(email: string | null): string {

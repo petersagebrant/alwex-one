@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AppHeader } from "@/components/layout/AppHeader";
+import { VdBriefingPanel } from "@/components/dashboard/VdBriefingPanel";
 import { VdDiaryTimeline } from "../components/dashboard/VdDiaryTimeline";
 import {
   InfoPanel,
@@ -8,6 +9,10 @@ import {
   SummaryCard,
   type UiStatus,
 } from "@/components/ui";
+import {
+  buildLocalVdBriefing,
+  getCachedVdBriefing,
+} from "@/services/assistant";
 import { getDashboardData } from "@/services/dashboard";
 import { getKPIs } from "@/services/kpis";
 import { formatDateTimeSv } from "@/lib/format/date";
@@ -76,8 +81,12 @@ export default async function Home() {
   const sinceLoginChanges = data?.sinceLoginChanges ?? [];
   const vdAssistant = data?.vdAssistant ?? {
     greeting: "",
+    situation: "",
+    priority: "",
+    observations: [] as string[],
+    positiveSummary: "",
+    highlights: [] as string[],
     intro: "",
-    highlights: [],
     recommendation: "",
     riskLevel: "Låg" as const,
     riskLabel: "Låg",
@@ -85,10 +94,6 @@ export default async function Home() {
   };
   const yesterdayChanges = data?.yesterdayChanges ?? [];
   const historyEvents = data?.historyEvents ?? [];
-  const assistantHighlights =
-    vdAssistant.highlights ??
-    (vdAssistant as { situationLines?: string[] }).situationLines ??
-    [];
   const focusKpis = vdFocus.kpis ?? [];
   const kpiDetailById = new Map(
     (kpiDetails ?? []).map((kpi) => [kpi.id, kpi]),
@@ -114,36 +119,110 @@ export default async function Home() {
     Låg: "!border-emerald-200/80 !bg-emerald-50/40",
   };
 
+  const cachedAiBriefing = getCachedVdBriefing();
+  const firstNameFromGreeting = vdAssistant.greeting?.match(
+    /^God morgon\s+([^!.]+)/i,
+  )?.[1]?.trim();
+  const summaryKpiValue = (id: string) =>
+    Number(kpis.find((kpi) => kpi.id === id)?.value ?? 0) || 0;
+  const localBriefing = buildLocalVdBriefing({
+    firstName: firstNameFromGreeting ?? null,
+    summaryText: vdAssistant.situation?.trim() ?? "",
+    followUpKpis: (focusKpis ?? []).map((kpi) => ({
+      name: kpi?.name ?? "",
+      area: kpi?.area ?? "",
+      status: kpi?.status,
+      owner: kpi?.owner ?? "",
+    })),
+    greenAreaNames: (businessAreas ?? [])
+      .filter((area) => area?.status === "Grön")
+      .map((area) => area?.name ?? "")
+      .filter(Boolean),
+    delayedActivities: (vdFocus.delayedActivities ?? []).map((activity) => ({
+      title: activity?.title ?? "",
+      area: activity?.area ?? "",
+      owner: activity?.owner ?? "",
+      deadline: activity?.deadline ?? "",
+    })),
+    openDecisions: (vdFocus.openDecisions ?? []).map((decision) => ({
+      title: decision?.title ?? "",
+      area: decision?.area ?? "",
+      owner: decision?.owner ?? "",
+      dueDate: decision?.dueDate ?? "",
+    })),
+    actionGoals: (actionGoals ?? []).map((goal) => ({
+      goal: goal?.goal ?? "",
+      area: goal?.area ?? "",
+      owner: goal?.owner ?? "",
+      status: goal?.status,
+    })),
+    delayedActivityCount: vdFocus.summary?.delayedActivityCount ?? 0,
+    openDecisionCount: vdFocus.summary?.openDecisionCount ?? 0,
+    priorityText:
+      vdAssistant.priority?.trim() ||
+      vdAssistant.recommendation?.trim() ||
+      "",
+    positiveSummary: vdAssistant.positiveSummary?.trim() ?? "",
+    counts: {
+      areas: businessAreas?.length ?? 0,
+      kpis: kpiDetails?.length ?? 0,
+      goals: summaryKpiValue("goals"),
+      activities: summaryKpiValue("activities"),
+      decisions: Math.max(
+        vdFocus.summary?.openDecisionCount ?? 0,
+        vdFocus.openDecisions?.length ?? 0,
+        upcomingDecisions?.length ?? 0,
+      ),
+    },
+    analyzedAtLabel:
+      vdAssistant.analyzedAtLabel?.trim() ||
+      formatDateTimeSv(new Date().toISOString()),
+  });
+  const initialBriefing = cachedAiBriefing ?? localBriefing;
+
   return (
     <div className="flex min-h-full flex-1 flex-col bg-[#eef2f6] font-sans text-slate-800">
       <AppHeader current="home" />
 
       <main className="mx-auto w-full max-w-[1440px] flex-1 space-y-6 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+        <VdBriefingPanel
+          initialContent={initialBriefing}
+          hasAiCache={Boolean(cachedAiBriefing)}
+        />
+
         <InfoPanel
           title="VD-assistent"
           variant="ai-summary"
           showLabel={false}
           compact
-          className={assistantToneClass[vdAssistant.riskLevel]}
+          className={assistantToneClass[vdAssistant.riskLevel ?? "Låg"]}
           footer={
             <p className="text-xs text-slate-500">
               Senast analyserad{" "}
               <span className="font-medium text-slate-700">
-                {vdAssistant.analyzedAtLabel}
+                {vdAssistant.analyzedAtLabel ?? "—"}
               </span>
             </p>
           }
         >
-          <div className="space-y-2">
-            <p className="text-sm text-slate-700">{vdAssistant.greeting}</p>
-            <p className="text-sm text-slate-600">
-              {(assistantHighlights ?? []).length > 0
-                ? (assistantHighlights ?? []).join(" ")
-                : vdAssistant.intro}
-            </p>
-            <p className="text-sm font-semibold text-slate-900">
-              {vdAssistant.recommendation}
-            </p>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="space-y-1">
+              <p className="text-sm text-slate-600">
+                Risknivå:{" "}
+                <span className="font-semibold text-slate-900">
+                  {vdAssistant.riskLabel ?? vdAssistant.riskLevel ?? "Låg"}
+                </span>
+              </p>
+              <p className="text-sm text-slate-500">
+                Sammanfattningen finns i VD Briefing ovan.
+              </p>
+            </div>
+            <Link
+              href="/assistant"
+              className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
+            >
+              Ställ en fråga
+            </Link>
           </div>
         </InfoPanel>
 

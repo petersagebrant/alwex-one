@@ -1,3 +1,4 @@
+import { getCurrentUser } from "@/lib/auth/require-user";
 import { fetchBusinessAreas } from "@/lib/supabase/business-areas";
 import { formatDateSv, formatDateTimeSv } from "@/lib/format/date";
 import { getActivities, type ActivityListItem } from "@/services/activities";
@@ -8,7 +9,7 @@ import {
 } from "@/services/auditLog";
 import { getDecisions } from "@/services/decisions";
 import { getGoals } from "@/services/goals";
-import { getKPIs } from "@/services/kpis";
+import { getKPIs, type KPIListItem } from "@/services/kpis";
 import {
   getKpiHistoryChangeLinesSince,
   getRecentKpiHistoryEntries,
@@ -117,9 +118,19 @@ export type DashboardVdAssistantRisk = "Låg" | "Medel" | "Hög";
 
 export type DashboardVdAssistant = {
   greeting: string;
-  intro: string;
-  highlights: string[];
+  /** Dynamiskt nuläge (2–4 meningar). */
+  situation: string;
+  /** Prioritet idag — viktigaste gula/röda KPI eller att inga kritiska avvikelser finns. */
+  priority: string;
+  /** Tre datadrivna observationer. */
+  observations: string[];
+  /** Kort positiv sammanfattning. */
+  positiveSummary: string;
+  /** Bakåtkompatibilitet: samma innehåll som priority. */
   recommendation: string;
+  /** Bakåtkompatibilitet: situation uppdelad i rader. */
+  highlights: string[];
+  intro: string;
   riskLevel: DashboardVdAssistantRisk;
   riskLabel: string;
   analyzedAtLabel: string;
@@ -394,84 +405,267 @@ function buildYesterdayChanges(input: {
   return changes;
 }
 
-function buildVdAssistant(input: {
-  kpiFollowUpCount: number;
-  delayedCount: number;
-  redAreaCount: number;
-  openDecisionCount: number;
-  yellowAreaNames: string[];
-  redAreaNames: string[];
-  topFollowUpKpi: { name: string; owner: string; status: StatusTone } | null;
-  topDelayedActivity: { title: string; owner: string } | null;
-}): DashboardVdAssistant {
-  const nulage = [
-    swedishCountPhrase(
-      input.kpiFollowUpCount,
-      "1 KPI behöver följas upp",
-      "{n} KPI behöver följas upp",
-      "inga KPI behöver följas upp",
-    ),
-    swedishCountPhrase(
-      input.delayedCount,
-      "1 aktivitet är försenad",
-      "{n} aktiviteter är försenade",
-      "inga försenade aktiviteter",
-    ),
-    swedishCountPhrase(
-      input.openDecisionCount,
-      "1 öppet beslut",
-      "{n} öppna beslut",
-      "inga öppna beslut",
-    ),
-  ].join(", ");
+function firstNameFromUser(email: string | null): string | null {
+  if (!email) {
+    return null;
+  }
+  const local = email.split("@")[0]?.trim();
+  if (!local) {
+    return null;
+  }
+  const token = local.split(/[._-]/)[0] ?? local;
+  if (!token) {
+    return null;
+  }
+  return token.charAt(0).toUpperCase() + token.slice(1).toLowerCase();
+}
 
-  let deviation: string;
-  if (input.redAreaNames.length > 0) {
-    deviation = `${input.redAreaNames[0]} har röd status.`;
-  } else if (input.topFollowUpKpi?.status === "Röd") {
-    deviation = `KPI:n ${input.topFollowUpKpi.name} är röd och kräver omedelbar uppföljning.`;
-  } else if (input.topDelayedActivity) {
-    deviation = `Aktiviteten "${input.topDelayedActivity.title}" är försenad.`;
-  } else if (input.topFollowUpKpi) {
-    deviation = `KPI:n ${input.topFollowUpKpi.name} är gul och bör följas upp.`;
-  } else if (input.yellowAreaNames.length > 0) {
-    deviation = `${input.yellowAreaNames[0]} har gul status.`;
-  } else {
-    deviation = "Inga kritiska avvikelser just nu.";
+function formatKpiStatusCounts(
+  green: number,
+  yellow: number,
+  red: number,
+): string {
+  const parts: string[] = [];
+  if (green > 0) {
+    parts.push(
+      green === 1 ? "1 KPI är grön" : `${green} KPI:er är gröna`,
+    );
+  }
+  if (yellow > 0) {
+    parts.push(yellow === 1 ? "1 gul" : `${yellow} gula`);
+  }
+  if (red > 0) {
+    parts.push(red === 1 ? "1 röd" : `${red} röda`);
   }
 
-  let recommendation: string;
+  if (parts.length === 0) {
+    return "Inga KPI:er är registrerade ännu.";
+  }
+
+  if (green > 0 && (yellow > 0 || red > 0)) {
+    // "10 KPI:er är gröna, 3 gula och 1 röd."
+    const rest = parts.slice(1);
+    if (rest.length === 1) {
+      return `${parts[0]}, ${rest[0]}.`;
+    }
+    return `${parts[0]}, ${rest.slice(0, -1).join(", ")} och ${rest[rest.length - 1]}.`;
+  }
+
+  return `${parts.join(", ")}.`;
+}
+
+function kpiObservation(kpi: KPIListItem): string {
+  const area = kpi.businessAreaName;
+  const name = kpi.name.toLowerCase();
+  const current = (kpi.currentValue ?? "").replace(/\s/g, "");
+  const isNegativeValue = current.startsWith("-") || current.startsWith("−");
+
+  if (name.includes("resultat") && isNegativeValue) {
+    return `${area} ligger under budget.`;
+  }
+  if (name.includes("belägg") && kpi.status !== "Grön") {
+    return `${area} har lägre beläggning än målet.`;
+  }
+  if (
+    (name.includes("volym") || kpi.trend === "Ner") &&
+    kpi.status !== "Grön"
+  ) {
+    return `${area} har negativ volymtrend.`;
+  }
+  if (name.includes("budgetavvik") && kpi.status !== "Grön") {
+    return `${area} har budgetavvikelse över mål.`;
+  }
+  if (kpi.status === "Röd") {
+    return `${area}: KPI:n ${kpi.name} är röd.`;
+  }
+  return `${area}: KPI:n ${kpi.name} är gul.`;
+}
+
+function buildVdAssistant(input: {
+  firstName: string | null;
+  areaCount: number;
+  greenKpiCount: number;
+  yellowKpiCount: number;
+  redKpiCount: number;
+  delayedCount: number;
+  openDecisionCount: number;
+  greenAreaCount: number;
+  yellowAreaNames: string[];
+  redAreaNames: string[];
+  followUpKpis: KPIListItem[];
+  topFollowUpKpi: {
+    name: string;
+    owner: string;
+    status: StatusTone;
+    areaName: string;
+  } | null;
+  yellowGoals: { title: string; area: string }[];
+}): DashboardVdAssistant {
+  const yellowAreaNames = input.yellowAreaNames ?? [];
+  const redAreaNames = input.redAreaNames ?? [];
+  const followUpKpis = input.followUpKpis ?? [];
+  const yellowGoals = input.yellowGoals ?? [];
+
+  const greeting = input.firstName
+    ? `God morgon ${input.firstName}.`
+    : "God morgon.";
+
+  const situationParts: string[] = [];
+  situationParts.push(
+    input.areaCount === 1
+      ? "1 affärsområde följs upp."
+      : `${input.areaCount} affärsområden följs upp.`,
+  );
+  situationParts.push(
+    formatKpiStatusCounts(
+      input.greenKpiCount,
+      input.yellowKpiCount,
+      input.redKpiCount,
+    ),
+  );
+  situationParts.push(
+    swedishCountPhrase(
+      input.delayedCount,
+      "1 aktivitet är försenad.",
+      "{n} aktiviteter är försenade.",
+      "Inga aktiviteter är försenade.",
+    ),
+  );
+
+  if (input.topFollowUpKpi?.status === "Röd") {
+    situationParts.push(
+      `${input.topFollowUpKpi.areaName} har den viktigaste negativa avvikelsen.`,
+    );
+  } else if (redAreaNames.length > 0) {
+    situationParts.push(
+      `${redAreaNames[0]} har den viktigaste negativa avvikelsen.`,
+    );
+  } else if (input.topFollowUpKpi) {
+    situationParts.push(
+      `${input.topFollowUpKpi.areaName} kräver uppföljning via KPI:n ${input.topFollowUpKpi.name}.`,
+    );
+  } else if (yellowAreaNames.length > 0) {
+    situationParts.push(
+      `${yellowAreaNames[0]} följs upp med gul status.`,
+    );
+  }
+
+  const situation = situationParts.slice(0, 4).join(" ");
+
+  let priority: string;
   if (input.topFollowUpKpi) {
-    recommendation = `Prioritet idag: följ upp KPI:n ${input.topFollowUpKpi.name} tillsammans med ${input.topFollowUpKpi.owner}.`;
-  } else if (input.topDelayedActivity) {
-    recommendation = `Prioritet idag: säkra nästa steg för "${input.topDelayedActivity.title}" med ${input.topDelayedActivity.owner}.`;
-  } else if (input.openDecisionCount > 0) {
-    recommendation =
-      "Prioritet idag: driva de öppna besluten framåt så att de inte ligger still.";
-  } else if (input.redAreaCount > 0) {
-    recommendation =
-      "Prioritet idag: gå igenom affärsområden med röd status och säkra åtgärdsplan.";
+    priority = `Prioritet idag:\nFölj upp KPI:n ${input.topFollowUpKpi.name} tillsammans med ${input.topFollowUpKpi.owner}.`;
   } else {
-    recommendation =
-      "Prioritet idag: behåll den dagliga översikten och följ upp eventuella gulmarkeringar i tid.";
+    priority = "Inga kritiska avvikelser finns.";
+  }
+
+  const observationCandidates: string[] = [];
+  for (const kpi of followUpKpis) {
+    observationCandidates.push(kpiObservation(kpi));
+  }
+  for (const goal of yellowGoals) {
+    observationCandidates.push(
+      `Målet "${goal.title}" i ${goal.area} kräver uppföljning.`,
+    );
+  }
+  if (input.delayedCount > 0) {
+    observationCandidates.push(
+      swedishCountPhrase(
+        input.delayedCount,
+        "1 aktivitet är försenad.",
+        "{n} aktiviteter är försenade.",
+        "",
+      ),
+    );
+  }
+  if (input.openDecisionCount === 0) {
+    observationCandidates.push(
+      "Inga öppna beslut blockerar verksamheten.",
+    );
+  } else {
+    observationCandidates.push(
+      swedishCountPhrase(
+        input.openDecisionCount,
+        "1 öppet beslut kräver uppföljning.",
+        "{n} öppna beslut kräver uppföljning.",
+        "",
+      ),
+    );
+  }
+  if (input.greenAreaCount > 0 && input.areaCount > 0) {
+    observationCandidates.push(
+      input.greenAreaCount === input.areaCount
+        ? "Alla affärsområden har grön status."
+        : `${input.greenAreaCount} av ${input.areaCount} affärsområden har grön status.`,
+    );
+  }
+
+  const seen = new Set<string>();
+  const observations: string[] = [];
+  for (const line of observationCandidates) {
+    if (!line || seen.has(line)) {
+      continue;
+    }
+    seen.add(line);
+    observations.push(line);
+    if (observations.length >= 3) {
+      break;
+    }
+  }
+  while (observations.length < 3) {
+    if (input.greenKpiCount > 0 && !seen.has("kpi-green")) {
+      seen.add("kpi-green");
+      observations.push(
+        input.greenKpiCount === 1
+          ? "1 KPI ligger inom mål."
+          : `${input.greenKpiCount} KPI:er ligger inom mål.`,
+      );
+      continue;
+    }
+    if (!seen.has("follow-up-done")) {
+      seen.add("follow-up-done");
+      observations.push("Daglig uppföljning kan fokusera på gröna områden.");
+      continue;
+    }
+    break;
+  }
+
+  let positiveSummary: string;
+  const greenKpiShare =
+    input.greenKpiCount + input.yellowKpiCount + input.redKpiCount > 0
+      ? input.greenKpiCount /
+        (input.greenKpiCount + input.yellowKpiCount + input.redKpiCount)
+      : 1;
+  if (input.redKpiCount === 0 && input.yellowKpiCount === 0) {
+    positiveSummary = "Inga kritiska avvikelser — verksamheten ligger enligt plan.";
+  } else if (greenKpiShare >= 0.6 || input.greenAreaCount >= input.areaCount / 2) {
+    positiveSummary = "De flesta affärsområden utvecklas enligt plan.";
+  } else if (input.redKpiCount > 0) {
+    positiveSummary = `${input.greenKpiCount} KPI:er ligger fortfarande inom mål trots pågående avvikelser.`;
+  } else {
+    positiveSummary = "Avvikelserna är hanterbara och de flesta nyckeltal följer planen.";
   }
 
   let riskLevel: DashboardVdAssistantRisk = "Låg";
   if (
-    input.redAreaCount > 0 ||
+    redAreaNames.length > 0 ||
     input.delayedCount >= 2 ||
     input.topFollowUpKpi?.status === "Röd"
   ) {
     riskLevel = "Hög";
-  } else if (input.kpiFollowUpCount > 0 || input.delayedCount > 0) {
+  } else if (input.yellowKpiCount > 0 || input.delayedCount > 0) {
     riskLevel = "Medel";
   }
 
   return {
-    greeting: "God morgon Peter.",
-    intro: "Här är min sammanfattning av läget just nu.",
-    highlights: [`Nuläge: ${nulage}.`, `Viktigaste avvikelse: ${deviation}`],
-    recommendation,
+    greeting,
+    situation,
+    priority,
+    observations,
+    positiveSummary,
+    recommendation: priority,
+    highlights: situationParts.slice(0, 4),
+    intro: situation,
     riskLevel,
     riskLabel: riskLevel,
     analyzedAtLabel: formatDateTimeSv(new Date().toISOString()),
@@ -480,6 +674,7 @@ function buildVdAssistant(input: {
 
 export async function getDashboardData(): Promise<DashboardData> {
   const [
+    currentUser,
     areaRows,
     goals,
     activities,
@@ -489,6 +684,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     allKpis,
     recentKpiHistory,
   ] = await Promise.all([
+    getCurrentUser(),
     fetchBusinessAreas().catch(() => []),
     getGoals().catch(() => []),
     getActivities().catch(() => []),
@@ -628,11 +824,17 @@ export async function getDashboardData(): Promise<DashboardData> {
   const followUpKpis = (allKpis ?? []).filter(
     (kpi) => kpi.status === "Gul" || kpi.status === "Röd",
   );
+  const greenKpis = (allKpis ?? []).filter((kpi) => kpi.status === "Grön");
+  const yellowKpis = (allKpis ?? []).filter((kpi) => kpi.status === "Gul");
+  const redKpis = (allKpis ?? []).filter((kpi) => kpi.status === "Röd");
   const redAreaRows = (areaRows ?? []).filter(
     (area) => toStatusTone(area.status) === "Röd",
   );
   const yellowAreaRows = (areaRows ?? []).filter(
     (area) => toStatusTone(area.status) === "Gul",
+  );
+  const greenAreaRows = (areaRows ?? []).filter(
+    (area) => toStatusTone(area.status) === "Grön",
   );
   const redAreaCount = redAreaRows.length;
   const waitingDecisionCount = openDecisions.length;
@@ -649,29 +851,34 @@ export async function getDashboardData(): Promise<DashboardData> {
     followUpKpis.find((kpi) => kpi.status === "Röd") ??
     followUpKpis[0] ??
     null;
-  const topDelayedActivity = delayedActivities[0] ?? null;
 
   const vdAssistant = buildVdAssistant({
-    kpiFollowUpCount: followUpKpis.length,
+    firstName: firstNameFromUser(currentUser?.email ?? null),
+    areaCount: businessAreaCount,
+    greenKpiCount: greenKpis.length,
+    yellowKpiCount: yellowKpis.length,
+    redKpiCount: redKpis.length,
     delayedCount,
-    redAreaCount,
     openDecisionCount: waitingDecisionCount,
+    greenAreaCount: greenAreaRows.length,
     yellowAreaNames: yellowAreaRows.map((area) => area.name),
     redAreaNames: redAreaRows.map((area) => area.name),
+    followUpKpis,
     topFollowUpKpi: topFollowUpKpi
       ? {
           name: topFollowUpKpi.name,
           owner:
             areaManagers.get(topFollowUpKpi.businessAreaId) ?? "ansvarig",
           status: topFollowUpKpi.status,
+          areaName: topFollowUpKpi.businessAreaName,
         }
       : null,
-    topDelayedActivity: topDelayedActivity
-      ? {
-          title: topDelayedActivity.title,
-          owner: topDelayedActivity.owner ?? "ansvarig",
-        }
-      : null,
+    yellowGoals: (goals ?? [])
+      .filter((goal) => goal.status === "Gul" || goal.status === "Röd")
+      .map((goal) => ({
+        title: goal.title,
+        area: areaNames.get(goal.businessAreaId) ?? goal.businessAreaName,
+      })),
   });
 
   const vdFocus: DashboardVdFocus = {

@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { requireUser } from "@/lib/auth/require-user";
+import { requireBusinessAreaManager } from "@/lib/auth/require-user";
 import {
   createBusinessArea,
   updateBusinessArea,
@@ -13,7 +13,7 @@ function isStatusTone(value: string): value is StatusTone {
 }
 
 export async function createBusinessAreaAction(formData: FormData) {
-  await requireUser();
+  await requireBusinessAreaManager();
 
   const name = String(formData.get("name") ?? "");
   const manager = String(formData.get("manager") ?? "");
@@ -49,7 +49,7 @@ export async function createBusinessAreaAction(formData: FormData) {
 }
 
 export async function updateBusinessAreaAction(formData: FormData) {
-  await requireUser();
+  await requireBusinessAreaManager();
 
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "");

@@ -1,11 +1,11 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { requireUser } from "@/lib/auth/require-user";
+import { requireOperationalWriter } from "@/lib/auth/require-user";
 import { createActivityComment } from "@/services/activityComments";
 
 export async function createActivityCommentAction(formData: FormData) {
-  await requireUser();
+  await requireOperationalWriter();
   const activityId = String(formData.get("activityId") ?? "");
   const authorName = String(formData.get("authorName") ?? "");
   const content = String(formData.get("content") ?? "");

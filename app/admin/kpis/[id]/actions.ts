@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { requireUser } from "@/lib/auth/require-user";
+import { requireOperationalWriter } from "@/lib/auth/require-user";
 import { addKPIHistoryEntry } from "@/services/kpiHistory";
 import type { StatusTone } from "@/types";
 
@@ -10,7 +10,7 @@ function isStatus(value: string): value is StatusTone {
 }
 
 export async function addKpiHistoryAction(formData: FormData) {
-  await requireUser();
+  await requireOperationalWriter();
   const kpiId = String(formData.get("kpiId") ?? "").trim();
   const value = String(formData.get("value") ?? "");
   const statusValue = String(formData.get("status") ?? "");

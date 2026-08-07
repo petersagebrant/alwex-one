@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { requireUser } from "@/lib/auth/require-user";
+import { requireOperationalWriter } from "@/lib/auth/require-user";
 import { createGoal, updateGoal } from "@/services/goals";
 import type { StatusTone } from "@/types";
 
@@ -24,7 +24,7 @@ function readGoalFields(formData: FormData) {
 }
 
 export async function createGoalAction(formData: FormData) {
-  await requireUser();
+  await requireOperationalWriter();
   const fields = readGoalFields(formData);
 
   if (!fields.businessAreaId.trim()) {
@@ -66,7 +66,7 @@ export async function createGoalAction(formData: FormData) {
 }
 
 export async function updateGoalAction(formData: FormData) {
-  await requireUser();
+  await requireOperationalWriter();
   const id = String(formData.get("id") ?? "");
   const fields = readGoalFields(formData);
 

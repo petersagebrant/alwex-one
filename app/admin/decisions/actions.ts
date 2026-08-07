@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { requireUser } from "@/lib/auth/require-user";
+import { requireDecisionWriter } from "@/lib/auth/require-user";
 import {
   createDecision,
   markDecisionComplete,
@@ -26,7 +26,7 @@ function readDecisionFields(formData: FormData) {
 }
 
 export async function createDecisionAction(formData: FormData) {
-  await requireUser();
+  await requireDecisionWriter();
   const fields = readDecisionFields(formData);
 
   if (!fields.businessAreaId.trim()) {
@@ -66,7 +66,7 @@ export async function createDecisionAction(formData: FormData) {
 }
 
 export async function updateDecisionAction(formData: FormData) {
-  await requireUser();
+  await requireDecisionWriter();
   const id = String(formData.get("id") ?? "");
   const fields = readDecisionFields(formData);
 
@@ -115,7 +115,7 @@ export async function updateDecisionAction(formData: FormData) {
 }
 
 export async function markDecisionCompleteAction(formData: FormData) {
-  await requireUser();
+  await requireDecisionWriter();
   const id = String(formData.get("id") ?? "");
 
   if (!id) {

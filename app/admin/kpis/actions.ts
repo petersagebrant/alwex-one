@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { requireUser } from "@/lib/auth/require-user";
+import { requireOperationalWriter } from "@/lib/auth/require-user";
 import { createKPI, updateKPI } from "@/services/kpis";
 import type { KpiTrend, StatusTone } from "@/types";
 
@@ -27,7 +27,7 @@ function readKpiFields(formData: FormData) {
 }
 
 export async function createKpiAction(formData: FormData) {
-  await requireUser();
+  await requireOperationalWriter();
   const fields = readKpiFields(formData);
 
   if (!fields.businessAreaId.trim()) {
@@ -69,7 +69,7 @@ export async function createKpiAction(formData: FormData) {
 }
 
 export async function updateKpiAction(formData: FormData) {
-  await requireUser();
+  await requireOperationalWriter();
   const id = String(formData.get("id") ?? "");
   const fields = readKpiFields(formData);
 

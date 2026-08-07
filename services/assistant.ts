@@ -10,34 +10,20 @@ import { getGoals, type GoalListItem } from "@/services/goals";
 import { getKPIs, type KPIListItem } from "@/services/kpis";
 import type { StatusTone } from "@/types";
 
-const ASSISTANT_SYSTEM_PROMPT = `Du är VD-assistent för ALWEX ONE.
+const ASSISTANT_SYSTEM_PROMPT_BROAD = `Du är VD-assistent för ALWEX ONE.
 
-Du svarar som en erfaren VD-rådgivare: kort, skarp och beslutsinriktad.
-Prioritera beslutsstöd framför sammanfattning.
-Analysera och rekommendera — dumpa inte data.
+Svara kort, skarpt och beslutsinriktat. Max 120–160 ord.
+Svara direkt på frågan först. Inga upprepningar. Samma KPI får nämnas högst en gång.
+Använd endast context. Hitta inte på orsaker eller siffror.
+Om samband syns men orsaken inte är säker, skriv t.ex.:
+"Tillgänglig data visar ett samband mellan X och Y, men fastställer inte den bakomliggande orsaken."
+Om orsaken saknas helt: "Orsaken framgår inte av tillgänglig data."
+Namnge ansvarig när namn finns i context.
 
-Använd endast informationen i context.
-Hitta inte på information. Om underlag saknas, säg det tydligt.
-Namnge ansvarig person när det finns i datan.
-Koppla ihop samband när flera datapunkter hör ihop.
-
-Prioritera alltid:
-1. Röda avvikelser och kritiska risker
-2. Ekonomi och resultat mot budget
-3. Gula KPI:er som behöver följas upp
-4. Försenade aktiviteter och öppna beslut
-5. Positiva utvecklingar och möjligheter
-
-Längd och stil:
-- Max 180–220 ord.
-- Korta meningar. Undvik långa stycken och långa listor.
-- Inga upprepningar. Samma KPI får inte nämnas flera gånger.
-- Skriv på svenska.
-
-Använd alltid exakt denna markdown-struktur:
+Struktur (markdown):
 
 ## Övergripande läge
-2–3 meningar.
+2–3 korta meningar.
 
 ## Viktigaste risker
 Max 3 punkter.
@@ -46,10 +32,31 @@ Max 3 punkter.
 Max 2 punkter.
 
 ## Mitt förslag idag
-Tre konkreta rekommendationer.
+Max 3 konkreta rekommendationer.
 
-Avsluta alltid med:
-Vill du att jag utvecklar någon punkt?`;
+Avsluta med: Vill du att jag utvecklar någon punkt?`;
+
+const ASSISTANT_SYSTEM_PROMPT_AREA = `Du är VD-assistent för ALWEX ONE.
+
+Svara kort, skarpt och beslutsinriktat. Max 120–160 ord.
+Svara direkt på frågan först. Inga upprepningar. Samma KPI får nämnas högst en gång.
+Använd endast context för det aktuella affärsområdet. Hitta inte på orsaker eller siffror.
+Om samband syns men orsaken inte är säker, skriv t.ex.:
+"Tillgänglig data visar ett samband mellan låg beläggning och svagt resultat, men fastställer inte den bakomliggande orsaken."
+Om orsaken saknas helt: "Orsaken framgår inte av tillgänglig data."
+Namnge ansvarig när namn finns i context.
+Använd analysisInsights om de finns — lägg inte till nya orsaker.
+
+Struktur (markdown) — använd exakt dessa rubriker:
+
+## Kort svar
+1–2 meningar som direkt förklarar läget.
+
+## Det som driver avvikelsen
+Max 3 punkter.
+
+## Min rekommendation
+Max 2 konkreta åtgärder.`;
 
 export type AssistantDeviation = {
   type: "kpi" | "goal" | "activity" | "area" | "decision";
@@ -64,6 +71,19 @@ export type AssistantPriority = {
   reason: string;
   owner: string;
   areaName: string | null;
+};
+
+/** Datastödd kedja: vad → varför → konsekvens → åtgärd → ansvarig. */
+export type AssistantAnalysisInsight = {
+  areaName: string;
+  owner: string;
+  whatHappened: string;
+  whyImportant: string;
+  consequence: string;
+  action: string;
+  linkedSignals: string[];
+  /** True när data inte räcker för att förklara orsaken. */
+  causeUnknown: boolean;
 };
 
 export type AssistantContext = {
@@ -89,6 +109,8 @@ export type AssistantContext = {
   decisions: DecisionListItem[];
   observations: string[];
   priorities: AssistantPriority[];
+  /** Förberäknade samband mellan KPI/mål/aktivitet/beslut per område. */
+  analysisInsights: AssistantAnalysisInsight[];
   yesterdayChanges: { id: string; text: string }[];
   /** Derived helpers used by rule-based answers. */
   openDeviations: AssistantDeviation[];
@@ -148,6 +170,15 @@ export async function buildAssistantContext(): Promise<AssistantContext> {
     vdPriority: vd?.priority ?? vd?.recommendation ?? "",
   });
 
+  const analysisInsights = buildAnalysisInsights({
+    areas: businessAreas,
+    kpis: allKpis,
+    goals: allGoals,
+    delayedActivities,
+    openDecisions,
+    areaManagers,
+  });
+
   const responsiblePersons = [
     ...new Set(
       [
@@ -192,6 +223,7 @@ export async function buildAssistantContext(): Promise<AssistantContext> {
     decisions: allDecisions,
     observations: uniqueObservations,
     priorities,
+    analysisInsights,
     yesterdayChanges: dashboard?.yesterdayChanges ?? [],
     openDeviations,
   };
@@ -199,23 +231,349 @@ export async function buildAssistantContext(): Promise<AssistantContext> {
 
 /**
  * Rule-based answers from the complete context object.
- * Later: replace this with OpenAI using the same AssistantContext.
  */
 export async function generateAssistantAnswer(
   question: string,
   context: AssistantContext,
 ): Promise<string> {
+  return buildLocalAnswer(question, context);
+}
+
+/**
+ * Routes the question to local, hybrid or AI answering.
+ * OpenAI is only used when classification requires it.
+ */
+export async function askAssistant(question: string): Promise<string> {
+  const totalStarted = Date.now();
+  const trimmed = question.trim();
+  if (!trimmed) {
+    return "Skriv en fråga om verksamheten för att få svar.";
+  }
+
+  const questionType = classifyQuestion(trimmed);
+  console.log(`Question type: ${questionType.toUpperCase()}`);
+
+  const contextStarted = Date.now();
+  const fullContext = await buildAssistantContext();
+  console.log(
+    `[askAssistant] buildAssistantContext: ${Date.now() - contextStarted}ms`,
+  );
+
+  try {
+    let answer: string;
+    if (questionType === "local") {
+      answer = await answerLocal(trimmed, fullContext);
+    } else if (questionType === "hybrid") {
+      answer = await answerHybrid(trimmed, fullContext);
+    } else {
+      answer = await answerAI(trimmed, fullContext);
+    }
+
+    console.log(`[askAssistant] total askAssistant: ${Date.now() - totalStarted}ms`);
+    return answer;
+  } catch (error) {
+    console.error(error);
+    console.log(
+      `[askAssistant] total askAssistant (error): ${Date.now() - totalStarted}ms`,
+    );
+    // LOCAL must still work if OpenAI path fails unexpectedly.
+    try {
+      return await answerLocal(trimmed, fullContext);
+    } catch {
+      return "AI-assistenten är tillfälligt upptagen och kunde inte generera analysen just nu. Försök igen om någon minut.";
+    }
+  }
+}
+
+export type AssistantQuestionType = "local" | "hybrid" | "ai";
+
+/**
+ * Classifies whether a question can be answered locally, needs a hybrid
+ * local+OpenAI pass, or requires a full AI analysis.
+ */
+export function classifyQuestion(question: string): AssistantQuestionType {
+  const q = normalizeText(question);
+  if (!q) {
+    return "local";
+  }
+
+  if (isAiQuestion(q)) {
+    return "ai";
+  }
+
+  if (isHybridQuestion(q)) {
+    return "hybrid";
+  }
+
+  if (isLocalQuestion(q)) {
+    return "local";
+  }
+
+  // Unknown open-ended questions → AI.
+  return "ai";
+}
+
+function isAiQuestion(q: string): boolean {
+  return (
+    q.includes("hur skulle du") ||
+    q.includes("vilken strategi") ||
+    q.includes("strategi") ||
+    q.includes("vad missar jag") ||
+    q.includes("ge en analys") ||
+    q.includes("analysera") ||
+    q.includes("sammanfatta") ||
+    q.includes("framtid") ||
+    q.includes("prognos") ||
+    q.includes("ledningsmotet") ||
+    q.includes("ledningsmote") ||
+    q.includes("scenario") ||
+    q.includes("rekommendera en plan")
+  );
+}
+
+function isHybridQuestion(q: string): boolean {
+  return (
+    q.startsWith("varfor") ||
+    q.includes(" varfor ") ||
+    q.startsWith("hur paverkar") ||
+    q.includes("hur paverkar") ||
+    q.startsWith("vilka risker") ||
+    q.includes("vilka risker") ||
+    q.startsWith("vad betyder") ||
+    q.includes("vad betyder")
+  );
+}
+
+function isLocalQuestion(q: string): boolean {
+  if (
+    q.includes("hur gar") ||
+    q.includes("hur gar det") ||
+    q.includes("visa status") ||
+    q.includes("status for") ||
+    q.includes("status pa")
+  ) {
+    return true;
+  }
+
+  if (q.includes("hur manga") || q.includes("hur många")) {
+    return true;
+  }
+
+  if (
+    q.includes("vem ansvarar") ||
+    q.includes("vem ar ansvarig") ||
+    q.includes("ansvarig for") ||
+    q.includes("vem ager")
+  ) {
+    return true;
+  }
+
+  if (
+    (q.includes("kpi") || q.includes("nyckeltal")) &&
+    (q.includes("roda") ||
+      q.includes("rod") ||
+      q.includes("gula") ||
+      q.includes("gul") ||
+      q.includes("uppfoljning") ||
+      q.includes("foljas upp") ||
+      q.includes("kraver"))
+  ) {
+    return true;
+  }
+
+  if (
+    (q.includes("mal") || q.includes("malen")) &&
+    (q.includes("sena") ||
+      q.includes("sen") ||
+      q.includes("forsenade") ||
+      q.includes("gula") ||
+      q.includes("roda"))
+  ) {
+    return true;
+  }
+
+  if (
+    (q.includes("aktivitet") || q.includes("aktiviteter")) &&
+    (q.includes("sena") ||
+      q.includes("sen") ||
+      q.includes("forsenade") ||
+      q.includes("forsenad"))
+  ) {
+    return true;
+  }
+
+  if (
+    (q.includes("beslut") || q.includes("besluten")) &&
+    (q.includes("oppna") || q.includes("oppet") || q.includes("vilka"))
+  ) {
+    return true;
+  }
+
+  if (
+    q.includes("belaggning") ||
+    q.includes("belaggningen") ||
+    q.includes("resultat mot budget") ||
+    (q.includes("resultat") && q.includes("budget"))
+  ) {
+    return true;
+  }
+
+  if (isPriorityQuestion(q) && !isAiQuestion(q)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Answers factual questions directly from context — no OpenAI.
+ */
+export async function answerLocal(
+  question: string,
+  context: AssistantContext,
+): Promise<string> {
+  const started = Date.now();
+  const answer = buildLocalAnswer(question, context);
+  console.log(`[answerLocal] ${Date.now() - started}ms`);
+  return answer;
+}
+
+/**
+ * Builds a tight local fact summary, then asks OpenAI only to explain it.
+ * Falls back to the local summary if OpenAI is unavailable.
+ */
+export async function answerHybrid(
+  question: string,
+  context: AssistantContext,
+): Promise<string> {
+  const localSummary = buildHybridLocalSummary(question, context);
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) {
+    console.log("[answerHybrid] OpenAI saknas — returnerar lokal sammanfattning");
+    return localSummary;
+  }
+
+  try {
+    const openaiStarted = Date.now();
+    const client = new OpenAI({
+      apiKey,
+      timeout: 20_000,
+      maxRetries: 0,
+    });
+    const completion = await client.chat.completions.create({
+      model: "gpt-5",
+      max_completion_tokens: 350,
+      messages: [
+        {
+          role: "system",
+          content: ASSISTANT_SYSTEM_PROMPT_AREA,
+        },
+        {
+          role: "user",
+          content: `Lokal analys (enda faktaunderlaget):\n${localSummary}\n\nFråga:\n${question}\n\nFörklara utifrån den lokala analysen. Hitta inte på orsaker. Max 120–160 ord.`,
+        },
+      ],
+    });
+    console.log(`[answerHybrid] OpenAI request: ${Date.now() - openaiStarted}ms`);
+
+    const answer = completion.choices[0]?.message?.content?.trim();
+    if (!answer) {
+      return localSummary;
+    }
+    return answer;
+  } catch (error) {
+    console.error(error);
+    console.log("[answerHybrid] OpenAI fel — returnerar lokal sammanfattning");
+    return localSummary;
+  }
+}
+
+/**
+ * Full AI path with filtered context. Falls back to local answer if OpenAI fails.
+ */
+export async function answerAI(
+  question: string,
+  context: AssistantContext,
+): Promise<string> {
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) {
+    console.log("[answerAI] OpenAI saknas — faller tillbaka till LOCAL");
+    return answerLocal(question, context);
+  }
+
+  const filterStarted = Date.now();
+  const { context: relevant, scope, areaName } = selectRelevantAssistantContext(
+    question,
+    context,
+  );
+  const openAiPayload = toCompactOpenAiContext(relevant, scope);
+  console.log(
+    `[answerAI] context filtering: ${Date.now() - filterStarted}ms (scope=${scope}${areaName ? ` area="${areaName}"` : ""}; payload=${JSON.stringify(openAiPayload).length} chars)`,
+  );
+
+  try {
+    const openaiStarted = Date.now();
+    const client = new OpenAI({
+      apiKey,
+      timeout: 25_000,
+      maxRetries: 0,
+    });
+    const systemPrompt =
+      scope === "area"
+        ? ASSISTANT_SYSTEM_PROMPT_AREA
+        : ASSISTANT_SYSTEM_PROMPT_BROAD;
+
+    const completion = await client.chat.completions.create({
+      model: "gpt-5",
+      max_completion_tokens: 450,
+      messages: [
+        {
+          role: "system",
+          content: systemPrompt,
+        },
+        {
+          role: "user",
+          content: `Context:\n${JSON.stringify(openAiPayload)}\n\nFråga:\n${question}\n\nSvara direkt på frågan. Max 120–160 ord. Hitta inte på orsaker.`,
+        },
+      ],
+    });
+    console.log(`[answerAI] OpenAI request: ${Date.now() - openaiStarted}ms`);
+
+    const answer = completion.choices[0]?.message?.content?.trim();
+    if (!answer) {
+      return answerLocal(question, context);
+    }
+    return answer;
+  } catch (error) {
+    console.error(error);
+    console.log("[answerAI] OpenAI fel — faller tillbaka till LOCAL");
+    return answerLocal(question, context);
+  }
+}
+
+function buildLocalAnswer(
+  question: string,
+  context: AssistantContext,
+): string {
   const q = normalizeText(question);
   if (!q) {
     return "Ställ en fråga om affärsområden, KPI:er, mål, aktiviteter eller beslut.";
   }
 
-  if (isPriorityQuestion(q)) {
-    return answerPriority(context);
+  if (isYellowKpiQuestion(q)) {
+    return answerYellowKpis(context);
   }
 
   if (isRedKpiQuestion(q)) {
     return answerRedKpis(context);
+  }
+
+  if (isFollowUpKpiQuestion(q)) {
+    return answerFollowUpKpis(context);
+  }
+
+  if (isLateGoalQuestion(q)) {
+    return answerLateGoals(context);
   }
 
   if (isDelayedActivityQuestion(q)) {
@@ -226,59 +584,558 @@ export async function generateAssistantAnswer(
     return answerOpenDecisions(context);
   }
 
+  if (isOwnerQuestion(q)) {
+    return answerOwnerQuestion(q, context);
+  }
+
+  if (isCountQuestion(q)) {
+    return answerCountQuestion(q, context);
+  }
+
+  if (isOccupancyQuestion(q) || isResultBudgetQuestion(q)) {
+    return answerNamedKpiQuestion(q, context);
+  }
+
+  if (isPriorityQuestion(q)) {
+    return answerPriority(context);
+  }
+
   const area = findAreaInQuestion(q, context.businessAreas);
   if (area) {
     return answerAreaStatus(area, context);
   }
 
+  if (q.includes("hur gar") || q.includes("visa status")) {
+    return "Affärsområdet hittades inte i tillgänglig data.";
+  }
+
   return answerFallback(context);
 }
 
-/**
- * Builds full operational context, then asks GPT-5 for the answer.
- * UI depends only on: question in → answer string out.
- */
-export async function askAssistant(question: string): Promise<string> {
-  const trimmed = question.trim();
-  if (!trimmed) {
-    return "Skriv en fråga om verksamheten för att få svar.";
-  }
+/** Compact factual briefing used as the only OpenAI input for hybrid questions. */
+function buildHybridLocalSummary(
+  question: string,
+  context: AssistantContext,
+): string {
+  const q = normalizeText(question);
+  const area = findAreaInQuestion(q, context.businessAreas);
 
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) {
-    throw new Error(
-      "OPENAI_API_KEY saknas. Lägg till nyckeln i .env.local.",
-    );
-  }
+  if (area) {
+    const areaContext = filterContextToArea(context, area);
+    const insight = (areaContext.analysisInsights ?? [])[0];
+    const kpis = (areaContext.kpis ?? []).slice(0, 6);
+    const lines: string[] = [
+      `Område: ${area.name}`,
+      `Status: ${area.status}`,
+      `Ansvarig: ${area.manager?.trim() || "Ej angiven"}`,
+      "",
+      "KPI:",
+      ...kpis.map((kpi) => `- ${formatKpiFact(kpi)}`),
+    ];
 
-  const context = await buildAssistantContext();
-
-  try {
-    const client = new OpenAI({ apiKey });
-    const completion = await client.chat.completions.create({
-      model: "gpt-5",
-      messages: [
-        {
-          role: "system",
-          content: ASSISTANT_SYSTEM_PROMPT,
-        },
-        {
-          role: "user",
-          content: `Context:\n${JSON.stringify(context)}\n\nFråga:\n${trimmed}`,
-        },
-      ],
-    });
-
-    const answer = completion.choices[0]?.message?.content?.trim();
-    if (!answer) {
-      throw new Error("OpenAI returnerade inget svar.");
+    const goals = (areaContext.goals ?? [])
+      .filter((goal) => goal.status === "Gul" || goal.status === "Röd")
+      .slice(0, 4);
+    if (goals.length > 0) {
+      lines.push("", "Mål som kräver uppföljning:");
+      for (const goal of goals) {
+        lines.push(`- ${goal.title} (${goal.status})`);
+      }
     }
 
-    return answer;
-  } catch (error) {
-    console.error(error);
-    return "AI-assistenten är tillfälligt upptagen och kunde inte generera analysen just nu. Försök igen om någon minut.";
+    const delayed = (areaContext.activities ?? [])
+      .filter(isDelayedActivity)
+      .slice(0, 3);
+    if (delayed.length > 0) {
+      lines.push("", "Försenade aktiviteter:");
+      for (const activity of delayed) {
+        lines.push(
+          `- ${activity.title} (${activity.owner?.trim() || "Ej angiven"})`,
+        );
+      }
+    }
+
+    const decisions = (areaContext.decisions ?? []).slice(0, 3);
+    if (decisions.length > 0) {
+      lines.push("", "Öppna beslut:");
+      for (const decision of decisions) {
+        lines.push(
+          `- ${decision.title} (${decision.owner?.trim() || "Ej angiven"})`,
+        );
+      }
+    }
+
+    if (insight) {
+      lines.push(
+        "",
+        "Lokal tolkning:",
+        `- ${insight.whatHappened}`,
+        `- ${insight.whyImportant}`,
+        `- ${insight.consequence}`,
+        `- Åtgärd: ${insight.action}`,
+        insight.causeUnknown
+          ? "- Orsaken framgår inte av tillgänglig data."
+          : "- Samband syns i data; bakomliggande orsak är inte bevisad.",
+      );
+    }
+
+    return lines.join("\n");
   }
+
+  return buildLocalAnswer(question, context);
+}
+
+function isYellowKpiQuestion(q: string): boolean {
+  const mentionsKpi = q.includes("kpi") || q.includes("nyckeltal");
+  const mentionsYellow = q.includes("gula") || q.includes("gul");
+  return mentionsKpi && mentionsYellow;
+}
+
+function isFollowUpKpiQuestion(q: string): boolean {
+  const mentionsKpi = q.includes("kpi") || q.includes("nyckeltal");
+  return (
+    mentionsKpi &&
+    (q.includes("uppfoljning") ||
+      q.includes("foljas upp") ||
+      q.includes("kraver") ||
+      q.includes("folja upp"))
+  );
+}
+
+function isLateGoalQuestion(q: string): boolean {
+  const mentionsGoal = q.includes("mal") || q.includes("malen");
+  return (
+    mentionsGoal &&
+    (q.includes("sena") ||
+      q.includes("sen ") ||
+      q.endsWith(" sen") ||
+      q.includes("forsenade") ||
+      q.includes("forsenad") ||
+      q.includes("passerad deadline"))
+  );
+}
+
+function isOwnerQuestion(q: string): boolean {
+  return (
+    q.includes("vem ansvarar") ||
+    q.includes("vem ar ansvarig") ||
+    q.includes("ansvarig for") ||
+    q.includes("vem ager")
+  );
+}
+
+function isCountQuestion(q: string): boolean {
+  return q.includes("hur manga") || q.includes("hur många");
+}
+
+function isOccupancyQuestion(q: string): boolean {
+  return q.includes("belaggning") || q.includes("belaggningen");
+}
+
+function isResultBudgetQuestion(q: string): boolean {
+  return (
+    (q.includes("resultat") && q.includes("budget")) ||
+    q.includes("resultat mot budget")
+  );
+}
+
+function answerYellowKpis(context: AssistantContext): string {
+  const yellow = (context.kpis ?? []).filter((kpi) => kpi.status === "Gul");
+  if (yellow.length === 0) {
+    return "Inga KPI:er är gula just nu.";
+  }
+
+  const lines = yellow.map((kpi) => {
+    const area = kpi.businessAreaName || "Okänt område";
+    return `• ${kpi.name} (${area}): ${[kpi.currentValue, kpi.unit].filter(Boolean).join(" ") || "—"}`;
+  });
+
+  return `Gula KPI:er (${yellow.length}):\n${lines.join("\n")}`;
+}
+
+function answerFollowUpKpis(context: AssistantContext): string {
+  const follow = (context.kpis ?? []).filter(
+    (kpi) => kpi.status === "Gul" || kpi.status === "Röd",
+  );
+  if (follow.length === 0) {
+    return "Inga KPI kräver uppföljning just nu.";
+  }
+
+  const lines = follow.map((kpi) => {
+    const area = kpi.businessAreaName || "Okänt område";
+    return `• ${kpi.name} (${area}): ${kpi.status} — ${[kpi.currentValue, kpi.unit].filter(Boolean).join(" ") || "—"}`;
+  });
+
+  return `KPI som kräver uppföljning (${follow.length}):\n${lines.join("\n")}`;
+}
+
+function answerLateGoals(context: AssistantContext): string {
+  const today = todayDateKey();
+  const late = (context.goals ?? []).filter((goal) => {
+    if (!goal.deadline) {
+      return false;
+    }
+    return goal.deadline.slice(0, 10) < today && goal.status !== "Grön";
+  });
+
+  if (late.length === 0) {
+    return "Inga mål är sena utifrån deadline just nu.";
+  }
+
+  const lines = late.map((goal) => {
+    const deadline = goal.deadline?.slice(0, 10) ?? "—";
+    return `• ${goal.title} (${goal.businessAreaName}) — deadline ${deadline}, ${goal.status}, ägare ${goal.owner ?? "Ej angiven"}`;
+  });
+
+  return `Sena mål (${late.length}):\n${lines.join("\n")}`;
+}
+
+function answerOwnerQuestion(
+  q: string,
+  context: AssistantContext,
+): string {
+  const area = findAreaInQuestion(q, context.businessAreas);
+  if (area) {
+    return `${area.name}: ansvarig är ${area.manager?.trim() || "Ej angiven"}.`;
+  }
+
+  const kpi = (context.kpis ?? []).find((item) =>
+    q.includes(normalizeText(item.name)),
+  );
+  if (kpi) {
+    const manager =
+      context.businessAreas.find((areaRow) => areaRow.id === kpi.businessAreaId)
+        ?.manager ?? "Ej angiven";
+    return `KPI:n ${kpi.name} (${kpi.businessAreaName}): ansvarig är ${manager?.trim() || "Ej angiven"}.`;
+  }
+
+  const persons = context.summary.responsiblePersons ?? [];
+  if (persons.length === 0) {
+    return "Ingen ansvarig person hittades i tillgänglig data.";
+  }
+
+  return `Registrerade ansvariga: ${persons.slice(0, 12).join(", ")}.`;
+}
+
+function answerCountQuestion(
+  q: string,
+  context: AssistantContext,
+): string {
+  if (q.includes("affarsomrad") || q.includes("omraden")) {
+    return `Det finns ${context.summary.areaCount} affärsområden.`;
+  }
+  if (q.includes("kpi") || q.includes("nyckeltal")) {
+    const total = (context.kpis ?? []).length;
+    const counts = context.summary.kpiCounts;
+    return `Det finns ${total} KPI:er (${counts.Grön} gröna, ${counts.Gul} gula, ${counts.Röd} röda).`;
+  }
+  if (q.includes("mal")) {
+    const total = (context.goals ?? []).length;
+    const counts = context.summary.goalCounts;
+    return `Det finns ${total} mål (${counts.Grön} gröna, ${counts.Gul} gula, ${counts.Röd} röda).`;
+  }
+  if (q.includes("aktivitet")) {
+    const total = (context.activities ?? []).length;
+    const delayed = context.summary.delayedActivityCount;
+    return `Det finns ${total} aktiviteter, varav ${delayed} försenade.`;
+  }
+  if (q.includes("beslut")) {
+    return `Det finns ${context.summary.openDecisionCount} öppna beslut.`;
+  }
+
+  return [
+    `${context.summary.areaCount} affärsområden.`,
+    `${(context.kpis ?? []).length} KPI:er.`,
+    `${(context.goals ?? []).length} mål.`,
+    `${context.summary.delayedActivityCount} försenade aktiviteter.`,
+    `${context.summary.openDecisionCount} öppna beslut.`,
+  ].join(" ");
+}
+
+function answerNamedKpiQuestion(
+  q: string,
+  context: AssistantContext,
+): string {
+  const area = findAreaInQuestion(q, context.businessAreas);
+  const pool = area
+    ? (context.kpis ?? []).filter((kpi) => kpi.businessAreaId === area.id)
+    : (context.kpis ?? []);
+
+  const keywords = isOccupancyQuestion(q)
+    ? ["belagg", "belägg", "kapacitet", "utnyttjande"]
+    : ["resultat", "budget", "ebit", "marginal"];
+
+  const match = findKpiByKeywords(pool, keywords);
+  if (!match) {
+    return area
+      ? `Ingen matchande KPI hittades för ${area.name}.`
+      : "Ingen matchande KPI hittades i tillgänglig data.";
+  }
+
+  return `${match.businessAreaName}: ${formatKpiFact(match)}.`;
+}
+
+type AssistantContextScope = "area" | "broad";
+
+type RelevantAssistantContextResult = {
+  context: AssistantContext;
+  scope: AssistantContextScope;
+  areaName: string | null;
+};
+
+/**
+ * Selects a question-relevant slice of the full assistant context.
+ * Area questions get only that area's signals; broad questions keep company-wide context.
+ */
+export function selectRelevantAssistantContext(
+  question: string,
+  fullContext: AssistantContext,
+): RelevantAssistantContextResult {
+  const q = normalizeText(question);
+  const areas = fullContext.businessAreas ?? [];
+
+  if (isBroadAssistantQuestion(q) || !q) {
+    return {
+      context: slimBroadContext(fullContext),
+      scope: "broad",
+      areaName: null,
+    };
+  }
+
+  const area = findAreaInQuestion(q, areas);
+  if (area) {
+    return {
+      context: filterContextToArea(fullContext, area),
+      scope: "area",
+      areaName: area.name,
+    };
+  }
+
+  return {
+    context: slimBroadContext(fullContext),
+    scope: "broad",
+    areaName: null,
+  };
+}
+
+function isBroadAssistantQuestion(q: string): boolean {
+  return (
+    q.includes("hur mar foretaget") ||
+    q.includes("hur gar det for bolaget") ||
+    q.includes("hur gar det for foretaget") ||
+    q.includes("hur ser laget ut") ||
+    q.includes("overgripande") ||
+    q.includes("hela bolaget") ||
+    q.includes("hela koncernen") ||
+    q.includes("ledningsmotet") ||
+    q.includes("ledningsmote") ||
+    q.includes("prioritera") ||
+    q.includes("prioritet") ||
+    q.includes("viktigast idag") ||
+    q.includes("vad ska jag fokusera") ||
+    q.includes("vad ska tas upp")
+  );
+}
+
+function filterContextToArea(
+  full: AssistantContext,
+  area: BusinessAreaRow,
+): AssistantContext {
+  const areaId = area.id;
+  const areaName = area.name;
+  const areaNameNorm = normalizeText(areaName);
+
+  const kpis = sortFollowUpFirst(
+    (full.kpis ?? []).filter((kpi) => kpi.businessAreaId === areaId),
+  ).slice(0, 10);
+
+  const goals = sortFollowUpFirst(
+    (full.goals ?? []).filter((goal) => goal.businessAreaId === areaId),
+  ).slice(0, 8);
+
+  const delayedFirst = [
+    ...(full.activities ?? []).filter(
+      (activity) =>
+        activity.businessAreaId === areaId && isDelayedActivity(activity),
+    ),
+    ...(full.activities ?? []).filter(
+      (activity) =>
+        activity.businessAreaId === areaId && !isDelayedActivity(activity),
+    ),
+  ].slice(0, 6);
+
+  const decisions = (full.decisions ?? [])
+    .filter(
+      (decision) =>
+        decision.businessAreaId === areaId && decision.status !== "Klart",
+    )
+    .slice(0, 5);
+
+  const observations = (full.observations ?? [])
+    .filter((line) => normalizeText(line).includes(areaNameNorm))
+    .slice(0, 5);
+
+  const priorities = (full.priorities ?? [])
+    .filter((item) => item.areaName === areaName)
+    .slice(0, 3);
+
+  const analysisInsights = (full.analysisInsights ?? [])
+    .filter((item) => item.areaName === areaName)
+    .slice(0, 3);
+
+  const openDeviations = (full.openDeviations ?? [])
+    .filter((item) => item.areaName === areaName)
+    .slice(0, 6);
+
+  const yesterdayChanges = (full.yesterdayChanges ?? [])
+    .filter((change) => normalizeText(change.text).includes(areaNameNorm))
+    .slice(0, 4);
+
+  const manager = area.manager?.trim() || "Ej angiven";
+
+  return {
+    summary: {
+      ...full.summary,
+      areaCount: 1,
+      kpiCounts: countStatuses(kpis.map((kpi) => kpi.status)),
+      goalCounts: countStatuses(goals.map((goal) => goal.status)),
+      delayedActivityCount: delayedFirst.filter(isDelayedActivity).length,
+      openDecisionCount: decisions.length,
+      responsiblePersons: manager !== "Ej angiven" ? [manager] : [],
+      vdSituation: "",
+      vdPriority: "",
+      vdPositiveSummary: "",
+      dashboardSituation: `${areaName} · ${kpis.length} KPI · ${goals.length} mål`,
+    },
+    businessAreas: [area],
+    kpis,
+    goals,
+    activities: delayedFirst,
+    decisions,
+    observations,
+    priorities,
+    analysisInsights,
+    yesterdayChanges,
+    openDeviations,
+  };
+}
+
+function slimBroadContext(full: AssistantContext): AssistantContext {
+  const followKpis = sortFollowUpFirst(
+    (full.kpis ?? []).filter(
+      (kpi) => kpi.status === "Röd" || kpi.status === "Gul",
+    ),
+  ).slice(0, 12);
+
+  const followGoals = sortFollowUpFirst(
+    (full.goals ?? []).filter(
+      (goal) => goal.status === "Röd" || goal.status === "Gul",
+    ),
+  ).slice(0, 8);
+
+  const delayedActivities = (full.activities ?? [])
+    .filter(isDelayedActivity)
+    .slice(0, 6);
+
+  const openDecisions = (full.decisions ?? [])
+    .filter((decision) => decision.status !== "Klart")
+    .slice(0, 6);
+
+  return {
+    ...full,
+    kpis: followKpis,
+    goals: followGoals,
+    activities: delayedActivities,
+    decisions: openDecisions,
+    observations: (full.observations ?? []).slice(0, 6),
+    priorities: (full.priorities ?? []).slice(0, 4),
+    analysisInsights: (full.analysisInsights ?? []).slice(0, 6),
+    openDeviations: (full.openDeviations ?? []).slice(0, 8),
+    yesterdayChanges: (full.yesterdayChanges ?? []).slice(0, 5),
+    summary: {
+      ...full.summary,
+      responsiblePersons: (full.summary.responsiblePersons ?? []).slice(0, 12),
+    },
+  };
+}
+
+function sortFollowUpFirst<T extends { status: StatusTone }>(items: T[]): T[] {
+  const rank = (status: StatusTone) => {
+    if (status === "Röd") return 0;
+    if (status === "Gul") return 1;
+    return 2;
+  };
+  return [...items].sort((a, b) => rank(a.status) - rank(b.status));
+}
+
+/** Compact JSON payload for OpenAI — drops ids/timestamps and unused fields. */
+function toCompactOpenAiContext(
+  context: AssistantContext,
+  scope: AssistantContextScope,
+) {
+  return {
+    scope,
+    summary: {
+      dateLabel: context.summary.dateLabel,
+      areaCount: context.summary.areaCount,
+      kpiCounts: context.summary.kpiCounts,
+      goalCounts: context.summary.goalCounts,
+      delayedActivityCount: context.summary.delayedActivityCount,
+      openDecisionCount: context.summary.openDecisionCount,
+      dashboardSituation: context.summary.dashboardSituation,
+      vdSituation: context.summary.vdSituation || undefined,
+      vdPriority: context.summary.vdPriority || undefined,
+      vdPositiveSummary: context.summary.vdPositiveSummary || undefined,
+      responsiblePersons: context.summary.responsiblePersons,
+      firstName: context.summary.firstName,
+    },
+    businessAreas: (context.businessAreas ?? []).map((area) => ({
+      name: area.name,
+      status: area.status,
+      manager: area.manager,
+    })),
+    kpis: (context.kpis ?? []).map((kpi) => ({
+      name: kpi.name,
+      area: kpi.businessAreaName,
+      status: kpi.status,
+      currentValue: kpi.currentValue,
+      targetValue: kpi.targetValue,
+      unit: kpi.unit,
+      trend: kpi.trend,
+    })),
+    goals: (context.goals ?? []).map((goal) => ({
+      title: goal.title,
+      area: goal.businessAreaName,
+      status: goal.status,
+      owner: goal.owner,
+      deadline: goal.deadline,
+    })),
+    activities: (context.activities ?? []).map((activity) => ({
+      title: activity.title,
+      area: activity.businessAreaName,
+      status: activity.status,
+      owner: activity.owner,
+      deadline: activity.deadline,
+      delayed: isDelayedActivity(activity),
+    })),
+    decisions: (context.decisions ?? []).map((decision) => ({
+      title: decision.title,
+      area: decision.businessAreaName,
+      status: decision.status,
+      owner: decision.owner,
+      dueDate: decision.dueDate,
+    })),
+    observations: context.observations ?? [],
+    priorities: (context.priorities ?? []).map((item) => ({
+      label: item.label,
+      reason: item.reason,
+      owner: item.owner,
+      areaName: item.areaName,
+    })),
+    analysisInsights: context.analysisInsights ?? [],
+    yesterdayChanges: context.yesterdayChanges ?? [],
+    openDeviations: context.openDeviations ?? [],
+  };
 }
 
 const BRIEFING_SYSTEM_PROMPT = `Du är COO-rådgivare för ALWEX ONE och förbereder VD inför dagen.
@@ -903,6 +1760,231 @@ function formatDeviationObservation(deviation: AssistantDeviation): string {
   return `Öppet beslut: "${deviation.title}" (${deviation.areaName}).`;
 }
 
+function normalizeSignalName(value: string | null | undefined): string {
+  return (value ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "");
+}
+
+function formatKpiFact(kpi: KPIListItem): string {
+  const current = [kpi.currentValue, kpi.unit].filter(Boolean).join(" ");
+  const target = kpi.targetValue
+    ? ` mot mål ${kpi.targetValue}${kpi.unit ? ` ${kpi.unit}` : ""}`
+    : "";
+  return `${kpi.name} ${current || "—"}${target} (${kpi.status})`;
+}
+
+function findKpiByKeywords(
+  kpis: KPIListItem[],
+  keywords: string[],
+): KPIListItem | null {
+  const normalizedKeywords = keywords.map((keyword) =>
+    normalizeSignalName(keyword),
+  );
+  return (
+    kpis.find((kpi) => {
+      const name = normalizeSignalName(kpi.name);
+      return normalizedKeywords.some((keyword) =>
+        keyword ? name.includes(keyword) : false,
+      );
+    }) ?? null
+  );
+}
+
+function isFollowUpStatus(status: StatusTone | null | undefined): boolean {
+  return status === "Gul" || status === "Röd";
+}
+
+/**
+ * Builds data-backed causal insights by linking related signals in the same area.
+ * Never invents causes — marks causeUnknown when linkage is weak.
+ */
+function buildAnalysisInsights(input: {
+  areas: BusinessAreaRow[];
+  kpis: KPIListItem[];
+  goals: GoalListItem[];
+  delayedActivities: ActivityListItem[];
+  openDecisions: DecisionListItem[];
+  areaManagers: Map<string, string>;
+}): AssistantAnalysisInsight[] {
+  const insights: AssistantAnalysisInsight[] = [];
+
+  for (const area of input.areas ?? []) {
+    const areaId = area.id;
+    const areaName = area.name;
+    const owner =
+      input.areaManagers.get(areaId) ||
+      area.manager?.trim() ||
+      "Ej angiven";
+
+    const areaKpis = (input.kpis ?? []).filter(
+      (kpi) => kpi.businessAreaId === areaId,
+    );
+    const followKpis = areaKpis.filter((kpi) => isFollowUpStatus(kpi.status));
+    if (followKpis.length === 0 && area.status !== "Gul" && area.status !== "Röd") {
+      continue;
+    }
+
+    const areaGoals = (input.goals ?? []).filter(
+      (goal) =>
+        goal.businessAreaId === areaId && isFollowUpStatus(goal.status),
+    );
+    const delayed = (input.delayedActivities ?? []).filter(
+      (activity) => activity.businessAreaId === areaId,
+    );
+    const decisions = (input.openDecisions ?? []).filter(
+      (decision) => decision.businessAreaId === areaId,
+    );
+
+    const occupancy = findKpiByKeywords(areaKpis, [
+      "belagg",
+      "belägg",
+      "kapacitet",
+      "utnyttjande",
+    ]);
+    const resultKpi = findKpiByKeywords(areaKpis, [
+      "resultat",
+      "budget",
+      "ebit",
+      "marginal",
+    ]);
+    const volume = findKpiByKeywords(areaKpis, [
+      "volym",
+      "ton",
+      "antal",
+      "order",
+      "orderingang",
+    ]);
+    const revenue = findKpiByKeywords(areaKpis, [
+      "intakt",
+      "intäkt",
+      "omsatt",
+      "omsattning",
+      "omsättning",
+      "foraljning",
+      "försäljning",
+    ]);
+
+    const linkedSignals: string[] = [];
+    let whatHappened = "";
+    let whyImportant = "";
+    let consequence = "";
+    let action = "";
+    let causeUnknown = true;
+
+    const occupancyOff =
+      occupancy && isFollowUpStatus(occupancy.status) ? occupancy : null;
+    const resultOff =
+      resultKpi && isFollowUpStatus(resultKpi.status) ? resultKpi : null;
+    const volumeOff =
+      volume && isFollowUpStatus(volume.status) ? volume : null;
+    const revenueOff =
+      revenue && isFollowUpStatus(revenue.status) ? revenue : null;
+
+    if (occupancyOff && resultOff) {
+      linkedSignals.push(formatKpiFact(occupancyOff), formatKpiFact(resultOff));
+      whatHappened = `${areaName}: ${formatKpiFact(occupancyOff)}.`;
+      whyImportant = `Samma område visar samtidigt avvikelse i ${resultOff.name} (${formatKpiFact(resultOff)}).`;
+      consequence =
+        "Om beläggningen inte förbättras finns risk att resultatmålet fortsatt missas.";
+      action = `${owner} bör presentera en kapacitets- och försäljningsplan.`;
+      causeUnknown = false;
+    } else if (volumeOff && revenueOff) {
+      linkedSignals.push(formatKpiFact(volumeOff), formatKpiFact(revenueOff));
+      whatHappened = `${areaName}: ${formatKpiFact(volumeOff)}.`;
+      whyImportant = `Volymsignalen sammanfaller med avvikelse i ${revenueOff.name} (${formatKpiFact(revenueOff)}).`;
+      consequence =
+        "Om volymen inte vänder finns risk att intäkten fortsatt ligger under plan.";
+      action = `${owner} bör redovisa volym- och intäktsåtgärder för nästa period.`;
+      causeUnknown = false;
+    } else if (followKpis[0] && areaGoals[0]) {
+      const kpi = followKpis[0];
+      const goal = areaGoals[0];
+      linkedSignals.push(formatKpiFact(kpi), `Mål: ${goal.title} (${goal.status})`);
+      whatHappened = `${areaName}: ${formatKpiFact(kpi)}.`;
+      whyImportant = `KPI-avvikelsen ligger i samma område som målet "${goal.title}" (${goal.status}).`;
+      consequence =
+        "Om KPI och mål fortsätter i samma riktning ökar risken att områdets målbild missas.";
+      action = `${owner} bör stämma av KPI mot målet och låsa nästa åtgärd.`;
+      causeUnknown = false;
+    } else if (followKpis[0] && delayed[0]) {
+      const kpi = followKpis[0];
+      const activity = delayed[0];
+      linkedSignals.push(
+        formatKpiFact(kpi),
+        `Försenad aktivitet: ${activity.title}`,
+      );
+      whatHappened = `${areaName}: ${formatKpiFact(kpi)}.`;
+      whyImportant = `Försenad aktivitet "${activity.title}" ökar risken kring KPI-avvikelsen.`;
+      consequence =
+        "Om aktiviteten inte låses kan KPI-avvikelsen bestå eller förvärras.";
+      action = `${activity.owner?.trim() || owner} bör säkra nästa steg för "${activity.title}".`;
+      causeUnknown = false;
+    } else if (followKpis[0] && decisions[0]) {
+      const kpi = followKpis[0];
+      const decision = decisions[0];
+      linkedSignals.push(
+        formatKpiFact(kpi),
+        `Öppet beslut: ${decision.title}`,
+      );
+      whatHappened = `${areaName}: ${formatKpiFact(kpi)}.`;
+      whyImportant = `Öppet beslut "${decision.title}" kan förklara utebliven effekt på KPI.`;
+      consequence =
+        "Så länge beslutet är öppet riskerar KPI-åtgärder att sakna effekt.";
+      action = `${decision.owner?.trim() || owner} bör driva beslutet "${decision.title}" till avslut.`;
+      causeUnknown = false;
+    } else if (followKpis[0]) {
+      const kpi = followKpis[0];
+      linkedSignals.push(formatKpiFact(kpi));
+      whatHappened = `${areaName}: ${formatKpiFact(kpi)}.`;
+      whyImportant =
+        "Orsaken framgår inte av tillgänglig data.";
+      consequence =
+        "Utan tydlig orsak finns risk att avvikelsen kvarstår utan rätt åtgärd.";
+      action = `${owner} bör komplettera underlaget och föreslå nästa steg.`;
+      causeUnknown = true;
+    } else if (area.status === "Gul" || area.status === "Röd") {
+      whatHappened = `${areaName} har status ${area.status}.`;
+      whyImportant =
+        "Orsaken framgår inte av tillgänglig data.";
+      consequence =
+        "Områdesstatusen kräver uppföljning tills underlag finns.";
+      action = `${owner} bör förklara status och föreslå åtgärd.`;
+      linkedSignals.push(`Områdesstatus: ${area.status}`);
+      causeUnknown = true;
+    } else {
+      continue;
+    }
+
+    if (delayed[0] && !linkedSignals.some((s) => s.includes(delayed[0]!.title))) {
+      linkedSignals.push(`Försenad aktivitet: ${delayed[0]!.title}`);
+    }
+    if (
+      decisions[0] &&
+      !linkedSignals.some((s) => s.includes(decisions[0]!.title))
+    ) {
+      linkedSignals.push(`Öppet beslut: ${decisions[0]!.title}`);
+    }
+
+    insights.push({
+      areaName,
+      owner,
+      whatHappened,
+      whyImportant,
+      consequence,
+      action,
+      linkedSignals: linkedSignals.slice(0, 5),
+      causeUnknown,
+    });
+  }
+
+  return insights
+    .sort((a, b) => Number(a.causeUnknown) - Number(b.causeUnknown))
+    .slice(0, 8);
+}
+
 function buildPriorities(input: {
   kpis: KPIListItem[];
   delayedActivities: ActivityListItem[];
@@ -1027,14 +2109,6 @@ function findAreaInQuestion(
   return best;
 }
 
-function formatKpiLine(kpi: KPIListItem): string {
-  const value = [kpi.currentValue, kpi.unit].filter(Boolean).join(" ");
-  const target = kpi.targetValue
-    ? ` (mål ${kpi.targetValue}${kpi.unit ? ` ${kpi.unit}` : ""})`
-    : "";
-  return `• ${kpi.name}: ${value || "—"}${target} — ${kpi.status}`;
-}
-
 function answerPriority(context: AssistantContext): string {
   if (context.summary.vdPriority.trim()) {
     return context.summary.vdPriority;
@@ -1051,15 +2125,16 @@ function answerPriority(context: AssistantContext): string {
 function answerRedKpis(context: AssistantContext): string {
   const red = (context.kpis ?? []).filter((kpi) => kpi.status === "Röd");
   if (red.length === 0) {
-    return "Inga KPI:er är röda just nu.";
+    return "Inga KPI är röda just nu.";
   }
 
-  const lines = red.map((kpi) => {
+  const lines = red.slice(0, 8).map((kpi) => {
     const area = kpi.businessAreaName || "Okänt område";
-    return `• ${kpi.name} (${area}): ${[kpi.currentValue, kpi.unit].filter(Boolean).join(" ") || "—"}`;
+    const value = formatKpiValueAgainstTarget(kpi);
+    return `• ${kpi.name} (${area}): ${value}`;
   });
 
-  return `Röda KPI:er (${red.length}):\n${lines.join("\n")}`;
+  return `Röda KPI (${red.length})\n${lines.join("\n")}`;
 }
 
 function answerDelayedActivities(context: AssistantContext): string {
@@ -1068,14 +2143,14 @@ function answerDelayedActivities(context: AssistantContext): string {
     return "Inga aktiviteter är försenade just nu.";
   }
 
-  const lines = delayed.map((activity) => {
+  const lines = delayed.slice(0, 8).map((activity) => {
     const deadline = activity.deadline
       ? activity.deadline.slice(0, 10)
       : "saknar deadline";
-    return `• ${activity.title} (${activity.businessAreaName}) — deadline ${deadline}, ägare ${activity.owner ?? "Ej angiven"}`;
+    return `• ${activity.title} (${activity.businessAreaName}) — deadline ${deadline}, ${activity.owner?.trim() || "Ej angiven"}`;
   });
 
-  return `Försenade aktiviteter (${delayed.length}):\n${lines.join("\n")}`;
+  return `Försenade aktiviteter (${delayed.length})\n${lines.join("\n")}`;
 }
 
 function answerOpenDecisions(context: AssistantContext): string {
@@ -1086,17 +2161,31 @@ function answerOpenDecisions(context: AssistantContext): string {
     return "Inga öppna beslut just nu.";
   }
 
-  const lines = open.map((decision) => {
+  const lines = open.slice(0, 8).map((decision) => {
     const when =
       decision.dueDate?.slice(0, 10) ??
       decision.meetingDate?.slice(0, 10) ??
-      "utan datum";
-    return `• ${decision.title} (${decision.businessAreaName}) — ${decision.status}, ${when}`;
+      null;
+    const owner = decision.owner?.trim() || "Ej angiven";
+    const due = when ? ` — förfaller ${when}` : "";
+    return `• ${decision.title} (${decision.businessAreaName})${due}, ${owner}`;
   });
 
-  return `Öppna beslut (${open.length}):\n${lines.join("\n")}`;
+  return `Öppna beslut (${open.length})\n${lines.join("\n")}`;
 }
 
+function formatKpiValueAgainstTarget(kpi: KPIListItem): string {
+  const current = [kpi.currentValue, kpi.unit].filter(Boolean).join(" ");
+  if (kpi.targetValue) {
+    const targetUnit = kpi.unit ? ` ${kpi.unit}` : "";
+    return `${current || "—"} mot mål ${kpi.targetValue}${targetUnit}`;
+  }
+  return current || "värde saknas";
+}
+
+/**
+ * VD-formatted local status for one business area — no OpenAI.
+ */
 function answerAreaStatus(
   area: BusinessAreaRow,
   context: AssistantContext,
@@ -1104,65 +2193,116 @@ function answerAreaStatus(
   const areaKpis = (context.kpis ?? []).filter(
     (kpi) => kpi.businessAreaId === area.id,
   );
-  const areaGoals = (context.goals ?? []).filter(
-    (goal) => goal.businessAreaId === area.id,
+  const followKpis = areaKpis
+    .filter((kpi) => kpi.status === "Röd" || kpi.status === "Gul")
+    .sort((a, b) => {
+      if (a.status === b.status) return 0;
+      return a.status === "Röd" ? -1 : 1;
+    });
+  const topKpi = followKpis[0] ?? null;
+
+  const delayed = (context.activities ?? []).filter(
+    (activity) =>
+      activity.businessAreaId === area.id && isDelayedActivity(activity),
   );
-  const areaActivities = (context.activities ?? []).filter(
-    (activity) => activity.businessAreaId === area.id,
-  );
-  const delayed = areaActivities.filter(isDelayedActivity);
-  const openDecisions = (context.decisions ?? []).filter(
-    (decision) =>
-      decision.businessAreaId === area.id && decision.status !== "Klart",
+  const followGoals = (context.goals ?? []).filter(
+    (goal) =>
+      goal.businessAreaId === area.id &&
+      (goal.status === "Gul" || goal.status === "Röd"),
   );
 
-  const statusCounts = countStatuses(areaKpis.map((kpi) => kpi.status));
-  const lines: string[] = [
-    `${area.name} har status ${area.status}.`,
-    `Ansvarig: ${area.manager?.trim() || "Ej angiven"}.`,
-    `KPI: ${statusCounts.Grön} gröna, ${statusCounts.Gul} gula, ${statusCounts.Röd} röda.`,
+  const status =
+    area.status === "Grön" || area.status === "Gul" || area.status === "Röd"
+      ? area.status
+      : "Gul";
+
+  let lage: string;
+  if (topKpi) {
+    lage = `${topKpi.name} ligger på ${formatKpiValueAgainstTarget(topKpi)}.`;
+  } else if (areaKpis.length === 0) {
+    lage = "Relevant KPI-data saknas för området i underlaget.";
+  } else if (status === "Grön") {
+    lage = "Området ligger enligt plan utifrån tillgängliga KPI.";
+  } else {
+    lage = `Området har status ${status}, men ingen tydlig KPI-avvikelse finns i underlaget.`;
+  }
+
+  const deviationBullets: string[] = [];
+  for (const kpi of followKpis.slice(0, 2)) {
+    deviationBullets.push(
+      `• ${kpi.name}: ${formatKpiValueAgainstTarget(kpi)}`,
+    );
+  }
+  if (deviationBullets.length < 2 && followGoals[0]) {
+    deviationBullets.push(
+      `• Mål: ${followGoals[0].title} (${followGoals[0].status})`,
+    );
+  }
+  if (deviationBullets.length < 2 && delayed[0]) {
+    deviationBullets.push(`• Försenad aktivitet: ${delayed[0].title}`);
+  }
+  if (deviationBullets.length === 0 && topKpi) {
+    deviationBullets.push(`• ${topKpi.name}: målet nås inte.`);
+  }
+
+  const hasClearRisk =
+    Boolean(topKpi) || delayed.length > 0 || followGoals.length > 0;
+  let risk: string | null = null;
+  if (topKpi) {
+    risk = `Fortsatt avvikelse i ${topKpi.name} behöver följas upp.`;
+  } else if (delayed[0]) {
+    risk = `Försenad aktivitet (${delayed[0].title}) ökar uppföljningsbehovet.`;
+  } else if (followGoals[0]) {
+    risk = `Målet "${followGoals[0].title}" ligger utanför plan.`;
+  }
+
+  const manager = area.manager?.trim();
+  const ansvarig = manager || "Ej angiven i data.";
+
+  let recommendation: string;
+  if (topKpi) {
+    recommendation = manager
+      ? `Följ upp ${topKpi.name} med ${manager} och säkra en åtgärdsplan.`
+      : `Följ upp ${topKpi.name} och säkra en åtgärdsplan.`;
+  } else if (delayed[0]) {
+    const owner = delayed[0].owner?.trim() || manager;
+    recommendation = owner
+      ? `Säkra nästa steg för "${delayed[0].title}" med ${owner}.`
+      : `Säkra nästa steg för "${delayed[0].title}".`;
+  } else if (followGoals[0]) {
+    recommendation = `Följ upp målet "${followGoals[0].title}".`;
+  } else if (status === "Grön") {
+    recommendation = "Behåll den löpande uppföljningen.";
+  } else {
+    recommendation =
+      "Komplettera underlaget och återkom med tydlig avvikelse och åtgärd.";
+  }
+
+  const sections: string[] = [
+    area.name,
+    `Status: ${status}`,
+    "",
+    "Läge:",
+    lage,
   ];
 
-  if (areaKpis.length > 0) {
-    lines.push("", "Nyckeltal:");
-    for (const kpi of areaKpis) {
-      lines.push(formatKpiLine(kpi));
-    }
-  }
-
-  const followGoals = areaGoals.filter(
-    (goal) => goal.status === "Gul" || goal.status === "Röd",
-  );
-  if (followGoals.length > 0) {
-    lines.push("", "Mål som kräver uppföljning:");
-    for (const goal of followGoals) {
-      lines.push(`• ${goal.title} — ${goal.status}`);
-    }
-  } else if (areaGoals.length > 0) {
-    lines.push("", `Alla ${areaGoals.length} mål ligger utan röd/gul markering.`);
-  }
-
-  if (delayed.length > 0) {
-    lines.push("", `Försenade aktiviteter: ${delayed.length}.`);
+  if (deviationBullets.length > 0) {
+    sections.push("", "Viktigaste avvikelse:", ...deviationBullets.slice(0, 2));
   } else {
-    lines.push("", "Inga försenade aktiviteter i området.");
+    sections.push(
+      "",
+      "Viktigaste avvikelse:",
+      "• Inga tydliga avvikelser i tillgänglig data.",
+    );
   }
 
-  if (openDecisions.length > 0) {
-    lines.push(`Öppna beslut: ${openDecisions.length}.`);
+  if (hasClearRisk && risk) {
+    sections.push("", "Risk:", risk);
   }
 
-  const areaDeviations = (context.openDeviations ?? []).filter(
-    (deviation) => deviation.areaName === area.name,
-  );
-  if (areaDeviations.length > 0) {
-    lines.push("", "Öppna avvikelser:");
-    for (const deviation of areaDeviations.slice(0, 4)) {
-      lines.push(`• ${deviation.title} (${deviation.status})`);
-    }
-  }
+  sections.push("", "Ansvarig:", ansvarig, "", "Rekommendation:", recommendation);
 
-  return lines.join("\n");
+  return sections.join("\n");
 }
 
 function answerFallback(context: AssistantContext): string {

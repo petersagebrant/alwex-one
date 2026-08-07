@@ -10,8 +10,10 @@ import { recordAuditLog } from "@/services/auditLog";
 import {
   collectFieldChanges,
   formatEntityChangeDescription,
+  formatEntityCreateDescription,
   hasFieldChange,
   resolveActorName,
+  snapshotCreateChanges,
 } from "@/services/changeHistory";
 import { addKPIHistoryEntry } from "@/services/kpiHistory";
 import type {
@@ -24,6 +26,7 @@ import type {
 
 const DEFAULT_ACTOR = "Peter Sagebrant";
 
+/** Fields logged on create/update for structured from/to history. */
 const KPI_TRACKED_FIELDS = [
   "name",
   "category",
@@ -135,7 +138,7 @@ export async function createKPI(input: CreateKPIInput): Promise<KPI> {
     throw new Error("businessAreaId är obligatoriskt.");
   }
 
-  const row = await insertKpi({
+  const payload = {
     business_area_id: input.businessAreaId,
     name,
     category: input.category?.trim() || null,
@@ -144,16 +147,38 @@ export async function createKPI(input: CreateKPIInput): Promise<KPI> {
     unit: input.unit?.trim() || null,
     status: input.status,
     trend: input.trend,
-  });
+  };
 
+  const row = await insertKpi(payload);
+
+  const createChanges = snapshotCreateChanges(payload, KPI_TRACKED_FIELDS);
+  const actorName = await resolveActorName(DEFAULT_ACTOR);
   await recordAuditLog({
     entityType: "kpi",
     entityId: row.id,
     action: "created",
-    description: `Skapade KPI:n "${row.name}"`,
-    actorName: DEFAULT_ACTOR,
+    description: formatEntityCreateDescription("KPI:n", row.name),
+    actorName,
     businessAreaId: row.business_area_id,
+    changes: createChanges.length > 0 ? { fields: createChanges } : null,
   });
+
+  if (row.current_value || row.status) {
+    try {
+      await addKPIHistoryEntry(
+        {
+          kpiId: row.id,
+          value: row.current_value?.trim() || "—",
+          status: toStatusTone(row.status),
+          comment: "Initial historik vid skapande",
+          recordedAt: new Date().toISOString(),
+        },
+        { skipAudit: true },
+      );
+    } catch {
+      // Historik får inte blockera skapandet.
+    }
+  }
 
   return mapKpiRow(row);
 }

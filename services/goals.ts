@@ -10,7 +10,9 @@ import { recordAuditLog } from "@/services/auditLog";
 import {
   collectFieldChanges,
   formatEntityChangeDescription,
+  formatEntityCreateDescription,
   resolveActorName,
+  snapshotCreateChanges,
 } from "@/services/changeHistory";
 import type {
   CreateGoalInput,
@@ -23,6 +25,7 @@ const DEFAULT_ACTOR = "Peter Sagebrant";
 
 const GOAL_TRACKED_FIELDS = [
   "title",
+  "description",
   "owner",
   "status",
   "target_value",
@@ -109,7 +112,7 @@ export async function createGoal(input: CreateGoalInput): Promise<Goal> {
       ? null
       : Math.min(100, Math.max(0, Math.round(input.progress)));
 
-  const row = await insertGoal({
+  const payload = {
     business_area_id: input.businessAreaId,
     title,
     description: input.description?.trim() || null,
@@ -119,15 +122,22 @@ export async function createGoal(input: CreateGoalInput): Promise<Goal> {
     current_value: input.currentValue?.trim() || null,
     deadline: input.deadline || null,
     progress,
-  });
+  };
 
+  const row = await insertGoal(payload);
+
+  const createChanges = snapshotCreateChanges(payload, GOAL_TRACKED_FIELDS);
+  const actorName = await resolveActorName(
+    input.owner?.trim() || DEFAULT_ACTOR,
+  );
   await recordAuditLog({
     entityType: "goal",
     entityId: row.id,
     action: "created",
-    description: `Skapade målet "${row.title}"`,
-    actorName: input.owner?.trim() || DEFAULT_ACTOR,
+    description: formatEntityCreateDescription("målet", row.title),
+    actorName,
     businessAreaId: row.business_area_id,
+    changes: createChanges.length > 0 ? { fields: createChanges } : null,
   });
 
   return mapGoalRow(row);
@@ -188,6 +198,7 @@ export async function updateGoal(input: UpdateGoalInput): Promise<Goal> {
     {
       business_area_id: existing.business_area_id,
       title: existing.title,
+      description: existing.description,
       owner: existing.owner,
       status: existing.status,
       target_value: existing.target_value,

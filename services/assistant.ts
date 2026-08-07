@@ -12,7 +12,10 @@ import { getKPIs, type KPIListItem } from "@/services/kpis";
 import {
   getRecentKpiHistoryForKpis,
 } from "@/services/kpiHistory";
-import type { KPIHistory, StatusTone } from "@/types";
+import type { AuditFieldChange, KPIHistory, StatusTone } from "@/types";
+
+const INSUFFICIENT_HISTORY =
+  "Det finns inte tillräckligt historiskt underlag för att bedöma trenden.";
 
 const ASSISTANT_SYSTEM_PROMPT_BROAD = `Du är VD-assistent för ALWEX ONE.
 
@@ -120,6 +123,23 @@ export type AssistantEntityChange = {
   description: string;
   action: string;
   at: string;
+  /** Structured from/to field diffs when available. */
+  fields: AuditFieldChange[];
+};
+
+/** Latest known change per KPI for LOCAL "när ändrades … senast"-frågor. */
+export type AssistantKpiLastChange = {
+  kpiId: string;
+  name: string;
+  areaId: string;
+  areaName: string;
+  lastChangedAt: string | null;
+  previousValue: string | null;
+  currentValue: string | null;
+  previousStatus: StatusTone | null;
+  currentStatus: StatusTone;
+  unit: string | null;
+  source: "kpi_history" | "audit_log" | "updated_at" | "none";
 };
 
 export type AssistantAreaTrendSummary = {
@@ -176,6 +196,8 @@ export type AssistantContext = {
   analysisInsights: AssistantAnalysisInsight[];
   /** Historik/trend från kpi_history + audit_log. */
   trends: AssistantTrends;
+  /** Senaste kända ändring per KPI (för LOCAL tidpunktsfrågor). */
+  kpiLastChanges: AssistantKpiLastChange[];
   yesterdayChanges: { id: string; text: string }[];
   /** Derived helpers used by rule-based answers. */
   openDeviations: AssistantDeviation[];
@@ -263,6 +285,12 @@ export async function buildAssistantContext(): Promise<AssistantContext> {
     kpiHistory: kpiHistoryRows ?? [],
   });
 
+  const kpiLastChanges = buildKpiLastChanges({
+    kpis: allKpis,
+    kpiHistory: kpiHistoryRows ?? [],
+    auditEntries: auditSinceWeek ?? [],
+  });
+
   const responsiblePersons = [
     ...new Set(
       [
@@ -309,6 +337,7 @@ export async function buildAssistantContext(): Promise<AssistantContext> {
     priorities,
     analysisInsights,
     trends,
+    kpiLastChanges,
     yesterdayChanges: dashboard?.yesterdayChanges ?? [],
     openDeviations,
   };
@@ -430,6 +459,10 @@ function isHybridQuestion(q: string): boolean {
 }
 
 function isLocalTrendQuestion(q: string): boolean {
+  if (isKpiLastChangedQuestion(q)) {
+    return true;
+  }
+
   if (
     q.includes("vilka kpi har forsamrats") ||
     q.includes("vilka kpi har forbattrats") ||
@@ -464,6 +497,22 @@ function isLocalTrendQuestion(q: string): boolean {
   }
 
   return false;
+}
+
+function isKpiLastChangedQuestion(q: string): boolean {
+  const mentionsKpi = q.includes("kpi") || q.includes("nyckeltal");
+  if (!mentionsKpi) {
+    return false;
+  }
+
+  return (
+    (q.includes("nar") && (q.includes("andrades") || q.includes("uppdaterades"))) ||
+    q.includes("senast andrad") ||
+    q.includes("senast andrades") ||
+    q.includes("senast uppdaterad") ||
+    q.includes("senast uppdaterades") ||
+    (q.includes("senast") && (q.includes("andrad") || q.includes("andrats")))
+  );
 }
 
 function isLocalQuestion(q: string): boolean {
@@ -1045,6 +1094,10 @@ function answerTrendQuestion(
   q: string,
   context: AssistantContext,
 ): string {
+  if (isKpiLastChangedQuestion(q)) {
+    return answerKpiLastChangedQuestion(q, context);
+  }
+
   const window = pickTrendWindow(context.trends, q);
   const area = findAreaInQuestion(q, context.businessAreas);
 
@@ -1071,10 +1124,58 @@ function answerTrendQuestion(
   }
 
   if (!window.hasEnoughHistory) {
-    return "Det finns inte tillräckligt historiskt underlag för att bedöma trenden.";
+    return INSUFFICIENT_HISTORY;
   }
 
   return formatCompanyTrendAnswer(window);
+}
+
+function answerKpiLastChangedQuestion(
+  q: string,
+  context: AssistantContext,
+): string {
+  const area = findAreaInQuestion(q, context.businessAreas);
+  const pool = area
+    ? (context.kpis ?? []).filter((kpi) => kpi.businessAreaId === area.id)
+    : (context.kpis ?? []);
+
+  const kpi = findKpiInQuestion(q, pool) ?? findKpiInQuestion(q, context.kpis ?? []);
+  if (!kpi) {
+    return "Ange vilken KPI du menar, till exempel namnet på nyckeltalet.";
+  }
+
+  const meta =
+    (context.kpiLastChanges ?? []).find((item) => item.kpiId === kpi.id) ??
+    null;
+
+  if (!meta || !meta.lastChangedAt || meta.source === "none") {
+    return INSUFFICIENT_HISTORY;
+  }
+
+  const when = formatDateTimeSv(meta.lastChangedAt);
+  const lines = [`${kpi.name} (${kpi.businessAreaName}) ändrades senast ${when}.`];
+
+  if (meta.previousValue !== null || meta.previousStatus !== null) {
+    const valuePart =
+      meta.previousValue !== null && meta.currentValue !== null
+        ? `${meta.previousValue} → ${meta.currentValue}${meta.unit ? ` ${meta.unit}` : ""}`
+        : null;
+    const statusPart =
+      meta.previousStatus && meta.previousStatus !== meta.currentStatus
+        ? `${meta.previousStatus} → ${meta.currentStatus}`
+        : null;
+    if (valuePart || statusPart) {
+      lines.push(
+        [valuePart, statusPart].filter(Boolean).join(" · "),
+      );
+    }
+  } else if (meta.source === "updated_at") {
+    lines.push(
+      "Tidpunkten kommer från senaste sparningen; tidigare värde saknas i historiken.",
+    );
+  }
+
+  return lines.join("\n");
 }
 
 function formatKpiTrendList(
@@ -1137,7 +1238,7 @@ function formatAreaTrendAnswer(
 
 function formatCompanyTrendAnswer(window: AssistantTrendWindow): string {
   if (!window.hasEnoughHistory) {
-    return "Det finns inte tillräckligt historiskt underlag för att bedöma trenden.";
+    return INSUFFICIENT_HISTORY;
   }
 
   const lines: string[] = [`Förändringar ${window.label}:`];
@@ -1481,12 +1582,58 @@ function buildAssistantTrends(input: {
         title,
         areaId,
         areaName,
-        description: entry.changes?.fields?.length
-          ? `${entry.description}`
-          : entry.description,
+        description: formatAuditChangeDescription(entry),
         action: entry.action,
         at: entry.createdAt,
+        fields: entry.changes?.fields ?? [],
       });
+    }
+
+    // Supplement KPI trends from structured audit diffs when kpi_history is thin.
+    const coveredKpiIds = new Set(kpiTrends.map((item) => item.kpiId));
+    for (const change of entityChanges) {
+      if (change.entityType !== "kpi" || !change.entityId) {
+        continue;
+      }
+      if (coveredKpiIds.has(change.entityId)) {
+        continue;
+      }
+
+      const kpi = kpiById.get(change.entityId);
+      if (!kpi) {
+        continue;
+      }
+
+      const valueChange = change.fields.find(
+        (field) => field.field === "current_value",
+      );
+      const statusChange = change.fields.find(
+        (field) => field.field === "status",
+      );
+      if (!valueChange && !statusChange) {
+        continue;
+      }
+
+      const previousStatus = toStatusToneOrNull(statusChange?.from ?? null);
+      const currentStatus =
+        toStatusToneOrNull(statusChange?.to ?? null) ?? kpi.status;
+      const direction = directionFromStatuses(previousStatus, currentStatus);
+
+      kpiTrends.push({
+        kpiId: kpi.id,
+        name: kpi.name,
+        areaId: kpi.businessAreaId,
+        areaName: kpi.businessAreaName,
+        previousValue: valueChange?.from ?? null,
+        currentValue: valueChange?.to ?? kpi.currentValue,
+        previousStatus,
+        currentStatus,
+        unit: kpi.unit,
+        direction,
+        previousRecordedAt: null,
+        currentRecordedAt: change.at,
+      });
+      coveredKpiIds.add(kpi.id);
     }
 
     const worsenedKpis = kpiTrends.filter((item) => item.direction === "sämre");
@@ -1588,6 +1735,174 @@ function mapAuditEntityType(
     default:
       return "other";
   }
+}
+
+function formatAuditChangeDescription(entry: AuditLogListItem): string {
+  const fields = entry.changes?.fields ?? [];
+  if (fields.length === 0) {
+    return entry.description;
+  }
+
+  const parts = fields
+    .filter((field) =>
+      ["status", "current_value", "progress", "owner", "priority", "deadline", "due_date", "meeting_date", "manager", "target_value"].includes(
+        field.field,
+      ),
+    )
+    .slice(0, 4)
+    .map((field) => `${field.field}: ${field.from ?? "—"} → ${field.to ?? "—"}`);
+
+  if (parts.length === 0) {
+    return entry.description;
+  }
+
+  return `${entry.description} [${parts.join("; ")}]`;
+}
+
+function toStatusToneOrNull(value: string | null | undefined): StatusTone | null {
+  if (value === "Grön" || value === "Gul" || value === "Röd") {
+    return value;
+  }
+  return null;
+}
+
+function buildKpiLastChanges(input: {
+  kpis: KPIListItem[];
+  kpiHistory: KPIHistory[];
+  auditEntries: AuditLogListItem[];
+}): AssistantKpiLastChange[] {
+  const historyByKpi = new Map<string, KPIHistory[]>();
+  for (const entry of input.kpiHistory ?? []) {
+    const list = historyByKpi.get(entry.kpiId) ?? [];
+    list.push(entry);
+    historyByKpi.set(entry.kpiId, list);
+  }
+  for (const [, list] of historyByKpi) {
+    list.sort(
+      (a, b) =>
+        new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime(),
+    );
+  }
+
+  const latestAuditByKpi = new Map<string, AuditLogListItem>();
+  for (const entry of input.auditEntries ?? []) {
+    if (entry.entityType !== "kpi" || !entry.entityId) {
+      continue;
+    }
+    const existing = latestAuditByKpi.get(entry.entityId);
+    if (
+      !existing ||
+      new Date(entry.createdAt).getTime() > new Date(existing.createdAt).getTime()
+    ) {
+      latestAuditByKpi.set(entry.entityId, entry);
+    }
+  }
+
+  return (input.kpis ?? []).map((kpi) => {
+    const history = historyByKpi.get(kpi.id) ?? [];
+    const latest = history[0] ?? null;
+    const previous = history[1] ?? null;
+    const audit = latestAuditByKpi.get(kpi.id) ?? null;
+
+    if (latest) {
+      return {
+        kpiId: kpi.id,
+        name: kpi.name,
+        areaId: kpi.businessAreaId,
+        areaName: kpi.businessAreaName,
+        lastChangedAt: latest.recordedAt,
+        previousValue: previous?.value ?? null,
+        currentValue: latest.value,
+        previousStatus: previous?.status ?? null,
+        currentStatus: latest.status,
+        unit: kpi.unit,
+        source: "kpi_history" as const,
+      };
+    }
+
+    if (audit) {
+      const valueChange = audit.changes?.fields?.find(
+        (field) => field.field === "current_value",
+      );
+      const statusChange = audit.changes?.fields?.find(
+        (field) => field.field === "status",
+      );
+      return {
+        kpiId: kpi.id,
+        name: kpi.name,
+        areaId: kpi.businessAreaId,
+        areaName: kpi.businessAreaName,
+        lastChangedAt: audit.createdAt,
+        previousValue: valueChange?.from ?? null,
+        currentValue: valueChange?.to ?? kpi.currentValue,
+        previousStatus: toStatusToneOrNull(statusChange?.from ?? null),
+        currentStatus:
+          toStatusToneOrNull(statusChange?.to ?? null) ?? kpi.status,
+        unit: kpi.unit,
+        source: "audit_log" as const,
+      };
+    }
+
+    if (kpi.updatedAt) {
+      return {
+        kpiId: kpi.id,
+        name: kpi.name,
+        areaId: kpi.businessAreaId,
+        areaName: kpi.businessAreaName,
+        lastChangedAt: kpi.updatedAt,
+        previousValue: null,
+        currentValue: kpi.currentValue,
+        previousStatus: null,
+        currentStatus: kpi.status,
+        unit: kpi.unit,
+        source: "updated_at" as const,
+      };
+    }
+
+    return {
+      kpiId: kpi.id,
+      name: kpi.name,
+      areaId: kpi.businessAreaId,
+      areaName: kpi.businessAreaName,
+      lastChangedAt: null,
+      previousValue: null,
+      currentValue: kpi.currentValue,
+      previousStatus: null,
+      currentStatus: kpi.status,
+      unit: kpi.unit,
+      source: "none" as const,
+    };
+  });
+}
+
+function findKpiInQuestion(
+  q: string,
+  kpis: KPIListItem[],
+): KPIListItem | null {
+  let best: KPIListItem | null = null;
+  let bestScore = 0;
+
+  for (const kpi of kpis ?? []) {
+    const name = normalizeText(kpi.name);
+    if (!name) {
+      continue;
+    }
+    if (q.includes(name) && name.length > bestScore) {
+      best = kpi;
+      bestScore = name.length;
+      continue;
+    }
+
+    const tokens = name.split(/\s+/).filter((token) => token.length >= 4);
+    for (const token of tokens) {
+      if (q.includes(token) && token.length > bestScore) {
+        best = kpi;
+        bestScore = token.length;
+      }
+    }
+  }
+
+  return best;
 }
 
 function formatShortHistoryDate(iso: string): string {
@@ -1744,6 +2059,9 @@ function filterContextToArea(
     priorities,
     analysisInsights,
     trends: filterTrendsToArea(full.trends, areaId, areaName),
+    kpiLastChanges: (full.kpiLastChanges ?? []).filter(
+      (item) => item.areaId === areaId,
+    ),
     yesterdayChanges,
     openDeviations,
   };
@@ -1782,6 +2100,7 @@ function slimBroadContext(full: AssistantContext): AssistantContext {
     openDeviations: (full.openDeviations ?? []).slice(0, 8),
     yesterdayChanges: (full.yesterdayChanges ?? []).slice(0, 5),
     trends: slimTrends(full.trends),
+    kpiLastChanges: (full.kpiLastChanges ?? []).slice(0, 40),
     summary: {
       ...full.summary,
       responsiblePersons: (full.summary.responsiblePersons ?? []).slice(0, 12),
@@ -1864,6 +2183,7 @@ function toCompactOpenAiContext(
     })),
     analysisInsights: context.analysisInsights ?? [],
     trends: context.trends ?? emptyTrends(),
+    kpiLastChanges: (context.kpiLastChanges ?? []).slice(0, 20),
     yesterdayChanges: context.yesterdayChanges ?? [],
     openDeviations: context.openDeviations ?? [],
   };

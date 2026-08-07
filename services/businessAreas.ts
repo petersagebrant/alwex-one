@@ -11,7 +11,9 @@ import { recordAuditLog } from "@/services/auditLog";
 import {
   collectFieldChanges,
   formatEntityChangeDescription,
+  formatEntityCreateDescription,
   resolveActorName,
+  snapshotCreateChanges,
 } from "@/services/changeHistory";
 import type {
   BusinessAreaSummary,
@@ -139,21 +141,37 @@ export async function createBusinessArea(
 
   const slug = await uniqueSlug(slugifyName(name));
 
-  const row = await insertBusinessArea({
+  const payload = {
     name,
     slug,
     description: data.description.trim(),
     manager: data.manager.trim(),
     status: data.status,
-  });
+  };
 
+  const row = await insertBusinessArea(payload);
+
+  const createChanges = snapshotCreateChanges(
+    {
+      name: payload.name,
+      manager: payload.manager,
+      status: payload.status,
+      description: payload.description,
+      vd_comment: null,
+    },
+    AREA_TRACKED_FIELDS,
+  );
+  const actorName = await resolveActorName(
+    data.manager.trim() || DEFAULT_ACTOR,
+  );
   await recordAuditLog({
     entityType: "business_area",
     entityId: row.id,
     action: "created",
-    description: `Skapade affärsområdet "${row.name}"`,
-    actorName: data.manager.trim() || DEFAULT_ACTOR,
+    description: formatEntityCreateDescription("affärsområdet", row.name),
+    actorName,
     businessAreaId: row.id,
+    changes: createChanges.length > 0 ? { fields: createChanges } : null,
   });
 }
 

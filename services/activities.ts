@@ -12,7 +12,9 @@ import { recordAuditLog } from "@/services/auditLog";
 import {
   collectFieldChanges,
   formatEntityChangeDescription,
+  formatEntityCreateDescription,
   resolveActorName,
+  snapshotCreateChanges,
 } from "@/services/changeHistory";
 import type {
   Activity,
@@ -26,10 +28,12 @@ const DEFAULT_ACTOR = "Peter Sagebrant";
 
 const ACTIVITY_TRACKED_FIELDS = [
   "title",
+  "description",
   "owner",
   "status",
   "priority",
   "deadline",
+  "completed_at",
   "business_area_id",
   "goal_id",
 ] as const;
@@ -134,7 +138,7 @@ export async function createActivity(
   const completedAt =
     input.status === "Klar" ? new Date().toISOString() : null;
 
-  const row = await insertActivity({
+  const payload = {
     business_area_id: input.businessAreaId,
     goal_id: input.goalId || null,
     title,
@@ -144,15 +148,22 @@ export async function createActivity(
     priority: input.priority,
     deadline: input.deadline || null,
     completed_at: completedAt,
-  });
+  };
 
+  const row = await insertActivity(payload);
+
+  const createChanges = snapshotCreateChanges(payload, ACTIVITY_TRACKED_FIELDS);
+  const actorName = await resolveActorName(
+    input.owner?.trim() || DEFAULT_ACTOR,
+  );
   await recordAuditLog({
     entityType: "activity",
     entityId: row.id,
     action: "created",
-    description: `Skapade aktiviteten "${row.title}"`,
-    actorName: input.owner?.trim() || DEFAULT_ACTOR,
+    description: formatEntityCreateDescription("aktiviteten", row.title),
+    actorName,
     businessAreaId: row.business_area_id,
+    changes: createChanges.length > 0 ? { fields: createChanges } : null,
   });
 
   return mapActivityRow(row);
@@ -224,10 +235,12 @@ export async function updateActivity(
       business_area_id: existing.business_area_id,
       goal_id: existing.goal_id,
       title: existing.title,
+      description: existing.description,
       owner: existing.owner,
       status: existing.status,
       priority: existing.priority,
       deadline: existing.deadline,
+      completed_at: existing.completed_at,
     },
     next,
     ACTIVITY_TRACKED_FIELDS,

@@ -1,14 +1,7 @@
 import { getCurrentUser } from "@/lib/auth/require-user";
+import type { AuditChangesPayload, AuditFieldChange } from "@/types";
 
-export type AuditFieldChange = {
-  field: string;
-  from: string | null;
-  to: string | null;
-};
-
-export type AuditChangesPayload = {
-  fields: AuditFieldChange[];
-};
+export type { AuditFieldChange, AuditChangesPayload };
 
 export function normalizeAuditValue(value: unknown): string | null {
   if (value === null || value === undefined) {
@@ -42,6 +35,26 @@ export function collectFieldChanges(
   return changes;
 }
 
+/**
+ * Snapshot initial values on create (from = null → to = value).
+ * Skips empty/null fields so we never write empty change sets.
+ */
+export function snapshotCreateChanges(
+  values: Record<string, unknown>,
+  fields: readonly string[],
+): AuditFieldChange[] {
+  const changes: AuditFieldChange[] = [];
+
+  for (const field of fields) {
+    const to = normalizeAuditValue(values[field]);
+    if (to !== null) {
+      changes.push({ field, from: null, to });
+    }
+  }
+
+  return changes;
+}
+
 export function hasFieldChange(
   changes: AuditFieldChange[],
   ...fields: string[]
@@ -65,6 +78,13 @@ export function formatEntityChangeDescription(
   });
 
   return `Uppdaterade ${entityLabel} "${name}" (${parts.join("; ")})`;
+}
+
+export function formatEntityCreateDescription(
+  entityLabel: string,
+  name: string,
+): string {
+  return `Skapade ${entityLabel} "${name}"`;
 }
 
 export async function resolveActorName(

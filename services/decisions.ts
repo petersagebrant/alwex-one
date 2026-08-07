@@ -9,7 +9,9 @@ import { recordAuditLog } from "@/services/auditLog";
 import {
   collectFieldChanges,
   formatEntityChangeDescription,
+  formatEntityCreateDescription,
   resolveActorName,
+  snapshotCreateChanges,
 } from "@/services/changeHistory";
 import type {
   CreateDecisionInput,
@@ -22,6 +24,7 @@ const DEFAULT_ACTOR = "Peter Sagebrant";
 
 const DECISION_TRACKED_FIELDS = [
   "title",
+  "description",
   "owner",
   "status",
   "meeting_date",
@@ -132,7 +135,7 @@ export async function createDecision(
     throw new Error("businessAreaId är obligatoriskt.");
   }
 
-  const row = await insertDecision({
+  const payload = {
     business_area_id: input.businessAreaId,
     title,
     description: input.description?.trim() || null,
@@ -140,15 +143,22 @@ export async function createDecision(
     meeting_date: input.meetingDate || null,
     due_date: input.dueDate || null,
     status: input.status,
-  });
+  };
 
+  const row = await insertDecision(payload);
+
+  const createChanges = snapshotCreateChanges(payload, DECISION_TRACKED_FIELDS);
+  const actorName = await resolveActorName(
+    input.owner?.trim() || DEFAULT_ACTOR,
+  );
   await recordAuditLog({
     entityType: "decision",
     entityId: row.id,
     action: "created",
-    description: `Skapade beslutet "${row.title}"`,
-    actorName: input.owner?.trim() || DEFAULT_ACTOR,
+    description: formatEntityCreateDescription("beslutet", row.title),
+    actorName,
     businessAreaId: row.business_area_id,
+    changes: createChanges.length > 0 ? { fields: createChanges } : null,
   });
 
   return mapDecisionRow(row);
@@ -189,6 +199,7 @@ export async function updateDecision(
     {
       business_area_id: existing.business_area_id,
       title: existing.title,
+      description: existing.description,
       owner: existing.owner,
       meeting_date: existing.meeting_date,
       due_date: existing.due_date,

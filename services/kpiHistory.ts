@@ -5,6 +5,13 @@ import {
   fetchRecentKpiHistoryForKpis,
   insertKpiHistory,
 } from "@/lib/supabase/kpi-history";
+import { fetchKpiById } from "@/lib/supabase/kpis";
+import { recordAuditLog } from "@/services/auditLog";
+import {
+  collectFieldChanges,
+  formatEntityChangeDescription,
+  resolveActorName,
+} from "@/services/changeHistory";
 import type { CreateKPIHistoryInput, KPIHistory, StatusTone } from "@/types";
 
 function toStatusTone(value: string): StatusTone {
@@ -62,6 +69,7 @@ export async function getKPIHistory(kpiId: string): Promise<KPIHistory[]> {
 
 export async function addKPIHistoryEntry(
   input: CreateKPIHistoryInput,
+  options?: { skipAudit?: boolean },
 ): Promise<KPIHistory> {
   const kpiId = input.kpiId.trim();
   if (!kpiId) {
@@ -87,6 +95,16 @@ export async function addKPIHistoryEntry(
     throw new Error("Ogiltigt datum.");
   }
 
+  const kpi = await fetchKpiById(kpiId).catch(() => null);
+  const previousHistory = await fetchKpiHistoryByKpiId(kpiId).catch(() => []);
+  const prior =
+    previousHistory
+      .map(mapKpiHistoryRow)
+      .sort(
+        (a, b) =>
+          new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime(),
+      )[0] ?? null;
+
   const row = await insertKpiHistory({
     kpi_id: kpiId,
     value,
@@ -94,6 +112,41 @@ export async function addKPIHistoryEntry(
     comment: input.comment?.trim() || null,
     recorded_at: recordedAt.toISOString(),
   });
+
+  if (!options?.skipAudit) {
+    try {
+      const changes = collectFieldChanges(
+        {
+          current_value: prior?.value ?? kpi?.current_value ?? null,
+          status: prior?.status ?? kpi?.status ?? null,
+        },
+        {
+          current_value: value,
+          status: input.status,
+        },
+        ["current_value", "status"],
+      );
+
+      if (changes.length > 0) {
+        const actorName = await resolveActorName("System");
+        await recordAuditLog({
+          entityType: "kpi",
+          entityId: kpiId,
+          action: "history_recorded",
+          description: formatEntityChangeDescription(
+            "KPI:n",
+            kpi?.name ?? "KPI",
+            changes,
+          ),
+          actorName,
+          businessAreaId: kpi?.business_area_id ?? null,
+          changes: { fields: changes },
+        });
+      }
+    } catch {
+      // Audit runt historik får inte blockera sparandet.
+    }
+  }
 
   return mapKpiHistoryRow(row);
 }
@@ -103,6 +156,27 @@ export async function getRecentKpiHistoryEntries(
 ): Promise<KPIHistory[]> {
   try {
     const rows = await fetchRecentKpiHistory(limit);
+    return rows.map(mapKpiHistoryRow);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("kpi_history") || message.includes("schema cache")) {
+      return [];
+    }
+    throw error;
+  }
+}
+
+/** Latest N history rows per KPI (newest first within each KPI). */
+export async function getRecentKpiHistoryForKpis(
+  kpiIds: string[],
+  limitPerKpi = 3,
+): Promise<KPIHistory[]> {
+  if (kpiIds.length === 0) {
+    return [];
+  }
+
+  try {
+    const rows = await fetchRecentKpiHistoryForKpis(kpiIds, limitPerKpi);
     return rows.map(mapKpiHistoryRow);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

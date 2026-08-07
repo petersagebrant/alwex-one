@@ -18,7 +18,7 @@ export type {
   CreateDecisionInput,
   UpdateDecisionInput,
 } from "./decision";
-export type { AuditLogEntry, CreateAuditLogInput } from "./audit-log";
+export type { AuditLogEntry, CreateAuditLogInput, AuditFieldChange, AuditChangesPayload } from "./audit-log";
 export type {
   KPI,
   Kpi,

@@ -4,11 +4,15 @@ import { formatDateTimeSv } from "@/lib/format/date";
 import { fetchBusinessAreas } from "@/lib/supabase/business-areas";
 import type { BusinessAreaRow } from "@/lib/supabase/business-areas";
 import { getActivities, type ActivityListItem } from "@/services/activities";
+import { getAuditLogSince, type AuditLogListItem } from "@/services/auditLog";
 import { getDashboardData } from "@/services/dashboard";
 import { getDecisions, type DecisionListItem } from "@/services/decisions";
 import { getGoals, type GoalListItem } from "@/services/goals";
 import { getKPIs, type KPIListItem } from "@/services/kpis";
-import type { StatusTone } from "@/types";
+import {
+  getRecentKpiHistoryForKpis,
+} from "@/services/kpiHistory";
+import type { KPIHistory, StatusTone } from "@/types";
 
 const ASSISTANT_SYSTEM_PROMPT_BROAD = `Du är VD-assistent för ALWEX ONE.
 
@@ -86,6 +90,65 @@ export type AssistantAnalysisInsight = {
   causeUnknown: boolean;
 };
 
+export type AssistantTrendDirection =
+  | "bättre"
+  | "sämre"
+  | "oförändrad"
+  | "okänd";
+
+export type AssistantKpiTrend = {
+  kpiId: string;
+  name: string;
+  areaId: string;
+  areaName: string;
+  previousValue: string | null;
+  currentValue: string | null;
+  previousStatus: StatusTone | null;
+  currentStatus: StatusTone;
+  unit: string | null;
+  direction: AssistantTrendDirection;
+  previousRecordedAt: string | null;
+  currentRecordedAt: string | null;
+};
+
+export type AssistantEntityChange = {
+  entityType: "area" | "kpi" | "goal" | "activity" | "decision" | "other";
+  entityId: string | null;
+  title: string;
+  areaId: string | null;
+  areaName: string | null;
+  description: string;
+  action: string;
+  at: string;
+};
+
+export type AssistantAreaTrendSummary = {
+  areaId: string;
+  areaName: string;
+  direction: AssistantTrendDirection;
+  worsenedCount: number;
+  improvedCount: number;
+  highlights: string[];
+};
+
+export type AssistantTrendWindow = {
+  key: "yesterday" | "week" | "monday";
+  label: string;
+  sinceIso: string;
+  kpiTrends: AssistantKpiTrend[];
+  worsenedKpis: AssistantKpiTrend[];
+  improvedKpis: AssistantKpiTrend[];
+  entityChanges: AssistantEntityChange[];
+  areaSummaries: AssistantAreaTrendSummary[];
+  hasEnoughHistory: boolean;
+};
+
+export type AssistantTrends = {
+  sinceYesterday: AssistantTrendWindow;
+  lastWeek: AssistantTrendWindow;
+  sinceMonday: AssistantTrendWindow;
+};
+
 export type AssistantContext = {
   summary: {
     date: string;
@@ -111,6 +174,8 @@ export type AssistantContext = {
   priorities: AssistantPriority[];
   /** Förberäknade samband mellan KPI/mål/aktivitet/beslut per område. */
   analysisInsights: AssistantAnalysisInsight[];
+  /** Historik/trend från kpi_history + audit_log. */
+  trends: AssistantTrends;
   yesterdayChanges: { id: string; text: string }[];
   /** Derived helpers used by rule-based answers. */
   openDeviations: AssistantDeviation[];
@@ -136,6 +201,15 @@ export async function buildAssistantContext(): Promise<AssistantContext> {
   const allGoals = goals ?? [];
   const allActivities = activities ?? [];
   const allDecisions = decisions ?? [];
+
+  const weekCutoff = daysAgoCutoff(7);
+  const [auditSinceWeek, kpiHistoryRows] = await Promise.all([
+    getAuditLogSince(weekCutoff, 150).catch(() => [] as AuditLogListItem[]),
+    getRecentKpiHistoryForKpis(
+      allKpis.map((kpi) => kpi.id),
+      3,
+    ).catch(() => [] as KPIHistory[]),
+  ]);
 
   const delayedActivities = allActivities.filter(isDelayedActivity);
   const openDecisions = allDecisions.filter(
@@ -177,6 +251,16 @@ export async function buildAssistantContext(): Promise<AssistantContext> {
     delayedActivities,
     openDecisions,
     areaManagers,
+  });
+
+  const trends = buildAssistantTrends({
+    areas: businessAreas,
+    kpis: allKpis,
+    goals: allGoals,
+    activities: allActivities,
+    decisions: allDecisions,
+    auditEntries: auditSinceWeek ?? [],
+    kpiHistory: kpiHistoryRows ?? [],
   });
 
   const responsiblePersons = [
@@ -224,6 +308,7 @@ export async function buildAssistantContext(): Promise<AssistantContext> {
     observations: uniqueObservations,
     priorities,
     analysisInsights,
+    trends,
     yesterdayChanges: dashboard?.yesterdayChanges ?? [],
     openDeviations,
   };
@@ -344,7 +429,48 @@ function isHybridQuestion(q: string): boolean {
   );
 }
 
+function isLocalTrendQuestion(q: string): boolean {
+  if (
+    q.includes("vilka kpi har forsamrats") ||
+    q.includes("vilka kpi har forbattrats") ||
+    q.includes("vilka nyckeltal har forsamrats") ||
+    q.includes("vilka nyckeltal har forbattrats") ||
+    q.includes("kpi har forsamrats") ||
+    q.includes("kpi har forbattrats")
+  ) {
+    return true;
+  }
+
+  if (
+    q.includes("vad har forandrats") ||
+    q.includes("vad har andrats") ||
+    q.includes("sedan igar") ||
+    q.includes("sedan mandag") ||
+    q.includes("senaste veckan") ||
+    q.includes("senaste 7 dagarna")
+  ) {
+    return true;
+  }
+
+  if (
+    q.includes("utvecklats") ||
+    (q.includes("battre") && q.includes("samre")) ||
+    q.includes("battre eller samre") ||
+    q.includes("forsamrats") ||
+    q.includes("forbattrats")
+  ) {
+    // "Varför har X försämrats" is hybrid (checked earlier).
+    return !isHybridQuestion(q);
+  }
+
+  return false;
+}
+
 function isLocalQuestion(q: string): boolean {
+  if (isLocalTrendQuestion(q)) {
+    return true;
+  }
+
   if (
     q.includes("hur gar") ||
     q.includes("hur gar det") ||
@@ -560,6 +686,10 @@ function buildLocalAnswer(
     return "Ställ en fråga om affärsområden, KPI:er, mål, aktiviteter eller beslut.";
   }
 
+  if (isLocalTrendQuestion(q) || isTrendIntentQuestion(q)) {
+    return answerTrendQuestion(q, context);
+  }
+
   if (isYellowKpiQuestion(q)) {
     return answerYellowKpis(context);
   }
@@ -676,6 +806,28 @@ function buildHybridLocalSummary(
         insight.causeUnknown
           ? "- Orsaken framgår inte av tillgänglig data."
           : "- Samband syns i data; bakomliggande orsak är inte bevisad.",
+      );
+    }
+
+    const trendWindow = pickTrendWindow(
+      areaContext.trends,
+      normalizeText(question),
+    );
+    const areaTrend = trendWindow.areaSummaries.find(
+      (item) => item.areaId === area.id,
+    );
+    if (areaTrend && trendWindow.hasEnoughHistory) {
+      lines.push(
+        "",
+        `Trend ${trendWindow.label}:`,
+        `- Riktning: ${areaTrend.direction}`,
+        ...areaTrend.highlights.slice(0, 3).map((line) => `- ${line}`),
+      );
+    } else if (isTrendIntentQuestion(normalizeText(question))) {
+      lines.push(
+        "",
+        "Trend:",
+        "- Det finns inte tillräckligt historiskt underlag för att bedöma trenden.",
       );
     }
 
@@ -875,6 +1027,582 @@ function answerNamedKpiQuestion(
   return `${match.businessAreaName}: ${formatKpiFact(match)}.`;
 }
 
+function isTrendIntentQuestion(q: string): boolean {
+  return (
+    isLocalTrendQuestion(q) ||
+    q.includes("forandrats") ||
+    q.includes("andrats") ||
+    q.includes("utvecklats") ||
+    q.includes("forsamrats") ||
+    q.includes("forbattrats") ||
+    q.includes("sedan igar") ||
+    q.includes("sedan mandag") ||
+    q.includes("senaste veckan")
+  );
+}
+
+function answerTrendQuestion(
+  q: string,
+  context: AssistantContext,
+): string {
+  const window = pickTrendWindow(context.trends, q);
+  const area = findAreaInQuestion(q, context.businessAreas);
+
+  if (q.includes("forsamrats") && (q.includes("kpi") || q.includes("nyckeltal"))) {
+    return formatKpiTrendList(window.worsenedKpis, "försämrats", window);
+  }
+
+  if (q.includes("forbattrats") && (q.includes("kpi") || q.includes("nyckeltal"))) {
+    return formatKpiTrendList(window.improvedKpis, "förbättrats", window);
+  }
+
+  if (area) {
+    return formatAreaTrendAnswer(area, window);
+  }
+
+  if (
+    q.includes("vad har forandrats") ||
+    q.includes("vad har andrats") ||
+    q.includes("sedan igar") ||
+    q.includes("sedan mandag") ||
+    q.includes("senaste veckan")
+  ) {
+    return formatCompanyTrendAnswer(window);
+  }
+
+  if (!window.hasEnoughHistory) {
+    return "Det finns inte tillräckligt historiskt underlag för att bedöma trenden.";
+  }
+
+  return formatCompanyTrendAnswer(window);
+}
+
+function formatKpiTrendList(
+  items: AssistantKpiTrend[],
+  verb: string,
+  window: AssistantTrendWindow,
+): string {
+  if (!window.hasEnoughHistory || items.length === 0) {
+    return `Inga KPI har ${verb} ${window.label} utifrån tillgänglig historik.`;
+  }
+
+  const lines = items.slice(0, 8).map((item) => {
+    if (item.previousValue && item.currentValue) {
+      return `• ${item.name} (${item.areaName}): ${item.previousValue} → ${item.currentValue}${item.unit ? ` ${item.unit}` : ""}`;
+    }
+    if (item.previousStatus && item.currentStatus !== item.previousStatus) {
+      return `• ${item.name} (${item.areaName}): ${item.previousStatus} → ${item.currentStatus}`;
+    }
+    return `• ${item.name} (${item.areaName}): ${item.direction}`;
+  });
+
+  return `KPI som ${verb} ${window.label} (${items.length})\n${lines.join("\n")}`;
+}
+
+function formatAreaTrendAnswer(
+  area: BusinessAreaRow,
+  window: AssistantTrendWindow,
+): string {
+  const summary = window.areaSummaries.find((item) => item.areaId === area.id);
+
+  if (!window.hasEnoughHistory || !summary || summary.direction === "okänd") {
+    return `Det finns inte tillräckligt historiskt underlag för att bedöma trenden för ${area.name}.`;
+  }
+
+  const directionLabel =
+    summary.direction === "sämre"
+      ? "försämrats"
+      : summary.direction === "bättre"
+        ? "förbättrats"
+        : "är i stort sett oförändrat";
+
+  const lines: string[] = [
+    summary.direction === "oförändrad"
+      ? `${area.name} ${directionLabel} ${window.label}.`
+      : `${area.name} har ${directionLabel} ${window.label}.`,
+  ];
+
+  for (const highlight of summary.highlights.slice(0, 3)) {
+    lines.push(highlight);
+  }
+
+  if (summary.worsenedCount > 0 || summary.improvedCount > 0) {
+    lines.push(
+      `${summary.worsenedCount} KPI försämrade, ${summary.improvedCount} förbättrade.`,
+    );
+  }
+
+  return lines.join("\n");
+}
+
+function formatCompanyTrendAnswer(window: AssistantTrendWindow): string {
+  if (!window.hasEnoughHistory) {
+    return "Det finns inte tillräckligt historiskt underlag för att bedöma trenden.";
+  }
+
+  const lines: string[] = [`Förändringar ${window.label}:`];
+
+  if (window.worsenedKpis.length > 0) {
+    lines.push("", "KPI som försämrats:");
+    for (const item of window.worsenedKpis.slice(0, 5)) {
+      if (item.previousValue && item.currentValue) {
+        lines.push(
+          `• ${item.name} (${item.areaName}): ${item.previousValue} → ${item.currentValue}${item.unit ? ` ${item.unit}` : ""}`,
+        );
+      } else {
+        lines.push(
+          `• ${item.name} (${item.areaName}): ${item.previousStatus ?? "—"} → ${item.currentStatus}`,
+        );
+      }
+    }
+  }
+
+  if (window.improvedKpis.length > 0) {
+    lines.push("", "KPI som förbättrats:");
+    for (const item of window.improvedKpis.slice(0, 5)) {
+      if (item.previousValue && item.currentValue) {
+        lines.push(
+          `• ${item.name} (${item.areaName}): ${item.previousValue} → ${item.currentValue}${item.unit ? ` ${item.unit}` : ""}`,
+        );
+      } else {
+        lines.push(
+          `• ${item.name} (${item.areaName}): ${item.previousStatus ?? "—"} → ${item.currentStatus}`,
+        );
+      }
+    }
+  }
+
+  const notableChanges = window.entityChanges
+    .filter((change) => change.entityType !== "kpi")
+    .slice(0, 4);
+  if (notableChanges.length > 0) {
+    lines.push("", "Övriga förändringar:");
+    for (const change of notableChanges) {
+      lines.push(`• ${change.description}`);
+    }
+  }
+
+  if (lines.length === 1) {
+    return `Inga tydliga förändringar registrerade ${window.label}.`;
+  }
+
+  return lines.join("\n");
+}
+
+function pickTrendWindow(
+  trends: AssistantTrends | null | undefined,
+  q: string,
+): AssistantTrendWindow {
+  const safe = trends ?? emptyTrends();
+  if (q.includes("sedan mandag") || q.includes("mandag")) {
+    return safe.sinceMonday;
+  }
+  if (
+    q.includes("senaste veckan") ||
+    q.includes("senaste 7") ||
+    q.includes("utvecklats")
+  ) {
+    return safe.lastWeek;
+  }
+  return safe.sinceYesterday;
+}
+
+function daysAgoCutoff(days: number): Date {
+  return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+}
+
+function mondayCutoffStockholm(): Date {
+  const now = new Date();
+  const key = todayDateKey();
+  const [year, month, day] = key.split("-").map(Number);
+  const todayNoon = new Date(Date.UTC(year!, month! - 1, day!, 12));
+  // getUTCDay: 0=Sun ... 1=Mon
+  const weekday = todayNoon.getUTCDay();
+  const daysSinceMonday = weekday === 0 ? 6 : weekday - 1;
+  return new Date(todayNoon.getTime() - daysSinceMonday * 24 * 60 * 60 * 1000);
+}
+
+function statusRank(status: StatusTone | null | undefined): number {
+  if (status === "Grön") return 2;
+  if (status === "Gul") return 1;
+  if (status === "Röd") return 0;
+  return 1;
+}
+
+function directionFromStatuses(
+  previous: StatusTone | null,
+  current: StatusTone,
+): AssistantTrendDirection {
+  if (!previous) {
+    return "okänd";
+  }
+  const delta = statusRank(current) - statusRank(previous);
+  if (delta > 0) return "bättre";
+  if (delta < 0) return "sämre";
+  return "oförändrad";
+}
+
+function emptyTrendWindow(
+  key: AssistantTrendWindow["key"],
+  label: string,
+  sinceIso: string,
+): AssistantTrendWindow {
+  return {
+    key,
+    label,
+    sinceIso,
+    kpiTrends: [],
+    worsenedKpis: [],
+    improvedKpis: [],
+    entityChanges: [],
+    areaSummaries: [],
+    hasEnoughHistory: false,
+  };
+}
+
+function emptyTrends(): AssistantTrends {
+  const now = new Date().toISOString();
+  return {
+    sinceYesterday: emptyTrendWindow("yesterday", "sedan igår", now),
+    lastWeek: emptyTrendWindow("week", "senaste veckan", now),
+    sinceMonday: emptyTrendWindow("monday", "sedan måndag", now),
+  };
+}
+
+function filterTrendsToArea(
+  trends: AssistantTrends | null | undefined,
+  areaId: string,
+  areaName: string,
+): AssistantTrends {
+  const source = trends ?? emptyTrends();
+  const filterWindow = (window: AssistantTrendWindow): AssistantTrendWindow => {
+    const kpiTrends = window.kpiTrends.filter((item) => item.areaId === areaId);
+    const entityChanges = window.entityChanges.filter(
+      (item) =>
+        item.areaId === areaId ||
+        item.areaName === areaName ||
+        normalizeText(item.description).includes(normalizeText(areaName)),
+    );
+    const areaSummaries = window.areaSummaries.filter(
+      (item) => item.areaId === areaId,
+    );
+    return {
+      ...window,
+      kpiTrends,
+      worsenedKpis: kpiTrends.filter((item) => item.direction === "sämre"),
+      improvedKpis: kpiTrends.filter((item) => item.direction === "bättre"),
+      entityChanges,
+      areaSummaries,
+      hasEnoughHistory:
+        kpiTrends.length > 0 ||
+        entityChanges.length > 0 ||
+        areaSummaries.some((item) => item.direction !== "okänd"),
+    };
+  };
+
+  return {
+    sinceYesterday: filterWindow(source.sinceYesterday),
+    lastWeek: filterWindow(source.lastWeek),
+    sinceMonday: filterWindow(source.sinceMonday),
+  };
+}
+
+function slimTrends(trends: AssistantTrends | null | undefined): AssistantTrends {
+  const source = trends ?? emptyTrends();
+  const slim = (window: AssistantTrendWindow): AssistantTrendWindow => ({
+    ...window,
+    kpiTrends: window.kpiTrends.slice(0, 20),
+    worsenedKpis: window.worsenedKpis.slice(0, 10),
+    improvedKpis: window.improvedKpis.slice(0, 10),
+    entityChanges: window.entityChanges.slice(0, 20),
+    areaSummaries: window.areaSummaries.slice(0, 10),
+  });
+  return {
+    sinceYesterday: slim(source.sinceYesterday),
+    lastWeek: slim(source.lastWeek),
+    sinceMonday: slim(source.sinceMonday),
+  };
+}
+
+function buildAssistantTrends(input: {
+  areas: BusinessAreaRow[];
+  kpis: KPIListItem[];
+  goals: GoalListItem[];
+  activities: ActivityListItem[];
+  decisions: DecisionListItem[];
+  auditEntries: AuditLogListItem[];
+  kpiHistory: KPIHistory[];
+}): AssistantTrends {
+  const yesterday = daysAgoCutoff(1);
+  const week = daysAgoCutoff(7);
+  const monday = mondayCutoffStockholm();
+
+  const historyByKpi = new Map<string, KPIHistory[]>();
+  for (const entry of input.kpiHistory ?? []) {
+    const list = historyByKpi.get(entry.kpiId) ?? [];
+    list.push(entry);
+    historyByKpi.set(entry.kpiId, list);
+  }
+  for (const [, list] of historyByKpi) {
+    list.sort(
+      (a, b) =>
+        new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime(),
+    );
+  }
+
+  const areaNameById = new Map(
+    (input.areas ?? []).map((area) => [area.id, area.name]),
+  );
+  const goalTitleById = new Map(
+    (input.goals ?? []).map((goal) => [goal.id, goal.title]),
+  );
+  const activityTitleById = new Map(
+    (input.activities ?? []).map((activity) => [activity.id, activity.title]),
+  );
+  const decisionTitleById = new Map(
+    (input.decisions ?? []).map((decision) => [decision.id, decision.title]),
+  );
+  const kpiById = new Map((input.kpis ?? []).map((kpi) => [kpi.id, kpi]));
+
+  const buildWindow = (
+    key: AssistantTrendWindow["key"],
+    label: string,
+    cutoff: Date,
+  ): AssistantTrendWindow => {
+    const cutoffMs = cutoff.getTime();
+    const kpiTrends: AssistantKpiTrend[] = [];
+
+    for (const kpi of input.kpis ?? []) {
+      const history = historyByKpi.get(kpi.id) ?? [];
+      if (history.length === 0) {
+        continue;
+      }
+
+      const latest = history[0]!;
+      const previous =
+        history.find(
+          (entry) =>
+            entry.id !== latest.id &&
+            new Date(entry.recordedAt).getTime() <
+              new Date(latest.recordedAt).getTime(),
+        ) ?? null;
+
+      const latestInWindow =
+        new Date(latest.recordedAt).getTime() >= cutoffMs ||
+        (previous && new Date(previous.recordedAt).getTime() >= cutoffMs);
+
+      if (!previous) {
+        if (new Date(latest.recordedAt).getTime() >= cutoffMs) {
+          kpiTrends.push({
+            kpiId: kpi.id,
+            name: kpi.name,
+            areaId: kpi.businessAreaId,
+            areaName: kpi.businessAreaName,
+            previousValue: null,
+            currentValue: latest.value,
+            previousStatus: null,
+            currentStatus: latest.status,
+            unit: kpi.unit,
+            direction: "okänd",
+            previousRecordedAt: null,
+            currentRecordedAt: latest.recordedAt,
+          });
+        }
+        continue;
+      }
+
+      if (!latestInWindow && new Date(latest.recordedAt).getTime() < cutoffMs) {
+        continue;
+      }
+
+      // Only include if something changed after cutoff (latest after cutoff),
+      // or previous is before cutoff and latest after (crossing the window).
+      const crossedWindow =
+        new Date(latest.recordedAt).getTime() >= cutoffMs &&
+        new Date(previous.recordedAt).getTime() < cutoffMs;
+      const bothInWindow =
+        new Date(latest.recordedAt).getTime() >= cutoffMs &&
+        new Date(previous.recordedAt).getTime() >= cutoffMs;
+
+      if (!crossedWindow && !bothInWindow) {
+        continue;
+      }
+
+      const direction = directionFromStatuses(previous.status, latest.status);
+      kpiTrends.push({
+        kpiId: kpi.id,
+        name: kpi.name,
+        areaId: kpi.businessAreaId,
+        areaName: kpi.businessAreaName,
+        previousValue: previous.value,
+        currentValue: latest.value,
+        previousStatus: previous.status,
+        currentStatus: latest.status,
+        unit: kpi.unit,
+        direction,
+        previousRecordedAt: previous.recordedAt,
+        currentRecordedAt: latest.recordedAt,
+      });
+    }
+
+    const entityChanges: AssistantEntityChange[] = [];
+    for (const entry of input.auditEntries ?? []) {
+      if (new Date(entry.createdAt).getTime() < cutoffMs) {
+        continue;
+      }
+
+      const entityType = mapAuditEntityType(entry.entityType);
+      let title = entry.description;
+      let areaId = entry.businessAreaId;
+      let areaName = areaId ? areaNameById.get(areaId) ?? null : null;
+
+      if (entityType === "kpi" && entry.entityId) {
+        const kpi = kpiById.get(entry.entityId);
+        if (kpi) {
+          title = kpi.name;
+          areaId = kpi.businessAreaId;
+          areaName = kpi.businessAreaName;
+        }
+      } else if (entityType === "goal" && entry.entityId) {
+        title = goalTitleById.get(entry.entityId) ?? entry.description;
+      } else if (entityType === "activity" && entry.entityId) {
+        title = activityTitleById.get(entry.entityId) ?? entry.description;
+      } else if (entityType === "decision" && entry.entityId) {
+        title = decisionTitleById.get(entry.entityId) ?? entry.description;
+      } else if (entityType === "area" && entry.entityId) {
+        title = areaNameById.get(entry.entityId) ?? entry.description;
+        areaId = entry.entityId;
+        areaName = areaNameById.get(entry.entityId) ?? null;
+      }
+
+      entityChanges.push({
+        entityType,
+        entityId: entry.entityId,
+        title,
+        areaId,
+        areaName,
+        description: entry.changes?.fields?.length
+          ? `${entry.description}`
+          : entry.description,
+        action: entry.action,
+        at: entry.createdAt,
+      });
+    }
+
+    const worsenedKpis = kpiTrends.filter((item) => item.direction === "sämre");
+    const improvedKpis = kpiTrends.filter((item) => item.direction === "bättre");
+
+    const areaSummaries: AssistantAreaTrendSummary[] = (input.areas ?? []).map(
+      (area) => {
+        const areaKpis = kpiTrends.filter((item) => item.areaId === area.id);
+        const worsened = areaKpis.filter((item) => item.direction === "sämre");
+        const improved = areaKpis.filter((item) => item.direction === "bättre");
+        const highlights: string[] = [];
+
+        for (const item of [...worsened, ...improved].slice(0, 3)) {
+          if (item.previousValue && item.currentValue) {
+            const since = item.currentRecordedAt
+              ? ` sedan ${formatShortHistoryDate(item.currentRecordedAt)}`
+              : "";
+            highlights.push(
+              `${item.name} gick från ${item.previousValue} till ${item.currentValue}${item.unit ? ` ${item.unit}` : ""}${since}.`,
+            );
+          } else if (item.previousStatus) {
+            highlights.push(
+              `${item.name}: ${item.previousStatus} → ${item.currentStatus}.`,
+            );
+          }
+        }
+
+        const areaAudit = entityChanges
+          .filter((change) => change.areaId === area.id)
+          .slice(0, 2);
+        for (const change of areaAudit) {
+          if (highlights.length >= 3) break;
+          highlights.push(change.description);
+        }
+
+        let direction: AssistantTrendDirection = "okänd";
+        if (worsened.length > improved.length) direction = "sämre";
+        else if (improved.length > worsened.length) direction = "bättre";
+        else if (worsened.length > 0 && improved.length > 0)
+          direction = "oförändrad";
+        else if (areaKpis.some((item) => item.direction === "oförändrad"))
+          direction = "oförändrad";
+        else if (highlights.length > 0) direction = "okänd";
+
+        return {
+          areaId: area.id,
+          areaName: area.name,
+          direction,
+          worsenedCount: worsened.length,
+          improvedCount: improved.length,
+          highlights,
+        };
+      },
+    );
+
+    const hasEnoughHistory =
+      worsenedKpis.length > 0 ||
+      improvedKpis.length > 0 ||
+      entityChanges.length > 0 ||
+      kpiTrends.some(
+        (item) => item.previousValue !== null || item.previousStatus !== null,
+      );
+
+    return {
+      key,
+      label,
+      sinceIso: cutoff.toISOString(),
+      kpiTrends,
+      worsenedKpis,
+      improvedKpis,
+      entityChanges,
+      areaSummaries,
+      hasEnoughHistory,
+    };
+  };
+
+  return {
+    sinceYesterday: buildWindow("yesterday", "sedan igår", yesterday),
+    lastWeek: buildWindow("week", "senaste veckan", week),
+    sinceMonday: buildWindow("monday", "sedan måndag", monday),
+  };
+}
+
+function mapAuditEntityType(
+  value: string,
+): AssistantEntityChange["entityType"] {
+  switch (value) {
+    case "business_area":
+      return "area";
+    case "kpi":
+      return "kpi";
+    case "goal":
+      return "goal";
+    case "activity":
+    case "activity_comment":
+      return "activity";
+    case "decision":
+      return "decision";
+    default:
+      return "other";
+  }
+}
+
+function formatShortHistoryDate(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return iso.slice(0, 10);
+  }
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Europe/Stockholm",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  }).format(date);
+}
+
 type AssistantContextScope = "area" | "broad";
 
 type RelevantAssistantContextResult = {
@@ -1015,6 +1743,7 @@ function filterContextToArea(
     observations,
     priorities,
     analysisInsights,
+    trends: filterTrendsToArea(full.trends, areaId, areaName),
     yesterdayChanges,
     openDeviations,
   };
@@ -1052,6 +1781,7 @@ function slimBroadContext(full: AssistantContext): AssistantContext {
     analysisInsights: (full.analysisInsights ?? []).slice(0, 6),
     openDeviations: (full.openDeviations ?? []).slice(0, 8),
     yesterdayChanges: (full.yesterdayChanges ?? []).slice(0, 5),
+    trends: slimTrends(full.trends),
     summary: {
       ...full.summary,
       responsiblePersons: (full.summary.responsiblePersons ?? []).slice(0, 12),
@@ -1133,6 +1863,7 @@ function toCompactOpenAiContext(
       areaName: item.areaName,
     })),
     analysisInsights: context.analysisInsights ?? [],
+    trends: context.trends ?? emptyTrends(),
     yesterdayChanges: context.yesterdayChanges ?? [],
     openDeviations: context.openDeviations ?? [],
   };

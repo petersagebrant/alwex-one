@@ -9,6 +9,11 @@ import {
 } from "@/lib/supabase/activities";
 import { fetchAllGoals } from "@/lib/supabase/goals";
 import { recordAuditLog } from "@/services/auditLog";
+import {
+  collectFieldChanges,
+  formatEntityChangeDescription,
+  resolveActorName,
+} from "@/services/changeHistory";
 import type {
   Activity,
   ActivityPriority,
@@ -18,6 +23,16 @@ import type {
 } from "@/types";
 
 const DEFAULT_ACTOR = "Peter Sagebrant";
+
+const ACTIVITY_TRACKED_FIELDS = [
+  "title",
+  "owner",
+  "status",
+  "priority",
+  "deadline",
+  "business_area_id",
+  "goal_id",
+] as const;
 
 function toStatus(value: string): ActivityStatus {
   if (
@@ -183,12 +198,16 @@ export async function updateActivity(
   }
 
   const existing = await fetchActivityById(input.id);
+  if (!existing) {
+    throw new Error("Aktiviteten hittades inte.");
+  }
+
   const completedAt =
     input.status === "Klar"
-      ? (existing?.completed_at ?? new Date().toISOString())
+      ? (existing.completed_at ?? new Date().toISOString())
       : null;
 
-  const row = await updateActivityRow(input.id, {
+  const next = {
     business_area_id: input.businessAreaId,
     goal_id: input.goalId || null,
     title,
@@ -198,17 +217,45 @@ export async function updateActivity(
     priority: input.priority,
     deadline: input.deadline || null,
     completed_at: completedAt,
+  };
+
+  const changes = collectFieldChanges(
+    {
+      business_area_id: existing.business_area_id,
+      goal_id: existing.goal_id,
+      title: existing.title,
+      owner: existing.owner,
+      status: existing.status,
+      priority: existing.priority,
+      deadline: existing.deadline,
+    },
+    next,
+    ACTIVITY_TRACKED_FIELDS,
+  );
+
+  const row = await updateActivityRow(input.id, {
+    ...next,
     updated_at: new Date().toISOString(),
   });
 
-  await recordAuditLog({
-    entityType: "activity",
-    entityId: row.id,
-    action: "updated",
-    description: `Uppdaterade aktiviteten "${row.title}"`,
-    actorName: input.owner?.trim() || DEFAULT_ACTOR,
-    businessAreaId: row.business_area_id,
-  });
+  if (changes.length > 0) {
+    const actorName = await resolveActorName(
+      input.owner?.trim() || DEFAULT_ACTOR,
+    );
+    await recordAuditLog({
+      entityType: "activity",
+      entityId: row.id,
+      action: "updated",
+      description: formatEntityChangeDescription(
+        "aktiviteten",
+        row.title,
+        changes,
+      ),
+      actorName,
+      businessAreaId: row.business_area_id,
+      changes: { fields: changes },
+    });
+  }
 
   return mapActivityRow(row);
 }

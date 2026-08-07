@@ -6,6 +6,11 @@ import {
   updateDecisionRow,
 } from "@/lib/supabase/decisions";
 import { recordAuditLog } from "@/services/auditLog";
+import {
+  collectFieldChanges,
+  formatEntityChangeDescription,
+  resolveActorName,
+} from "@/services/changeHistory";
 import type {
   CreateDecisionInput,
   Decision,
@@ -14,6 +19,15 @@ import type {
 } from "@/types";
 
 const DEFAULT_ACTOR = "Peter Sagebrant";
+
+const DECISION_TRACKED_FIELDS = [
+  "title",
+  "owner",
+  "status",
+  "meeting_date",
+  "due_date",
+  "business_area_id",
+] as const;
 
 function toStatus(value: string): DecisionStatus {
   if (value === "Planerat" || value === "Pågår" || value === "Klart") {
@@ -156,7 +170,12 @@ export async function updateDecision(
     throw new Error("businessAreaId är obligatoriskt.");
   }
 
-  const row = await updateDecisionRow(input.id, {
+  const existing = await fetchDecisionById(input.id);
+  if (!existing) {
+    throw new Error("Beslutet hittades inte.");
+  }
+
+  const next = {
     business_area_id: input.businessAreaId,
     title,
     description: input.description?.trim() || null,
@@ -164,17 +183,44 @@ export async function updateDecision(
     meeting_date: input.meetingDate || null,
     due_date: input.dueDate || null,
     status: input.status,
+  };
+
+  const changes = collectFieldChanges(
+    {
+      business_area_id: existing.business_area_id,
+      title: existing.title,
+      owner: existing.owner,
+      meeting_date: existing.meeting_date,
+      due_date: existing.due_date,
+      status: existing.status,
+    },
+    next,
+    DECISION_TRACKED_FIELDS,
+  );
+
+  const row = await updateDecisionRow(input.id, {
+    ...next,
     updated_at: new Date().toISOString(),
   });
 
-  await recordAuditLog({
-    entityType: "decision",
-    entityId: row.id,
-    action: "updated",
-    description: `Uppdaterade beslutet "${row.title}"`,
-    actorName: input.owner?.trim() || DEFAULT_ACTOR,
-    businessAreaId: row.business_area_id,
-  });
+  if (changes.length > 0) {
+    const actorName = await resolveActorName(
+      input.owner?.trim() || DEFAULT_ACTOR,
+    );
+    await recordAuditLog({
+      entityType: "decision",
+      entityId: row.id,
+      action: "updated",
+      description: formatEntityChangeDescription(
+        "beslutet",
+        row.title,
+        changes,
+      ),
+      actorName,
+      businessAreaId: row.business_area_id,
+      changes: { fields: changes },
+    });
+  }
 
   return mapDecisionRow(row);
 }
@@ -184,6 +230,12 @@ export async function markDecisionComplete(id: string): Promise<Decision> {
   if (!existing) {
     throw new Error("Beslutet hittades inte.");
   }
+
+  const changes = collectFieldChanges(
+    { status: existing.status },
+    { status: "Klart" },
+    ["status"],
+  );
 
   const row = await updateDecisionRow(id, {
     business_area_id: existing.business_area_id,
@@ -196,14 +248,24 @@ export async function markDecisionComplete(id: string): Promise<Decision> {
     updated_at: new Date().toISOString(),
   });
 
-  await recordAuditLog({
-    entityType: "decision",
-    entityId: row.id,
-    action: "completed",
-    description: `Avslutade beslutet "${row.title}"`,
-    actorName: row.owner?.trim() || DEFAULT_ACTOR,
-    businessAreaId: row.business_area_id,
-  });
+  if (changes.length > 0) {
+    const actorName = await resolveActorName(
+      row.owner?.trim() || DEFAULT_ACTOR,
+    );
+    await recordAuditLog({
+      entityType: "decision",
+      entityId: row.id,
+      action: "completed",
+      description: formatEntityChangeDescription(
+        "beslutet",
+        row.title,
+        changes,
+      ),
+      actorName,
+      businessAreaId: row.business_area_id,
+      changes: { fields: changes },
+    });
+  }
 
   return mapDecisionRow(row);
 }

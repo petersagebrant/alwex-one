@@ -8,6 +8,11 @@ import {
   type BusinessAreaRow,
 } from "@/lib/supabase/business-areas";
 import { recordAuditLog } from "@/services/auditLog";
+import {
+  collectFieldChanges,
+  formatEntityChangeDescription,
+  resolveActorName,
+} from "@/services/changeHistory";
 import type {
   BusinessAreaSummary,
   StatusTone,
@@ -15,6 +20,14 @@ import type {
 } from "@/types";
 
 const DEFAULT_ACTOR = "Peter Sagebrant";
+
+const AREA_TRACKED_FIELDS = [
+  "name",
+  "manager",
+  "status",
+  "description",
+  "vd_comment",
+] as const;
 
 function toStatusTone(value: string): StatusTone {
   if (value === "Grön" || value === "Gul" || value === "Röd") {
@@ -161,23 +174,49 @@ export async function updateBusinessArea(
     throw new Error("Affärsområdet hittades inte.");
   }
 
-  const row = await updateBusinessAreaRow(input.id, {
+  const next = {
     name,
     description: input.description.trim() || null,
     manager: input.manager.trim() || null,
     status: input.status,
     vd_comment: input.vdComment.trim() || null,
+  };
+
+  const changes = collectFieldChanges(
+    {
+      name: existing.name,
+      description: existing.description,
+      manager: existing.manager,
+      status: existing.status,
+      vd_comment: existing.vd_comment,
+    },
+    next,
+    AREA_TRACKED_FIELDS,
+  );
+
+  const row = await updateBusinessAreaRow(input.id, {
+    ...next,
     updated_at: new Date().toISOString(),
   });
 
-  await recordAuditLog({
-    entityType: "business_area",
-    entityId: row.id,
-    action: "updated",
-    description: `Uppdaterade affärsområdet "${row.name}"`,
-    actorName: input.manager.trim() || DEFAULT_ACTOR,
-    businessAreaId: row.id,
-  });
+  if (changes.length > 0) {
+    const actorName = await resolveActorName(
+      input.manager.trim() || DEFAULT_ACTOR,
+    );
+    await recordAuditLog({
+      entityType: "business_area",
+      entityId: row.id,
+      action: "updated",
+      description: formatEntityChangeDescription(
+        "affärsområdet",
+        row.name,
+        changes,
+      ),
+      actorName,
+      businessAreaId: row.id,
+      changes: { fields: changes },
+    });
+  }
 
   return mapBusinessAreaDetail(row);
 }

@@ -7,6 +7,13 @@ import {
   updateKpiRow,
 } from "@/lib/supabase/kpis";
 import { recordAuditLog } from "@/services/auditLog";
+import {
+  collectFieldChanges,
+  formatEntityChangeDescription,
+  hasFieldChange,
+  resolveActorName,
+} from "@/services/changeHistory";
+import { addKPIHistoryEntry } from "@/services/kpiHistory";
 import type {
   CreateKPIInput,
   KPI,
@@ -16,6 +23,17 @@ import type {
 } from "@/types";
 
 const DEFAULT_ACTOR = "Peter Sagebrant";
+
+const KPI_TRACKED_FIELDS = [
+  "name",
+  "category",
+  "target_value",
+  "current_value",
+  "unit",
+  "status",
+  "trend",
+  "business_area_id",
+] as const;
 
 function toStatusTone(value: string): StatusTone {
   if (value === "Grön" || value === "Gul" || value === "Röd") {
@@ -154,7 +172,12 @@ export async function updateKPI(input: UpdateKPIInput): Promise<KPI> {
     throw new Error("businessAreaId är obligatoriskt.");
   }
 
-  const row = await updateKpiRow(input.id, {
+  const existing = await fetchKpiById(input.id);
+  if (!existing) {
+    throw new Error("KPI hittades inte.");
+  }
+
+  const next = {
     business_area_id: input.businessAreaId,
     name,
     category: input.category?.trim() || null,
@@ -163,17 +186,61 @@ export async function updateKPI(input: UpdateKPIInput): Promise<KPI> {
     unit: input.unit?.trim() || null,
     status: input.status,
     trend: input.trend,
+  };
+
+  const changes = collectFieldChanges(
+    {
+      business_area_id: existing.business_area_id,
+      name: existing.name,
+      category: existing.category,
+      target_value: existing.target_value,
+      current_value: existing.current_value,
+      unit: existing.unit,
+      status: existing.status,
+      trend: existing.trend,
+    },
+    next,
+    KPI_TRACKED_FIELDS,
+  );
+
+  const row = await updateKpiRow(input.id, {
+    ...next,
     updated_at: new Date().toISOString(),
   });
 
-  await recordAuditLog({
-    entityType: "kpi",
-    entityId: row.id,
-    action: "updated",
-    description: `Uppdaterade KPI:n "${row.name}"`,
-    actorName: DEFAULT_ACTOR,
-    businessAreaId: row.business_area_id,
-  });
+  if (changes.length > 0) {
+    const actorName = await resolveActorName(DEFAULT_ACTOR);
+    await recordAuditLog({
+      entityType: "kpi",
+      entityId: row.id,
+      action: "updated",
+      description: formatEntityChangeDescription("KPI:n", row.name, changes),
+      actorName,
+      businessAreaId: row.business_area_id,
+      changes: { fields: changes },
+    });
+
+    if (hasFieldChange(changes, "current_value", "status")) {
+      const historyValue =
+        next.current_value?.trim() ||
+        existing.current_value?.trim() ||
+        "—";
+      try {
+        await addKPIHistoryEntry(
+          {
+            kpiId: row.id,
+            value: historyValue,
+            status: toStatusTone(next.status),
+            comment: "Automatisk historik vid KPI-uppdatering",
+            recordedAt: new Date().toISOString(),
+          },
+          { skipAudit: true },
+        );
+      } catch {
+        // Historik får inte blockera huvuduppdateringen.
+      }
+    }
+  }
 
   return mapKpiRow(row);
 }

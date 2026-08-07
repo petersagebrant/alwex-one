@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { requireUser } from "@/lib/auth/require-user";
 import { createActivity, updateActivity } from "@/services/activities";
 import type { ActivityPriority, ActivityStatus } from "@/types";
 
@@ -31,6 +32,7 @@ function readActivityFields(formData: FormData) {
 }
 
 export async function createActivityAction(formData: FormData) {
+  await requireUser();
   const fields = readActivityFields(formData);
 
   if (!fields.businessAreaId.trim()) {
@@ -72,6 +74,7 @@ export async function createActivityAction(formData: FormData) {
 }
 
 export async function updateActivityAction(formData: FormData) {
+  await requireUser();
   const id = String(formData.get("id") ?? "");
   const fields = readActivityFields(formData);
 

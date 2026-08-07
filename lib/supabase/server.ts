@@ -18,7 +18,7 @@ export async function createClient() {
           });
         } catch {
           // setAll kan misslyckas i Server Components.
-          // Det är förväntat om sessioner senare uppdateras via middleware/proxy.
+          // Proxy hanterar cookie-uppdatering på varje request.
         }
       },
     },

@@ -13,7 +13,12 @@ export async function fetchVdBriefingAction(): Promise<string | null> {
   try {
     return await generateVdBriefing();
   } catch (error) {
-    console.error(error);
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("timeout")) {
+      console.warn("[vd-briefing] AI upgrade skipped — keeping local briefing");
+    } else {
+      console.error("[vd-briefing] AI upgrade failed:", message);
+    }
     return null;
   }
 }

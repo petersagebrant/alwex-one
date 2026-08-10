@@ -2189,6 +2189,125 @@ function toCompactOpenAiContext(
   };
 }
 
+/**
+ * Briefing-specific OpenAI payload: reuse compact context, prioritize
+ * deviations / red-yellow signals / risks / changes, drop duplicate noise.
+ */
+function buildVdBriefingOpenAiPayload(full: AssistantContext) {
+  const slimmed = slimBroadContext(full);
+  const compact = toCompactOpenAiContext(slimmed, "broad");
+
+  const greenAreas = (full.businessAreas ?? [])
+    .filter((area) => area.status === "Grön")
+    .map((area) => area.name)
+    .slice(0, 6);
+
+  const attentionAreas = (full.businessAreas ?? [])
+    .filter((area) => area.status === "Röd" || area.status === "Gul")
+    .map((area) => ({
+      name: area.name,
+      status: area.status,
+      manager: area.manager,
+    }));
+
+  const week = compact.trends?.lastWeek;
+  const yesterday = compact.trends?.sinceYesterday;
+
+  const trendFocus = {
+    sinceYesterday: {
+      label: yesterday?.label,
+      hasEnoughHistory: yesterday?.hasEnoughHistory ?? false,
+      worsenedKpis: (yesterday?.worsenedKpis ?? []).slice(0, 6),
+      improvedKpis: (yesterday?.improvedKpis ?? []).slice(0, 4),
+      entityChanges: (yesterday?.entityChanges ?? [])
+        .filter((change) => change.entityType !== "kpi")
+        .slice(0, 4),
+    },
+    lastWeek: {
+      label: week?.label,
+      hasEnoughHistory: week?.hasEnoughHistory ?? false,
+      worsenedKpis: (week?.worsenedKpis ?? []).slice(0, 6),
+      improvedKpis: (week?.improvedKpis ?? []).slice(0, 4),
+      areaSummaries: (week?.areaSummaries ?? [])
+        .filter(
+          (item) =>
+            item.direction === "sämre" ||
+            item.direction === "bättre" ||
+            item.worsenedCount > 0 ||
+            item.improvedCount > 0,
+        )
+        .slice(0, 6),
+    },
+  };
+
+  const kpiChanges = (compact.kpiLastChanges ?? [])
+    .filter(
+      (item) =>
+        item.previousValue !== null ||
+        item.previousStatus !== null ||
+        item.source === "kpi_history" ||
+        item.source === "audit_log",
+    )
+    .slice(0, 10)
+    .map((item) => ({
+      name: item.name,
+      area: item.areaName,
+      previousValue: item.previousValue,
+      currentValue: item.currentValue,
+      previousStatus: item.previousStatus,
+      currentStatus: item.currentStatus,
+      unit: item.unit,
+      lastChangedAt: item.lastChangedAt,
+    }));
+
+  return {
+    scope: "vd-briefing" as const,
+    summary: {
+      dateLabel: compact.summary.dateLabel,
+      areaCount: compact.summary.areaCount,
+      kpiCounts: compact.summary.kpiCounts,
+      goalCounts: compact.summary.goalCounts,
+      delayedActivityCount: compact.summary.delayedActivityCount,
+      openDecisionCount: compact.summary.openDecisionCount,
+      dashboardSituation: compact.summary.dashboardSituation,
+      vdSituation: compact.summary.vdSituation,
+      vdPriority: compact.summary.vdPriority,
+      vdPositiveSummary: compact.summary.vdPositiveSummary,
+      firstName: compact.summary.firstName,
+    },
+    focus: {
+      attentionAreas,
+      greenAreaNames: greenAreas,
+      followUpKpis: compact.kpis,
+      atRiskGoals: compact.goals,
+      delayedActivities: compact.activities,
+      openDecisions: compact.decisions,
+      openDeviations: compact.openDeviations,
+      priorities: compact.priorities,
+      observations: compact.observations,
+      analysisInsights: (compact.analysisInsights ?? []).slice(0, 5),
+      yesterdayChanges: compact.yesterdayChanges,
+      kpiChanges,
+      trends: trendFocus,
+    },
+    counts: {
+      areas: full.businessAreas?.length ?? compact.summary.areaCount,
+      kpis: full.kpis?.length ??
+        (compact.summary.kpiCounts?.Grön ?? 0) +
+          (compact.summary.kpiCounts?.Gul ?? 0) +
+          (compact.summary.kpiCounts?.Röd ?? 0),
+      goals: full.goals?.length ??
+        (compact.summary.goalCounts?.Grön ?? 0) +
+          (compact.summary.goalCounts?.Gul ?? 0) +
+          (compact.summary.goalCounts?.Röd ?? 0),
+      activities: full.activities?.length ?? 0,
+      decisions: full.decisions?.length ?? 0,
+      delayedActivities: compact.summary.delayedActivityCount,
+      openDecisions: compact.summary.openDecisionCount,
+    },
+  };
+}
+
 const BRIEFING_SYSTEM_PROMPT = `Du är COO-rådgivare för ALWEX ONE och förbereder VD inför dagen.
 
 Skriv som en erfaren COO: kort, skarp, affärsmässig. Beslutsstöd framför datadump.
@@ -2232,10 +2351,14 @@ Exakt 3 korta åtgärder. Ansvarig på egen rad när namn finns.
 Skapad: [tidstämpel]`;
 
 const VD_BRIEFING_CACHE_TTL_MS = 15 * 60 * 1000;
-/** Background AI upgrade must finish within 8 seconds or local briefing is kept. */
-const VD_BRIEFING_OPENAI_TIMEOUT_MS = 8_000;
-/** Bump when briefing format changes so stale AI cache is not shown. */
-const VD_BRIEFING_CACHE_VERSION = 2;
+/** Background AI upgrade budget; local briefing stays on screen if this fails. */
+const VD_BRIEFING_OPENAI_TIMEOUT_MS = 15_000;
+const VD_BRIEFING_OPENAI_MODEL = "gpt-5";
+/** gpt-5: completion budget covers reasoning + visible text; keep effort minimal for latency. */
+const VD_BRIEFING_MAX_COMPLETION_TOKENS = 1200;
+const VD_BRIEFING_REASONING_EFFORT = "minimal" as const;
+/** Bump when briefing format/payload changes so stale AI cache is not shown. */
+const VD_BRIEFING_CACHE_VERSION = 5;
 
 type VdBriefingCacheEntry = {
   content: string;
@@ -2576,16 +2699,21 @@ export function buildLocalVdBriefing(
 }
 
 /**
- * Returns cached AI briefing when valid; otherwise generates via OpenAI (8s timeout).
+ * Returns cached AI briefing when valid; otherwise generates via OpenAI.
  * Uses singleflight so concurrent callers share one OpenAI request.
  */
 export async function generateVdBriefing(): Promise<string> {
+  const totalStarted = Date.now();
   const cached = getCachedVdBriefing();
   if (cached) {
+    console.log(
+      `[vd-briefing] cache hit (${Date.now() - totalStarted}ms, ${cached.length} chars)`,
+    );
     return cached;
   }
 
   if (vdBriefingInFlight) {
+    console.log("[vd-briefing] joining in-flight OpenAI request");
     return vdBriefingInFlight;
   }
 
@@ -2597,7 +2725,16 @@ export async function generateVdBriefing(): Promise<string> {
         expiresAt: Date.now() + VD_BRIEFING_CACHE_TTL_MS,
         version: VD_BRIEFING_CACHE_VERSION,
       };
+      console.log(
+        `[vd-briefing] total success: ${Date.now() - totalStarted}ms (${content.length} chars)`,
+      );
       return content;
+    } catch (error) {
+      console.warn(
+        `[vd-briefing] total failed: ${Date.now() - totalStarted}ms` +
+          (error instanceof Error ? ` — ${error.message}` : ""),
+      );
+      throw error;
     } finally {
       vdBriefingInFlight = null;
     }
@@ -2614,9 +2751,23 @@ async function generateVdBriefingFromOpenAI(): Promise<string> {
     );
   }
 
+  const contextStarted = Date.now();
   const context = await buildAssistantContext();
+  const contextMs = Date.now() - contextStarted;
+
+  const payloadStarted = Date.now();
+  const payload = buildVdBriefingOpenAiPayload(context);
+  const payloadJson = JSON.stringify(payload);
+  const payloadMs = Date.now() - payloadStarted;
+  const payloadChars = payloadJson.length;
+
   const firstName = context.summary.firstName ?? "Peter";
   const createdAtLabel = formatDateTimeSv(new Date().toISOString());
+
+  console.log(
+    `[vd-briefing] context build: ${contextMs}ms · payload shape: ${payloadMs}ms · payload: ${payloadChars} chars · ` +
+      `model=${VD_BRIEFING_OPENAI_MODEL} · reasoning_effort=${VD_BRIEFING_REASONING_EFFORT}`,
+  );
 
   const client = new OpenAI({
     apiKey,
@@ -2629,10 +2780,13 @@ async function generateVdBriefingFromOpenAI(): Promise<string> {
     controller.abort();
   }, VD_BRIEFING_OPENAI_TIMEOUT_MS);
 
+  const openaiStarted = Date.now();
   try {
     const completion = await client.chat.completions.create(
       {
-        model: "gpt-5",
+        model: VD_BRIEFING_OPENAI_MODEL,
+        max_completion_tokens: VD_BRIEFING_MAX_COMPLETION_TOKENS,
+        reasoning_effort: VD_BRIEFING_REASONING_EFFORT,
         messages: [
           {
             role: "system",
@@ -2640,20 +2794,44 @@ async function generateVdBriefingFromOpenAI(): Promise<string> {
           },
           {
             role: "user",
-            content: `Context:\n${JSON.stringify(context)}\n\nUppgift:\nSkriv morgonbriefingen för dashboarden.\nAnvänd exakt denna tidstämpel i foten: Skapad: ${createdAtLabel}\nRäkna antal från context: affärsområden, KPI, mål, aktiviteter, beslut.`,
+            content: `Context (prioriterat beslutsunderlag — avvikelser och förändringar först):\n${payloadJson}\n\nUppgift:\nSkriv morgonbriefingen för dashboarden.\nPrioritera röda/gula KPI, risker, försenade aktiviteter, öppna beslut och tydliga förändringar.\nAnvänd positiva gröna signaler kortfattat under Positiv utveckling.\nAnvänd exakt denna tidstämpel i foten: Skapad: ${createdAtLabel}\nRäkna antal från context.counts: affärsområden, KPI, mål, aktiviteter, beslut.`,
           },
         ],
       },
       { signal: controller.signal },
     );
 
-    const briefing = completion.choices[0]?.message?.content?.trim();
+    const openaiMs = Date.now() - openaiStarted;
+    const choice = completion.choices[0];
+    const message = choice?.message;
+    const contentRaw = message?.content;
+    const briefing =
+      typeof contentRaw === "string" ? contentRaw.trim() : "";
+    const usage = completion.usage;
+    const reasoningTokens =
+      usage?.completion_tokens_details?.reasoning_tokens ?? null;
+
+    // Timing/token metrics only — never log prompts, payloads, or API keys.
+    console.log(
+      `[vd-briefing] OpenAI request: ${openaiMs}ms · model=${completion.model ?? VD_BRIEFING_OPENAI_MODEL} · ` +
+        `finish_reason=${choice?.finish_reason ?? "n/a"} · content_len=${briefing.length} · ` +
+        `prompt_tokens=${usage?.prompt_tokens ?? "n/a"} · ` +
+        `completion_tokens=${usage?.completion_tokens ?? "n/a"} · ` +
+        `reasoning_tokens=${reasoningTokens ?? "n/a"} · ` +
+        `total_tokens=${usage?.total_tokens ?? "n/a"}`,
+    );
+
     if (!briefing) {
-      throw new Error("OpenAI returnerade ingen briefing.");
+      throw new Error(
+        `OpenAI returnerade ingen briefing (finish_reason=${choice?.finish_reason ?? "n/a"}, ` +
+          `reasoning_tokens=${reasoningTokens ?? "n/a"}, ` +
+          `completion_tokens=${usage?.completion_tokens ?? "n/a"}).`,
+      );
     }
 
     return briefing;
   } catch (error) {
+    const openaiMs = Date.now() - openaiStarted;
     if (
       controller.signal.aborted ||
       (error instanceof Error &&
@@ -2661,8 +2839,17 @@ async function generateVdBriefingFromOpenAI(): Promise<string> {
           error.message.toLowerCase().includes("timeout") ||
           error.message.toLowerCase().includes("aborted")))
     ) {
+      console.warn(
+        `[vd-briefing] OpenAI timeout after ${openaiMs}ms ` +
+          `(limit ${VD_BRIEFING_OPENAI_TIMEOUT_MS}ms, model=${VD_BRIEFING_OPENAI_MODEL}, ` +
+          `payload ${payloadChars} chars)`,
+      );
       throw new Error("VD Briefing OpenAI timeout");
     }
+    const message = error instanceof Error ? error.message : "unknown error";
+    console.error(
+      `[vd-briefing] OpenAI error after ${openaiMs}ms (model=${VD_BRIEFING_OPENAI_MODEL}): ${message}`,
+    );
     throw error;
   } finally {
     clearTimeout(timeoutId);

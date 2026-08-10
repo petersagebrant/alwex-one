@@ -166,6 +166,27 @@ export async function getRecentKpiHistoryEntries(
   }
 }
 
+/** KPI history rows recorded at/after cutoff (plus recent prior rows for diffs). */
+export async function getKpiHistoryForChangeReport(
+  cutoff: Date,
+): Promise<KPIHistory[]> {
+  try {
+    const sinceRows = await fetchKpiHistorySince(cutoff.toISOString());
+    if (sinceRows.length === 0) {
+      return [];
+    }
+    const kpiIds = [...new Set(sinceRows.map((row) => row.kpi_id))];
+    // Need previous points for status/value diffs.
+    return await getRecentKpiHistoryForKpis(kpiIds, 4);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("kpi_history") || message.includes("schema cache")) {
+      return [];
+    }
+    throw error;
+  }
+}
+
 /** Latest N history rows per KPI (newest first within each KPI). */
 export async function getRecentKpiHistoryForKpis(
   kpiIds: string[],

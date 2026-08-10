@@ -4,6 +4,7 @@ import { formatDateSv, formatDateTimeSv } from "@/lib/format/date";
 import { getActivities, type ActivityListItem } from "@/services/activities";
 import { getAllActivityComments } from "@/services/activityComments";
 import {
+  getAuditLogSince,
   getRecentAuditLog,
   type AuditLogListItem,
 } from "@/services/auditLog";
@@ -11,7 +12,7 @@ import { getDecisions } from "@/services/decisions";
 import { getGoals } from "@/services/goals";
 import { getKPIs, type KPIListItem } from "@/services/kpis";
 import {
-  getKpiHistoryChangeLinesSince,
+  getKpiHistoryForChangeReport,
   getRecentKpiHistoryEntries,
 } from "@/services/kpiHistory";
 import {
@@ -20,6 +21,11 @@ import {
   getSinceLoginCutoff,
   type SinceLoginChange,
 } from "@/services/sinceLogin";
+import {
+  buildYesterdayChangeReport,
+  getYesterdayCutoff,
+  type YesterdayChangeItem,
+} from "@/services/yesterdayChanges";
 import type { StatusTone, VdDiaryEvent, VdDiaryTone } from "@/types";
 
 export type DashboardKpi = {
@@ -136,10 +142,7 @@ export type DashboardVdAssistant = {
   analyzedAtLabel: string;
 };
 
-export type DashboardYesterdayChange = {
-  id: string;
-  text: string;
-};
+export type DashboardYesterdayChange = YesterdayChangeItem;
 
 export type DashboardData = {
   kpis: DashboardKpi[];
@@ -179,19 +182,6 @@ function swedishCountPhrase(
     return one;
   }
   return many.replace("{n}", String(count));
-}
-
-function getYesterdayCutoff(): Date {
-  const todayMidnight = getSinceLoginCutoff();
-  return new Date(todayMidnight.getTime() - 24 * 60 * 60 * 1000);
-}
-
-function isAfter(iso: string | null | undefined, cutoff: Date): boolean {
-  if (!iso) {
-    return false;
-  }
-  const time = new Date(iso).getTime();
-  return Number.isFinite(time) && time >= cutoff.getTime();
 }
 
 function todayDateKey(): string {
@@ -323,86 +313,6 @@ function buildHistoryEvents(input: {
         new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),
     )
     .slice(0, input.limit);
-}
-
-function buildYesterdayChanges(input: {
-  newActivityCount: number;
-  changedKpiCount: number;
-  closedDecisionCount: number;
-  newGoalCount: number;
-  statusChangeCount: number;
-  kpiHistoryLines: { id: string; text: string }[];
-}): DashboardYesterdayChange[] {
-  const changes: DashboardYesterdayChange[] = [];
-
-  if (input.newActivityCount > 0) {
-    changes.push({
-      id: "yesterday-new-activities",
-      text: swedishCountPhrase(
-        input.newActivityCount,
-        "1 ny aktivitet",
-        "{n} nya aktiviteter",
-        "",
-      ),
-    });
-  }
-
-  if (input.changedKpiCount > 0) {
-    changes.push({
-      id: "yesterday-changed-kpis",
-      text: swedishCountPhrase(
-        input.changedKpiCount,
-        "1 ändrad KPI",
-        "{n} ändrade KPI",
-        "",
-      ),
-    });
-  }
-
-  if (input.closedDecisionCount > 0) {
-    changes.push({
-      id: "yesterday-closed-decisions",
-      text: swedishCountPhrase(
-        input.closedDecisionCount,
-        "1 avslutat beslut",
-        "{n} avslutade beslut",
-        "",
-      ),
-    });
-  }
-
-  if (input.newGoalCount > 0) {
-    changes.push({
-      id: "yesterday-new-goals",
-      text: swedishCountPhrase(
-        input.newGoalCount,
-        "1 nytt mål",
-        "{n} nya mål",
-        "",
-      ),
-    });
-  }
-
-  if (input.statusChangeCount > 0) {
-    changes.push({
-      id: "yesterday-status-changes",
-      text: swedishCountPhrase(
-        input.statusChangeCount,
-        "1 statusförändring",
-        "{n} statusförändringar",
-        "",
-      ),
-    });
-  }
-
-  for (const line of input.kpiHistoryLines.slice(0, 3)) {
-    if (changes.some((change) => change.text === line.text)) {
-      continue;
-    }
-    changes.push(line);
-  }
-
-  return changes;
 }
 
 function firstNameFromUser(email: string | null): string | null {
@@ -930,9 +840,6 @@ export async function getDashboardData(): Promise<DashboardData> {
   });
 
   const yesterdayCutoff = getYesterdayCutoff();
-  const kpiNames = new Map(
-    (allKpis ?? []).map((kpi) => [kpi.id, kpi.name]),
-  );
   const kpiMeta = new Map(
     (allKpis ?? []).map((kpi) => [
       kpi.id,
@@ -944,49 +851,26 @@ export async function getDashboardData(): Promise<DashboardData> {
     ]),
   );
 
-  const kpiHistoryChanges = await getKpiHistoryChangeLinesSince(
-    yesterdayCutoff,
-    kpiNames,
-  ).catch(() => []);
+  const [yesterdayAudit, yesterdayKpiHistory] = await Promise.all([
+    getAuditLogSince(yesterdayCutoff, 200).catch(() => []),
+    getKpiHistoryForChangeReport(yesterdayCutoff).catch(() => []),
+  ]);
 
-  const changedKpiIds = new Set(
-    (recentKpiHistory ?? [])
-      .filter((entry) =>
-        isAfter(entry.recordedAt || entry.createdAt, yesterdayCutoff),
-      )
-      .map((entry) => entry.kpiId),
-  );
-
-  const newActivityCount = (activities ?? []).filter((activity) =>
-    isAfter(activity.createdAt, yesterdayCutoff),
-  ).length;
-  const newGoalCount = (goals ?? []).filter((goal) =>
-    isAfter(goal.createdAt, yesterdayCutoff),
-  ).length;
-  const closedDecisionCount = (allDecisions ?? []).filter(
-    (decision) =>
-      decision.status === "Klart" &&
-      isAfter(decision.updatedAt, yesterdayCutoff),
-  ).length;
-
-  const statusChangeCount = (recentAudit ?? []).filter((entry) => {
-    if (!isAfter(entry.createdAt, yesterdayCutoff)) {
-      return false;
-    }
-    return (
-      entry.action === "updated" ||
-      entry.action === "completed" ||
-      entry.description.toLowerCase().includes("status")
-    );
-  }).length;
-
-  const yesterdayChanges = buildYesterdayChanges({
-    newActivityCount,
-    changedKpiCount: changedKpiIds.size,
-    closedDecisionCount,
-    newGoalCount,
-    statusChangeCount,
-    kpiHistoryLines: kpiHistoryChanges,
+  const yesterdayChanges = buildYesterdayChangeReport({
+    cutoff: yesterdayCutoff,
+    auditEntries: yesterdayAudit,
+    kpiHistory: yesterdayKpiHistory,
+    kpis: allKpis ?? [],
+    goals: goals ?? [],
+    activities: activities ?? [],
+    areas: (areaRows ?? []).map((area) => ({
+      id: area.id,
+      name: area.name,
+      slug: area.slug,
+      manager: area.manager ?? null,
+      status: area.status,
+    })),
+    limit: 5,
   });
 
   const historyEvents = buildHistoryEvents({

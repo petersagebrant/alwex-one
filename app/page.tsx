@@ -42,6 +42,14 @@ function formatKpiValue(
   return unit ? `${value} ${unit}` : value;
 }
 
+function yesterdayChangeDot(tone: string): string {
+  if (tone === "red") return "bg-rose-500";
+  if (tone === "yellow") return "bg-amber-400";
+  if (tone === "green") return "bg-emerald-500";
+  if (tone === "blue") return "bg-sky-500";
+  return "bg-slate-400";
+}
+
 function yesterdayChangeIconClass(text: string): string {
   if (text.includes("%") || text.toLowerCase().includes("kpi")) {
     return "bg-sky-500";
@@ -288,27 +296,68 @@ export default async function Home() {
         >
           {(yesterdayChanges ?? []).length === 0 ? (
             <p className="text-sm text-slate-600">
-              Inga förändringar registrerade ännu.
+              Inga väsentliga förändringar sedan igår.
             </p>
           ) : (
             <ul className="divide-y divide-slate-100">
-              {(yesterdayChanges ?? []).map((change) => (
-                <li
-                  key={change.id}
-                  className="flex items-center gap-3 py-2 first:pt-0 last:pb-0"
-                >
-                  <span
-                    aria-hidden
-                    className={`h-2.5 w-2.5 shrink-0 rounded-full ${yesterdayChangeIconClass(change.text)}`}
-                  />
-                  <p className="min-w-0 flex-1 text-sm font-medium text-slate-800">
-                    {change.text}
-                  </p>
-                  <time className="shrink-0 text-xs text-slate-500">
-                    Sedan igår
-                  </time>
-                </li>
-              ))}
+              {(yesterdayChanges ?? []).map((change) => {
+                const body = (
+                  <div className="flex min-w-0 items-start gap-3">
+                    <span
+                      aria-hidden
+                      className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${
+                        yesterdayChangeDot(change.tone) ||
+                        yesterdayChangeIconClass(change.text)
+                      }`}
+                    />
+                    <div className="min-w-0 flex-1">
+                      {change.area ? (
+                        <p className="text-sm font-semibold text-slate-900">
+                          {change.area}
+                        </p>
+                      ) : null}
+                      <p
+                        className={`text-sm text-slate-700 ${
+                          change.area ? "mt-0.5" : "font-medium text-slate-800"
+                        }`}
+                      >
+                        {change.detail || change.text}
+                      </p>
+                      {change.owner ? (
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          Ansvarig: {change.owner}
+                        </p>
+                      ) : null}
+                      <p className="mt-1 text-xs text-slate-500">
+                        {change.occurredAtLabel || "Sedan igår"}
+                      </p>
+                    </div>
+                  </div>
+                );
+
+                return (
+                  <li key={change.id} className="py-3 first:pt-0 last:pb-0">
+                    {change.href ? (
+                      <Link
+                        href={change.href}
+                        className="group block rounded-lg outline-none transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-300"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          {body}
+                          <span
+                            aria-hidden
+                            className="mt-0.5 shrink-0 text-base leading-none text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-slate-500"
+                          >
+                            ›
+                          </span>
+                        </div>
+                      </Link>
+                    ) : (
+                      body
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </InfoPanel>

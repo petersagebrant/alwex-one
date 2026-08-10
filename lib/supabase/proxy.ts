@@ -15,6 +15,15 @@ function isPublicAuthPath(pathname: string): boolean {
   );
 }
 
+/** Next internals / static files must never be redirected to /login HTML. */
+function isAssetOrNextInternalPath(pathname: string): boolean {
+  return (
+    pathname.startsWith("/_next/") ||
+    pathname === "/favicon.ico" ||
+    /\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map|txt|woff2?)$/i.test(pathname)
+  );
+}
+
 function safeInternalPath(value: string | null, fallback = "/"): string {
   if (!value) {
     return fallback;
@@ -87,6 +96,12 @@ function redirectAuthParamsToCallback(request: NextRequest): NextResponse | null
  * Must preserve supabaseResponse cookies on every returned response.
  */
 export async function updateSession(request: NextRequest) {
+  // Belt-and-suspenders: matcher should already skip these, but never auth-gate
+  // asset URLs (login HTML as JS/CSS → hydration never starts).
+  if (isAssetOrNextInternalPath(request.nextUrl.pathname)) {
+    return NextResponse.next({ request });
+  }
+
   const authParamRedirect = redirectAuthParamsToCallback(request);
   if (authParamRedirect) {
     return authParamRedirect;
@@ -166,19 +181,18 @@ export async function updateSession(request: NextRequest) {
 
   // Already signed in — leave the login page (unless recovery is pending).
   if (user && publicAuth && pathname.startsWith("/login")) {
-    const next = recoveryPending
+    const nextPath = recoveryPending
       ? RECOVERY_UPDATE_PATH
       : safeInternalPath(request.nextUrl.searchParams.get("next"));
-    const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = next;
-    redirectUrl.search = "";
+    // nextPath may include ?query (e.g. /report/kpis?area=<uuid>) — preserve it.
+    const target = new URL(nextPath, request.nextUrl.origin);
 
     console.log("[auth-recovery] proxy signed-in leave /login", {
-      to: next,
+      to: `${target.pathname}${target.search}`,
       recoveryPending,
     });
 
-    const redirectResponse = NextResponse.redirect(redirectUrl);
+    const redirectResponse = NextResponse.redirect(target);
     copyCookies(supabaseResponse, redirectResponse);
     return redirectResponse;
   }

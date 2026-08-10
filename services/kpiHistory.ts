@@ -1,18 +1,26 @@
+import { getCurrentUser } from "@/lib/auth/require-user";
 import {
   fetchKpiHistoryByKpiId,
   fetchKpiHistorySince,
   fetchRecentKpiHistory,
   fetchRecentKpiHistoryForKpis,
   insertKpiHistory,
+  upsertDailyKpiReportRow,
+  type KpiHistoryRow,
 } from "@/lib/supabase/kpi-history";
-import { fetchKpiById } from "@/lib/supabase/kpis";
+import { fetchKpiById, updateKpiCurrentSnapshot } from "@/lib/supabase/kpis";
 import { recordAuditLog } from "@/services/auditLog";
 import {
   collectFieldChanges,
   formatEntityChangeDescription,
   resolveActorName,
 } from "@/services/changeHistory";
-import type { CreateKPIHistoryInput, KPIHistory, StatusTone } from "@/types";
+import type {
+  CreateKPIHistoryInput,
+  KPIHistory,
+  StatusTone,
+  UpsertDailyKpiReportInput,
+} from "@/types";
 
 function toStatusTone(value: string): StatusTone {
   if (value === "Grön" || value === "Gul" || value === "Röd") {
@@ -21,15 +29,7 @@ function toStatusTone(value: string): StatusTone {
   return "Gul";
 }
 
-function mapKpiHistoryRow(row: {
-  id: string;
-  kpi_id: string;
-  value: string;
-  status: string;
-  comment: string | null;
-  recorded_at: string;
-  created_at: string;
-}): KPIHistory {
+function mapKpiHistoryRow(row: KpiHistoryRow): KPIHistory {
   return {
     id: row.id,
     kpiId: row.kpi_id,
@@ -38,6 +38,9 @@ function mapKpiHistoryRow(row: {
     comment: row.comment,
     recordedAt: row.recorded_at,
     createdAt: row.created_at,
+    updatedAt: row.updated_at ?? row.created_at,
+    reportDate: row.report_date ?? null,
+    recordedBy: row.recorded_by ?? null,
   };
 }
 
@@ -48,6 +51,52 @@ function parseNumericValue(value: string): number | null {
   }
   const parsed = Number.parseFloat(normalized);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+/** YYYY-MM-DD for a Date in Europe/Stockholm. */
+export function toStockholmReportDate(date: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Stockholm",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function isValidReportDate(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+/**
+ * Sync kpis.current_value / status / updated_at when the history entry
+ * is the newest for that KPI (by recorded_at). Backdated inserts do not
+ * overwrite the current snapshot.
+ */
+async function syncCurrentKpiFromHistory(input: {
+  kpiId: string;
+  value: string;
+  status: StatusTone;
+  recordedAt: Date;
+  existingNewestRecordedAt: string | null;
+}): Promise<void> {
+  const existingMs = input.existingNewestRecordedAt
+    ? new Date(input.existingNewestRecordedAt).getTime()
+    : null;
+  const nextMs = input.recordedAt.getTime();
+
+  if (
+    existingMs !== null &&
+    !Number.isNaN(existingMs) &&
+    nextMs < existingMs
+  ) {
+    return;
+  }
+
+  await updateKpiCurrentSnapshot(input.kpiId, {
+    current_value: input.value,
+    status: input.status,
+    updated_at: new Date().toISOString(),
+  });
 }
 
 export async function getKPIHistory(kpiId: string): Promise<KPIHistory[]> {
@@ -69,7 +118,7 @@ export async function getKPIHistory(kpiId: string): Promise<KPIHistory[]> {
 
 export async function addKPIHistoryEntry(
   input: CreateKPIHistoryInput,
-  options?: { skipAudit?: boolean },
+  options?: { skipAudit?: boolean; syncCurrent?: boolean },
 ): Promise<KPIHistory> {
   const kpiId = input.kpiId.trim();
   if (!kpiId) {
@@ -105,13 +154,37 @@ export async function addKPIHistoryEntry(
           new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime(),
       )[0] ?? null;
 
+  const currentUser = await getCurrentUser().catch(() => null);
+  const recordedBy =
+    input.recordedBy !== undefined
+      ? input.recordedBy
+      : (currentUser?.id ?? null);
+
+  // Ordinary history inserts leave report_date NULL so multiple audit points
+  // per calendar day remain allowed; daily reports use upsertDailyKpiReport.
   const row = await insertKpiHistory({
     kpi_id: kpiId,
     value,
     status: input.status,
     comment: input.comment?.trim() || null,
     recorded_at: recordedAt.toISOString(),
+    report_date: null,
+    recorded_by: recordedBy,
   });
+
+  if (options?.syncCurrent !== false) {
+    try {
+      await syncCurrentKpiFromHistory({
+        kpiId,
+        value,
+        status: input.status,
+        recordedAt,
+        existingNewestRecordedAt: prior?.recordedAt ?? null,
+      });
+    } catch {
+      // Synk av aktuellt KPI-värde får inte blockera historikskrivningen.
+    }
+  }
 
   if (!options?.skipAudit) {
     try {
@@ -149,6 +222,91 @@ export async function addKPIHistoryEntry(
   }
 
   return mapKpiHistoryRow(row);
+}
+
+/**
+ * Atomic daily report for (kpi_id, report_date): upserts kpi_history and
+ * updates kpis.current_value / status / updated_at via DB RPC.
+ */
+export async function upsertDailyKpiReport(
+  input: UpsertDailyKpiReportInput,
+  options?: { skipAudit?: boolean },
+): Promise<KPIHistory> {
+  const kpiId = input.kpiId.trim();
+  if (!kpiId) {
+    throw new Error("kpiId är obligatoriskt.");
+  }
+
+  const reportDate = input.reportDate.trim();
+  if (!isValidReportDate(reportDate)) {
+    throw new Error("reportDate måste vara YYYY-MM-DD.");
+  }
+
+  const value = input.value.trim();
+  if (!value) {
+    throw new Error("Värde är obligatoriskt.");
+  }
+
+  const kpi = await fetchKpiById(kpiId).catch(() => null);
+  const currentUser = await getCurrentUser().catch(() => null);
+  const recordedBy =
+    input.recordedBy !== undefined
+      ? input.recordedBy
+      : (currentUser?.id ?? null);
+
+  const row = await upsertDailyKpiReportRow({
+    p_kpi_id: kpiId,
+    p_report_date: reportDate,
+    p_value: value,
+    p_status: input.status,
+    p_comment: input.comment?.trim() || null,
+    p_recorded_by: recordedBy,
+  });
+
+  if (!options?.skipAudit) {
+    try {
+      const changes = collectFieldChanges(
+        {
+          current_value: kpi?.current_value ?? null,
+          status: kpi?.status ?? null,
+        },
+        {
+          current_value: value,
+          status: input.status,
+        },
+        ["current_value", "status"],
+      );
+
+      if (changes.length > 0) {
+        const actorName = await resolveActorName("System");
+        await recordAuditLog({
+          entityType: "kpi",
+          entityId: kpiId,
+          action: "history_recorded",
+          description: formatEntityChangeDescription(
+            "KPI:n",
+            kpi?.name ?? "KPI",
+            changes,
+          ),
+          actorName,
+          businessAreaId: kpi?.business_area_id ?? null,
+          changes: { fields: changes },
+        });
+      }
+    } catch {
+      // Audit runt daglig rapport får inte blockera sparandet.
+    }
+  }
+
+  return mapKpiHistoryRow(row);
+}
+
+/** Alias for upsertDailyKpiReport — reserved for future reporting UI. */
+export async function reportKpiForDate(
+  input: UpsertDailyKpiReportInput,
+  options?: { skipAudit?: boolean },
+): Promise<KPIHistory> {
+  return upsertDailyKpiReport(input, options);
 }
 
 export async function getRecentKpiHistoryEntries(

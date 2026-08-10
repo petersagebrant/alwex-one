@@ -173,7 +173,8 @@ export async function createKPI(input: CreateKPIInput): Promise<KPI> {
           comment: "Initial historik vid skapande",
           recordedAt: new Date().toISOString(),
         },
-        { skipAudit: true },
+        // KPI row already holds current_value/status.
+        { skipAudit: true, syncCurrent: false },
       );
     } catch {
       // Historik får inte blockera skapandet.
@@ -259,7 +260,8 @@ export async function updateKPI(input: UpdateKPIInput): Promise<KPI> {
             comment: "Automatisk historik vid KPI-uppdatering",
             recordedAt: new Date().toISOString(),
           },
-          { skipAudit: true },
+          // KPI row already updated above.
+          { skipAudit: true, syncCurrent: false },
         );
       } catch {
         // Historik får inte blockera huvuduppdateringen.

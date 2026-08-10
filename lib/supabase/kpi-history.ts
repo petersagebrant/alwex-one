@@ -8,6 +8,9 @@ export type KpiHistoryRow = {
   comment: string | null;
   recorded_at: string;
   created_at: string;
+  updated_at: string;
+  report_date: string | null;
+  recorded_by: string | null;
 };
 
 export type InsertKpiHistoryInput = {
@@ -16,10 +19,21 @@ export type InsertKpiHistoryInput = {
   status: string;
   comment: string | null;
   recorded_at: string;
+  report_date?: string | null;
+  recorded_by?: string | null;
+};
+
+export type UpsertDailyKpiReportRpcInput = {
+  p_kpi_id: string;
+  p_report_date: string;
+  p_value: string;
+  p_status: string;
+  p_comment: string | null;
+  p_recorded_by: string | null;
 };
 
 const kpiHistorySelect =
-  "id, kpi_id, value, status, comment, recorded_at, created_at";
+  "id, kpi_id, value, status, comment, recorded_at, created_at, updated_at, report_date, recorded_by";
 
 export async function fetchKpiHistoryByKpiId(
   kpiId: string,
@@ -55,6 +69,70 @@ export async function insertKpiHistory(
   }
 
   return data;
+}
+
+export async function upsertDailyKpiReportRow(
+  input: UpsertDailyKpiReportRpcInput,
+): Promise<KpiHistoryRow> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase.rpc("upsert_daily_kpi_report", input);
+
+  if (error) {
+    throw new Error(`Kunde inte spara daglig KPI-rapport: ${error.message}`);
+  }
+
+  if (!data) {
+    throw new Error("Kunde inte spara daglig KPI-rapport: tomt svar.");
+  }
+
+  return data as KpiHistoryRow;
+}
+
+/** All daily report rows for a calendar date (report_date = YYYY-MM-DD). */
+export async function fetchKpiHistoryByReportDate(
+  reportDate: string,
+): Promise<KpiHistoryRow[]> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("kpi_history")
+    .select(kpiHistorySelect)
+    .eq("report_date", reportDate);
+
+  if (error) {
+    throw new Error(
+      `Kunde inte hämta dagliga KPI-rapporter: ${error.message}`,
+    );
+  }
+
+  return data ?? [];
+}
+
+/** Daily report rows for specific KPIs on a calendar date. */
+export async function fetchKpiHistoryByReportDateForKpis(
+  kpiIds: string[],
+  reportDate: string,
+): Promise<KpiHistoryRow[]> {
+  if (kpiIds.length === 0) {
+    return [];
+  }
+
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("kpi_history")
+    .select(kpiHistorySelect)
+    .in("kpi_id", kpiIds)
+    .eq("report_date", reportDate);
+
+  if (error) {
+    throw new Error(
+      `Kunde inte hämta dagliga KPI-rapporter: ${error.message}`,
+    );
+  }
+
+  return data ?? [];
 }
 
 export async function fetchRecentKpiHistory(

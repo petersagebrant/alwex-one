@@ -124,3 +124,28 @@ export async function updateKpiRow(
 
   return data;
 }
+
+/** Sync current snapshot fields after a history write (value/status/updated_at). */
+export async function updateKpiCurrentSnapshot(
+  id: string,
+  input: {
+    current_value: string;
+    status: string;
+    updated_at: string;
+  },
+): Promise<KpiRow> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("kpis")
+    .update(input)
+    .eq("id", id)
+    .select(kpiSelect)
+    .single();
+
+  if (error) {
+    throw new Error(`Kunde inte synka KPI-värde: ${error.message}`);
+  }
+
+  return data;
+}

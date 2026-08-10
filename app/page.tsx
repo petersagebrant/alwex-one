@@ -16,6 +16,9 @@ import {
 } from "@/services/assistant";
 import { getDashboardData } from "@/services/dashboard";
 import { getKPIs } from "@/services/kpis";
+import { getDashboardReportingContext } from "@/services/kpiReporting";
+import { getCurrentUser } from "@/lib/auth/require-user";
+import { fetchProfileByUserId } from "@/lib/supabase/profiles";
 import { formatDateTimeSv } from "@/lib/format/date";
 import type { StatusTone } from "@/types";
 
@@ -55,9 +58,28 @@ function yesterdayChangeIconClass(text: string): string {
 }
 
 export default async function Home() {
-  const [data, kpiDetails] = await Promise.all([
+  const currentUser = await getCurrentUser().catch(() => null);
+  const profileRow = currentUser
+    ? await fetchProfileByUserId(currentUser.id).catch(() => null)
+    : null;
+
+  const [data, kpiDetails, reportingContext] = await Promise.all([
     getDashboardData(),
     getKPIs().catch(() => []),
+    profileRow
+      ? getDashboardReportingContext({
+          role: profileRow.role,
+          businessAreaId: profileRow.business_area_id,
+        }).catch(() => ({
+          kind: "none" as const,
+          myReporting: null,
+          orgStats: null,
+        }))
+      : Promise.resolve({
+          kind: "none" as const,
+          myReporting: null,
+          orgStats: null,
+        }),
   ]);
   const kpis = data?.kpis ?? [];
   const businessAreas = data?.businessAreas ?? [];
@@ -233,6 +255,65 @@ export default async function Home() {
           stats={briefingStats}
           linkHints={briefingLinkHints}
         />
+
+        {reportingContext.kind === "ao_chef" &&
+        reportingContext.myReporting ? (
+          <InfoPanel
+            title="Mina KPI:er idag"
+            showLabel={false}
+            compact
+            className="!border-slate-200/80 !bg-white"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-slate-900">
+                  {reportingContext.myReporting.reportedCount} av{" "}
+                  {reportingContext.myReporting.totalCount} rapporterade
+                </p>
+                <p className="text-sm text-slate-500">
+                  {reportingContext.myReporting.businessAreaName}
+                </p>
+              </div>
+              <Link
+                href="/report/kpis"
+                className="inline-flex items-center rounded-xl bg-[#0b1220] px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+              >
+                {reportingContext.myReporting.reportedCount <
+                reportingContext.myReporting.totalCount
+                  ? "Rapportera KPI"
+                  : "Visa rapporter"}
+              </Link>
+            </div>
+          </InfoPanel>
+        ) : null}
+
+        {reportingContext.kind === "leadership" &&
+        reportingContext.orgStats ? (
+          <Link
+            href="/report/kpis"
+            className="group block rounded-2xl outline-none transition hover:brightness-[0.99] focus-visible:ring-2 focus-visible:ring-slate-300"
+          >
+            <InfoPanel
+              title="KPI-rapportering idag"
+              showLabel={false}
+              compact
+              className="!border-slate-200/80 !bg-white"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-slate-700">
+                  KPI rapporterade idag:{" "}
+                  <span className="font-semibold text-slate-900">
+                    {reportingContext.orgStats.reported} av{" "}
+                    {reportingContext.orgStats.total}
+                  </span>
+                </p>
+                <span className="inline-flex items-center rounded-xl bg-[#0b1220] px-3.5 py-2 text-sm font-semibold text-white transition group-hover:bg-slate-800">
+                  Rapportera KPI
+                </span>
+              </div>
+            </InfoPanel>
+          </Link>
+        ) : null}
 
         <InfoPanel
           title="VD-assistent"

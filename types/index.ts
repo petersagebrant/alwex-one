@@ -29,7 +29,13 @@ export type {
 export type {
   KPIHistory,
   CreateKPIHistoryInput,
+  UpsertDailyKpiReportInput,
 } from "./kpi-history";
+export type {
+  DailyKpiReportItem,
+  MyKpisForTodayReporting,
+  TodayOrgReportingStats,
+} from "./kpi-reporting";
 export type { HistoryEvent } from "./history";
 export type { VdDiaryEvent, VdDiaryTone } from "./vd-diary";
 

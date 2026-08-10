@@ -180,6 +180,57 @@ export default async function Home() {
   });
   const initialBriefing = cachedAiBriefing ?? localBriefing;
 
+  const kpiStatusCounts = (kpiDetails ?? []).reduce(
+    (acc, kpi) => {
+      if (kpi.status === "Grön") acc.green += 1;
+      else if (kpi.status === "Gul") acc.yellow += 1;
+      else if (kpi.status === "Röd") acc.red += 1;
+      return acc;
+    },
+    { green: 0, yellow: 0, red: 0 },
+  );
+
+  const briefingStats = {
+    areas: businessAreas?.length ?? 0,
+    greenKpis: kpiStatusCounts.green,
+    yellowKpis: kpiStatusCounts.yellow,
+    redKpis: kpiStatusCounts.red,
+    delayedActivities: vdFocus.summary?.delayedActivityCount ?? 0,
+  };
+
+  const briefingLinkHints = [
+    ...(businessAreas ?? []).map((area) => ({
+      label: area.name,
+      href: `/areas/${area.slug}`,
+      area: area.name,
+    })),
+    ...(focusKpis ?? []).map((kpi) => ({
+      label: kpi.name,
+      href: kpi.href,
+      area: kpi.area,
+    })),
+    ...(actionGoals ?? []).map((goal) => ({
+      label: goal.goal,
+      href: `/admin/goals/${goal.id}`,
+      area: goal.area,
+    })),
+    ...(vdFocus.delayedActivities ?? []).map((activity) => ({
+      label: activity.title,
+      href: activity.href,
+      area: activity.area,
+    })),
+    ...(vdFocus.openDecisions ?? []).map((decision) => ({
+      label: decision.title,
+      href: decision.href,
+      area: decision.area,
+    })),
+    ...(attentionItems ?? []).map((item) => ({
+      label: item.title,
+      href: `/areas/${item.slug}`,
+      area: item.title,
+    })),
+  ].filter((hint) => hint.label && hint.href);
+
   return (
     <div className="flex min-h-full flex-1 flex-col bg-[#eef2f6] font-sans text-slate-800">
       <AppHeader current="home" />
@@ -188,6 +239,8 @@ export default async function Home() {
         <VdBriefingPanel
           initialContent={initialBriefing}
           hasAiCache={Boolean(cachedAiBriefing)}
+          stats={briefingStats}
+          linkHints={briefingLinkHints}
         />
 
         <InfoPanel

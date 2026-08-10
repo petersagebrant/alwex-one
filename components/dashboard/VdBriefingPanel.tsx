@@ -2,13 +2,21 @@
 
 import { useEffect, useRef, useState } from "react";
 import { fetchVdBriefingAction } from "@/app/dashboard/briefing-actions";
-import { VdBriefing } from "@/components/dashboard/VdBriefing";
+import {
+  VdBriefing,
+  type VdBriefingLinkHint,
+  type VdBriefingStats,
+} from "@/components/dashboard/VdBriefing";
 
 type VdBriefingPanelProps = {
   /** Instant content shown on first paint (cache or local briefing). */
   initialContent?: string | null;
   /** When true, skip OpenAI — initial content is already a fresh AI cache hit. */
   hasAiCache?: boolean;
+  /** Compact status strip counts from live dashboard data. */
+  stats?: VdBriefingStats | null;
+  /** Link targets for making briefing rows clickable when names match. */
+  linkHints?: VdBriefingLinkHint[] | null;
 };
 
 /**
@@ -18,6 +26,8 @@ type VdBriefingPanelProps = {
 export function VdBriefingPanel({
   initialContent,
   hasAiCache = false,
+  stats = null,
+  linkHints = null,
 }: VdBriefingPanelProps) {
   const safeInitial = initialContent?.trim() ? initialContent : "";
   const [content, setContent] = useState(safeInitial);
@@ -55,5 +65,7 @@ export function VdBriefingPanel({
     };
   }, [hasAiCache]);
 
-  return <VdBriefing content={content} />;
+  return (
+    <VdBriefing content={content} stats={stats} linkHints={linkHints} />
+  );
 }

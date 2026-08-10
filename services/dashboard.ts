@@ -17,16 +17,16 @@ import {
 } from "@/services/kpiHistory";
 import {
   buildSinceLoginChanges,
-  formatSinceLoginTime,
   getSinceLoginCutoff,
   type SinceLoginChange,
 } from "@/services/sinceLogin";
+import { buildDashboardHistoryEvents } from "@/services/historyFeed";
 import {
   buildYesterdayChangeReport,
   getYesterdayCutoff,
   type YesterdayChangeItem,
 } from "@/services/yesterdayChanges";
-import type { StatusTone, VdDiaryEvent, VdDiaryTone } from "@/types";
+import type { StatusTone, VdDiaryEvent } from "@/types";
 
 export type DashboardKpi = {
   id: string;
@@ -203,116 +203,6 @@ function isDelayedActivity(activity: ActivityListItem): boolean {
 
   const deadlineKey = activity.deadline.slice(0, 10);
   return deadlineKey < todayDateKey();
-}
-
-function extractQuotedTitle(description: string): string {
-  const match = description.match(/"([^"]+)"/);
-  return match?.[1]?.trim() || description.trim() || "Händelse";
-}
-
-function auditHeadline(entityType: string, action: string): string {
-  if (entityType === "kpi") {
-    if (action === "created") return "Ny KPI";
-    return "KPI ändrad";
-  }
-  if (entityType === "goal") {
-    if (action === "created") return "Nytt mål";
-    return "Mål uppdaterat";
-  }
-  if (entityType === "activity") {
-    if (action === "created") return "Ny aktivitet";
-    if (action === "commented") return "Ny kommentar";
-    return "Aktivitet uppdaterad";
-  }
-  if (entityType === "decision") {
-    if (action === "created") return "Nytt beslut";
-    if (action === "completed") return "Beslut avslutat";
-    return "Beslut uppdaterat";
-  }
-  if (entityType === "business_area") {
-    if (action === "created") return "Nytt affärsområde";
-    return "Affärsområde uppdaterat";
-  }
-  if (entityType === "activity_comment") {
-    return "Ny kommentar";
-  }
-  return "Händelse";
-}
-
-function auditTone(entityType: string, action: string): VdDiaryTone {
-  if (entityType === "kpi") {
-    return "yellow";
-  }
-  if (entityType === "decision") {
-    return action === "completed" ? "green" : "blue";
-  }
-  if (entityType === "goal") {
-    return "green";
-  }
-  if (entityType === "activity") {
-    return action === "created" ? "blue" : "slate";
-  }
-  if (entityType === "business_area") {
-    return "slate";
-  }
-  return "slate";
-}
-
-function statusToneToDiary(status: StatusTone): VdDiaryTone {
-  if (status === "Röd") return "red";
-  if (status === "Gul") return "yellow";
-  return "green";
-}
-
-function buildHistoryEvents(input: {
-  auditEntries: AuditLogListItem[];
-  kpiHistory: Awaited<ReturnType<typeof getRecentKpiHistoryEntries>>;
-  kpiMeta: Map<
-    string,
-    { name: string; area: string; owner: string }
-  >;
-  areaNames: Map<string, string>;
-  limit: number;
-}): VdDiaryEvent[] {
-  const fromAudit: VdDiaryEvent[] = (input.auditEntries ?? []).map((entry) => ({
-    id: `audit-${entry.id}`,
-    tone: auditTone(entry.entityType, entry.action),
-    headline: auditHeadline(entry.entityType, entry.action),
-    title: extractQuotedTitle(entry.description),
-    area: entry.businessAreaId
-      ? (input.areaNames.get(entry.businessAreaId) ?? "—")
-      : "—",
-    owner: entry.actorName || "Ej angiven",
-    occurredAt: entry.createdAt,
-    occurredAtLabel: formatSinceLoginTime(entry.createdAt),
-    href: entry.href || "/",
-  }));
-
-  const fromKpiHistory: VdDiaryEvent[] = (input.kpiHistory ?? []).map(
-    (entry) => {
-      const meta = input.kpiMeta.get(entry.kpiId);
-      return {
-        id: `kpi-history-${entry.id}`,
-        tone: statusToneToDiary(entry.status),
-        headline: "KPI-historik",
-        title: meta?.name ?? "KPI",
-        area: meta?.area ?? "—",
-        owner: meta?.owner ?? "Ej angiven",
-        occurredAt: entry.recordedAt || entry.createdAt,
-        occurredAtLabel: formatSinceLoginTime(
-          entry.recordedAt || entry.createdAt,
-        ),
-        href: `/admin/kpis/${entry.kpiId}`,
-      };
-    },
-  );
-
-  return [...fromAudit, ...fromKpiHistory]
-    .sort(
-      (a, b) =>
-        new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),
-    )
-    .slice(0, input.limit);
 }
 
 function firstNameFromUser(email: string | null): string | null {
@@ -873,12 +763,19 @@ export async function getDashboardData(): Promise<DashboardData> {
     limit: 5,
   });
 
-  const historyEvents = buildHistoryEvents({
+  const historyEvents = buildDashboardHistoryEvents({
     auditEntries: recentAudit ?? [],
     kpiHistory: recentKpiHistory ?? [],
     kpiMeta,
+    goalTitles: new Map((goals ?? []).map((goal) => [goal.id, goal.title])),
+    activityTitles: new Map(
+      (activities ?? []).map((activity) => [activity.id, activity.title]),
+    ),
+    decisionTitles: new Map(
+      (allDecisions ?? []).map((decision) => [decision.id, decision.title]),
+    ),
     areaNames,
-    limit: 20,
+    limit: 5,
   });
 
   return {

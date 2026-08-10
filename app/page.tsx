@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AppHeader } from "@/components/layout/AppHeader";
+import { VdAttentionList } from "@/components/dashboard/VdAttentionList";
 import { VdBriefingPanel } from "@/components/dashboard/VdBriefingPanel";
 import { VdDiaryTimeline } from "../components/dashboard/VdDiaryTimeline";
 import {
@@ -30,16 +31,6 @@ const kpiHref: Record<string, string> = {
 
 function toUiStatus(status: StatusTone): UiStatus {
   return status;
-}
-
-function formatKpiValue(
-  value: string | null | undefined,
-  unit: string | null | undefined,
-): string {
-  if (!value) {
-    return "—";
-  }
-  return unit ? `${value} ${unit}` : value;
 }
 
 function yesterdayChangeDot(tone: string): string {
@@ -85,6 +76,7 @@ export default async function Home() {
     kpis: [],
     delayedActivities: [],
     openDecisions: [],
+    priorityItems: [],
   };
   const sinceLoginChanges = data?.sinceLoginChanges ?? [];
   const vdAssistant = data?.vdAssistant ?? {
@@ -103,15 +95,6 @@ export default async function Home() {
   const yesterdayChanges = data?.yesterdayChanges ?? [];
   const historyEvents = data?.historyEvents ?? [];
   const focusKpis = vdFocus.kpis ?? [];
-  const kpiDetailById = new Map(
-    (kpiDetails ?? []).map((kpi) => [kpi.id, kpi]),
-  );
-
-  const vdCardToneClass: Record<string, string> = {
-    red: "!border-rose-200/80 !bg-rose-50/70",
-    yellow: "!border-amber-200/80 !bg-amber-50/70",
-    green: "!border-emerald-200/80 !bg-emerald-50/70",
-  };
 
   const sinceLoginDot: Record<string, string> = {
     red: "bg-rose-500",
@@ -374,10 +357,10 @@ export default async function Home() {
 
         <InfoPanel
           title="VD:s uppmärksamhet idag"
-          variant="warning"
+          variant="info"
           showLabel={false}
           compact
-          className={vdCardToneClass[vdFocus.cardTone]}
+          className="!border-slate-200/80 !bg-white"
         >
           <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <div className="rounded-lg border border-slate-200/70 bg-white/80 px-3 py-2">
@@ -410,80 +393,7 @@ export default async function Home() {
             </div>
           </dl>
 
-          {(focusKpis ?? []).length > 0 ? (
-            <div className="mt-4">
-              <SectionHeader title="KPI som kräver uppföljning" />
-              <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
-                {(focusKpis ?? []).map((kpi) => {
-                  const detail = kpiDetailById.get(kpi.id);
-                  return (
-                    <article
-                      key={kpi.id}
-                      className="flex h-full flex-col rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,0.05)]"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <h3 className="text-xl font-semibold tracking-tight text-slate-900">
-                            {kpi.name}
-                          </h3>
-                          <p className="mt-0.5 text-sm text-slate-500">
-                            {kpi.area}
-                          </p>
-                        </div>
-                        <StatusBadge status={toUiStatus(kpi.status)} />
-                      </div>
-
-                      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm text-slate-600">
-                        <div>
-                          <dt className="text-xs text-slate-500">
-                            Aktuellt värde
-                          </dt>
-                          <dd className="mt-0.5 text-base font-semibold text-slate-900">
-                            {formatKpiValue(
-                              detail?.currentValue,
-                              detail?.unit,
-                            )}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt className="text-xs text-slate-500">Målvärde</dt>
-                          <dd className="mt-0.5 text-base font-semibold text-slate-900">
-                            {formatKpiValue(
-                              detail?.targetValue,
-                              detail?.unit,
-                            )}
-                          </dd>
-                        </div>
-                        <div className="flex items-baseline justify-between gap-2 col-span-2 border-t border-slate-100 pt-2">
-                          <dt>Trend</dt>
-                          <dd className="font-medium text-slate-800">
-                            {kpi.trend}
-                          </dd>
-                        </div>
-                        <div className="flex items-baseline justify-between gap-2 col-span-2">
-                          <dt>Ansvarig</dt>
-                          <dd className="font-medium text-slate-800">
-                            {kpi.owner}
-                          </dd>
-                        </div>
-                      </dl>
-
-                      <Link
-                        href={kpi.href}
-                        className="mt-4 inline-flex w-full items-center justify-center rounded-xl bg-[#0b1220] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
-                      >
-                        Öppna KPI
-                      </Link>
-                    </article>
-                  );
-                })}
-              </div>
-            </div>
-          ) : (
-            <p className="mt-4 text-sm text-slate-700">
-              Inga KPI kräver uppföljning just nu.
-            </p>
-          )}
+          <VdAttentionList items={vdFocus.priorityItems ?? []} />
 
           <div className="mt-4 flex flex-wrap gap-2">
             <Link

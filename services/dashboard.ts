@@ -22,6 +22,10 @@ import {
 } from "@/services/sinceLogin";
 import { buildDashboardHistoryEvents } from "@/services/historyFeed";
 import {
+  buildVdAttentionItems,
+  type VdAttentionItem,
+} from "@/services/vdAttention";
+import {
   buildYesterdayChangeReport,
   getYesterdayCutoff,
   type YesterdayChangeItem,
@@ -118,6 +122,8 @@ export type DashboardVdFocus = {
   kpis: DashboardVdFocusKpi[];
   delayedActivities: DashboardVdFocusActivity[];
   openDecisions: DashboardVdFocusDecision[];
+  /** Prioritized operational queue for VD (max 5). */
+  priorityItems: VdAttentionItem[];
 };
 
 export type DashboardVdAssistantRisk = "Låg" | "Medel" | "Hög";
@@ -716,6 +722,20 @@ export async function getDashboardData(): Promise<DashboardData> {
       dueDate: decision.dueDate ? formatDateSv(decision.dueDate) : "—",
       href: `/admin/decisions/${decision.id}`,
     })),
+    priorityItems: buildVdAttentionItems({
+      kpis: allKpis ?? [],
+      delayedActivities,
+      openDecisions,
+      areas: (areaRows ?? []).map((area) => ({
+        id: area.id,
+        name: area.name,
+        slug: area.slug,
+        manager: area.manager ?? null,
+        status: area.status,
+      })),
+      areaManagers,
+      limit: 5,
+    }),
   };
 
   const sinceLoginChanges = buildSinceLoginChanges({

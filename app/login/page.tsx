@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { signInAction } from "./actions";
 
 export const metadata: Metadata = {
@@ -7,12 +8,13 @@ export const metadata: Metadata = {
 };
 
 type LoginPageProps = {
-  searchParams: Promise<{ error?: string; next?: string }>;
+  searchParams: Promise<{ error?: string; next?: string; message?: string }>;
 };
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = await searchParams;
   const error = params.error;
+  const message = params.message;
   const next = params.next?.startsWith("/") ? params.next : "/";
 
   return (
@@ -29,6 +31,12 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             Använd ditt Supabase-konto för att fortsätta.
           </p>
         </div>
+
+        {message ? (
+          <p className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+            {message}
+          </p>
+        ) : null}
 
         {error ? (
           <p className="mb-5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
@@ -57,12 +65,20 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           </div>
 
           <div>
-            <label
-              htmlFor="password"
-              className="block text-xs font-medium text-neutral-500"
-            >
-              Lösenord
-            </label>
+            <div className="flex items-center justify-between gap-3">
+              <label
+                htmlFor="password"
+                className="block text-xs font-medium text-neutral-500"
+              >
+                Lösenord
+              </label>
+              <Link
+                href="/auth/forgot-password"
+                className="text-xs font-medium text-neutral-600 underline-offset-2 hover:text-neutral-900 hover:underline"
+              >
+                Glömt lösenord?
+              </Link>
+            </div>
             <input
               id="password"
               name="password"

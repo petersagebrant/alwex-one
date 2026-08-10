@@ -1,9 +1,18 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  isRecoveryAllowedPath,
+  RECOVERY_COOKIE,
+  RECOVERY_UPDATE_PATH,
+} from "@/lib/auth/recovery";
 import { getSupabaseEnv } from "./env";
 
 function isPublicAuthPath(pathname: string): boolean {
-  return pathname === "/login" || pathname.startsWith("/login/") || pathname.startsWith("/auth/");
+  return (
+    pathname === "/login" ||
+    pathname.startsWith("/login/") ||
+    pathname.startsWith("/auth/")
+  );
 }
 
 function safeInternalPath(value: string | null, fallback = "/"): string {
@@ -30,10 +39,59 @@ function copyCookies(from: NextResponse, to: NextResponse) {
 }
 
 /**
+ * Supabase Dashboard "Send password recovery" uses Site URL as redirect_to
+ * (often `/`), not `/auth/callback`. Catch auth codes/token hashes anywhere
+ * and route them through the callback → update-password flow.
+ */
+function redirectAuthParamsToCallback(request: NextRequest): NextResponse | null {
+  const pathname = request.nextUrl.pathname;
+  if (pathname === "/auth/callback" || pathname.startsWith("/auth/callback/")) {
+    return null;
+  }
+
+  const code = request.nextUrl.searchParams.get("code");
+  const tokenHash = request.nextUrl.searchParams.get("token_hash");
+  const type = request.nextUrl.searchParams.get("type");
+
+  if (!code && !(tokenHash && type)) {
+    return null;
+  }
+
+  const callbackUrl = request.nextUrl.clone();
+  callbackUrl.pathname = "/auth/callback";
+  callbackUrl.search = "";
+  if (code) {
+    callbackUrl.searchParams.set("code", code);
+  }
+  if (tokenHash) {
+    callbackUrl.searchParams.set("token_hash", tokenHash);
+  }
+  if (type) {
+    callbackUrl.searchParams.set("type", type);
+  }
+  callbackUrl.searchParams.set("next", RECOVERY_UPDATE_PATH);
+
+  console.log("[auth-recovery] proxy intercepted auth params → callback", {
+    from: pathname,
+    hasCode: Boolean(code),
+    hasTokenHash: Boolean(tokenHash),
+    type,
+    to: callbackUrl.toString(),
+  });
+
+  return NextResponse.redirect(callbackUrl);
+}
+
+/**
  * Refreshes the Auth session and redirects unauthenticated users to /login.
  * Must preserve supabaseResponse cookies on every returned response.
  */
 export async function updateSession(request: NextRequest) {
+  const authParamRedirect = redirectAuthParamsToCallback(request);
+  if (authParamRedirect) {
+    return authParamRedirect;
+  }
+
   let supabaseResponse = NextResponse.next({
     request,
   });
@@ -73,6 +131,25 @@ export async function updateSession(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
   const publicAuth = isPublicAuthPath(pathname);
+  const recoveryPending =
+    request.cookies.get(RECOVERY_COOKIE)?.value === "1";
+
+  // Recovery session must finish on update-password — never Dashboard.
+  if (recoveryPending && !isRecoveryAllowedPath(pathname)) {
+    const recoveryUrl = request.nextUrl.clone();
+    recoveryUrl.pathname = RECOVERY_UPDATE_PATH;
+    recoveryUrl.search = "";
+
+    console.log("[auth-recovery] proxy recovery-gate redirect", {
+      from: pathname,
+      to: RECOVERY_UPDATE_PATH,
+      hasUser: Boolean(user),
+    });
+
+    const redirectResponse = NextResponse.redirect(recoveryUrl);
+    copyCookies(supabaseResponse, redirectResponse);
+    return redirectResponse;
+  }
 
   // /login and /auth/* must never be auth-gated.
   if (!user && !publicAuth) {
@@ -87,12 +164,19 @@ export async function updateSession(request: NextRequest) {
     return redirectResponse;
   }
 
-  // Already signed in — leave the login page.
+  // Already signed in — leave the login page (unless recovery is pending).
   if (user && publicAuth && pathname.startsWith("/login")) {
-    const next = safeInternalPath(request.nextUrl.searchParams.get("next"));
+    const next = recoveryPending
+      ? RECOVERY_UPDATE_PATH
+      : safeInternalPath(request.nextUrl.searchParams.get("next"));
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = next;
     redirectUrl.search = "";
+
+    console.log("[auth-recovery] proxy signed-in leave /login", {
+      to: next,
+      recoveryPending,
+    });
 
     const redirectResponse = NextResponse.redirect(redirectUrl);
     copyCookies(supabaseResponse, redirectResponse);

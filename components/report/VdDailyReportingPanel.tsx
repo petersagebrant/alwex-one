@@ -157,8 +157,8 @@ function ReportingBody({
             />
           </div>
           <p className="text-xs text-slate-500">
-            Status väljs manuellt. Automatisk status kräver KPI-riktning
-            (higher/lower is better) som saknas i datamodellen.
+            Status beräknas automatiskt när KPI:n har riktning och toleranser.
+            Kommentar krävs vid Gul eller Röd.
           </p>
         </div>
       </InfoPanel>

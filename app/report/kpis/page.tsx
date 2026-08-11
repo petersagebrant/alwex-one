@@ -2,16 +2,15 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppHeader } from "@/components/layout/AppHeader";
+import { AoChefKpiReportList } from "@/components/report/AoChefKpiReportList";
 import { VdKpiReportingView } from "@/components/report/VdKpiReportingView";
 import { InfoPanel, SectionHeader } from "@/components/ui";
-import { canWriteOperational } from "@/lib/auth/roles";
 import { requireProfile } from "@/lib/auth/require-user";
 import { fetchBusinessAreas } from "@/lib/supabase/business-areas";
 import {
   getMyKpisForTodayReporting,
 } from "@/services/kpiReporting";
 import { formatDateSv } from "@/lib/format/date";
-import { DailyKpiReportList } from "@/components/report/DailyKpiReportList";
 import type { MyKpisForTodayReporting } from "@/types";
 
 export const metadata: Metadata = {
@@ -26,7 +25,7 @@ type ReportKpisPageProps = {
   searchParams: Promise<{ area?: string | string[] }>;
 };
 
-function ReportingProgress({
+function AoChefReportingProgress({
   reporting,
 }: {
   reporting: MyKpisForTodayReporting;
@@ -64,14 +63,14 @@ function ReportingProgress({
             />
           </div>
           <p className="text-xs text-slate-500">
-            Status väljs manuellt. Automatisk status kräver KPI-riktning
-            (higher/lower is better) som saknas i datamodellen.
+            Ange nytt värde och spara. Status beräknas automatiskt. Kommentar
+            krävs vid Gul eller Röd.
           </p>
         </div>
       </InfoPanel>
 
       {total > 0 ? (
-        <DailyKpiReportList items={reporting.items} />
+        <AoChefKpiReportList items={reporting.items} />
       ) : (
         <p className="rounded-2xl border border-slate-200/80 bg-white p-5 text-sm text-slate-600 shadow-[0_6px_18px_rgba(15,23,42,0.05)]">
           Inga KPI:er är skapade för {reporting.businessAreaName}.
@@ -81,10 +80,10 @@ function ReportingProgress({
   );
 }
 
-function ReportPageActions({ canManageKpis }: { canManageKpis: boolean }) {
+function ReportPageActions({ showManageKpis }: { showManageKpis: boolean }) {
   return (
     <div className="flex flex-wrap items-center gap-3">
-      {canManageKpis ? (
+      {showManageKpis ? (
         <Link
           href="/admin/kpis"
           className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-800 shadow-sm transition hover:bg-slate-50"
@@ -110,7 +109,6 @@ export default async function ReportKpisPage({
   const isAoChef = profile.role === "ao_chef";
   const isLeadership =
     profile.role === "vd" || profile.role === "administrator";
-  const canManageKpis = canWriteOperational(profile.role);
 
   if (!isAoChef && !isLeadership) {
     redirect("/");
@@ -124,7 +122,7 @@ export default async function ReportKpisPage({
           <main className="mx-auto w-full max-w-3xl flex-1 space-y-6 px-4 py-6 sm:px-6 sm:py-8">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <SectionHeader title="Mina KPI:er idag" />
-              <ReportPageActions canManageKpis={canManageKpis} />
+              <ReportPageActions showManageKpis={false} />
             </div>
             <InfoPanel title="Mina KPI:er idag" showLabel={false} compact>
               <p>
@@ -152,10 +150,10 @@ export default async function ReportKpisPage({
               title="Mina KPI:er idag"
               description={`${reporting?.businessAreaName ?? "Affärsområde"} · ${reportDateLabel}`}
             />
-            <ReportPageActions canManageKpis={canManageKpis} />
+            <ReportPageActions showManageKpis={false} />
           </div>
 
-          {reporting ? <ReportingProgress reporting={reporting} /> : null}
+          {reporting ? <AoChefReportingProgress reporting={reporting} /> : null}
         </main>
       </div>
     );
@@ -174,7 +172,7 @@ export default async function ReportKpisPage({
             title="KPI-rapportering idag"
             description="Välj affärsområde för granskning"
           />
-          <ReportPageActions canManageKpis={canManageKpis} />
+          <ReportPageActions showManageKpis />
         </div>
 
         <VdKpiReportingView

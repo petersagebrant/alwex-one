@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AppHeader } from "@/components/layout/AppHeader";
+import { AoChefDashboard } from "@/components/dashboard/AoChefDashboard";
 import { VdAttentionList } from "@/components/dashboard/VdAttentionList";
 import { VdBriefingPanel } from "@/components/dashboard/VdBriefingPanel";
 import { VdDiaryTimeline } from "../components/dashboard/VdDiaryTimeline";
@@ -14,6 +15,7 @@ import {
   buildLocalVdBriefing,
   getCachedVdBriefing,
 } from "@/services/assistant";
+import { getAoChefDashboardData } from "@/services/aoChefDashboard";
 import { getDashboardData } from "@/services/dashboard";
 import { getKPIs } from "@/services/kpis";
 import { getDashboardReportingContext } from "@/services/kpiReporting";
@@ -62,6 +64,20 @@ export default async function Home() {
   const profileRow = currentUser
     ? await fetchProfileByUserId(currentUser.id).catch(() => null)
     : null;
+
+  // AO-chef: fully separate, area-scoped dashboard. VD/admin path below unchanged.
+  if (
+    profileRow?.role === "ao_chef" &&
+    profileRow.business_area_id
+  ) {
+    const aoData = await getAoChefDashboardData({
+      id: currentUser!.id,
+      email: currentUser!.email,
+      role: "ao_chef",
+      businessAreaId: profileRow.business_area_id,
+    });
+    return <AoChefDashboard data={aoData} />;
+  }
 
   const [data, kpiDetails, reportingContext] = await Promise.all([
     getDashboardData(),

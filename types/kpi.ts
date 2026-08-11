@@ -22,6 +22,8 @@ export type KPI = {
   /** NULL = manual status in daily reporting. */
   direction: KpiDirection | null;
   toleranceType: KpiToleranceType | null;
+  /** Optional green band for TARGET_IS_BEST. NULL = tiny heuristic. */
+  greenTolerance: number | null;
   yellowTolerance: number | null;
   createdAt: string;
   updatedAt: string;
@@ -48,6 +50,7 @@ export type CreateKPIInput = {
   trend: KpiTrend;
   direction?: KpiDirection | null;
   toleranceType?: KpiToleranceType | null;
+  greenTolerance?: number | null;
   yellowTolerance?: number | null;
 };
 
@@ -63,5 +66,6 @@ export type UpdateKPIInput = {
   trend: KpiTrend;
   direction?: KpiDirection | null;
   toleranceType?: KpiToleranceType | null;
+  greenTolerance?: number | null;
   yellowTolerance?: number | null;
 };

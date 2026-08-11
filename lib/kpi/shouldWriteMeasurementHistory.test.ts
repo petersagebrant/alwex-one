@@ -8,6 +8,7 @@ describe("shouldWriteKpiMeasurementHistory", () => {
       shouldWriteKpiMeasurementHistory([
         { field: "direction" },
         { field: "tolerance_type" },
+        { field: "green_tolerance" },
         { field: "yellow_tolerance" },
         { field: "status" },
       ]),

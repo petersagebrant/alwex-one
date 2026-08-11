@@ -37,6 +37,7 @@ export function DailyKpiReportCard({
     ? computeKpiStatus({
         direction: item.kpi.direction,
         toleranceType: item.kpi.toleranceType,
+        greenTolerance: item.kpi.greenTolerance,
         yellowTolerance: item.kpi.yellowTolerance,
         value,
         target: item.kpi.targetValue,

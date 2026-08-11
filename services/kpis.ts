@@ -1,6 +1,7 @@
 import {
   computeKpiStatus,
   defaultToleranceTypeForTarget,
+  validateGreenYellowTolerances,
   type KpiDirection,
   type KpiToleranceType,
 } from "@/lib/kpi/computeStatus";
@@ -46,6 +47,7 @@ const KPI_TRACKED_FIELDS = [
   "business_area_id",
   "direction",
   "tolerance_type",
+  "green_tolerance",
   "yellow_tolerance",
 ] as const;
 
@@ -85,7 +87,7 @@ function toToleranceType(
   return null;
 }
 
-function toYellowTolerance(
+function toToleranceNumber(
   value: number | string | null | undefined,
 ): number | null {
   return parseNumeric(value);
@@ -104,7 +106,8 @@ function mapKpiRow(row: KpiRow): KPI {
     trend: toTrend(row.trend),
     direction: toDirection(row.direction),
     toleranceType: toToleranceType(row.tolerance_type),
-    yellowTolerance: toYellowTolerance(row.yellow_tolerance),
+    greenTolerance: toToleranceNumber(row.green_tolerance),
+    yellowTolerance: toToleranceNumber(row.yellow_tolerance),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -113,11 +116,13 @@ function mapKpiRow(row: KpiRow): KPI {
 function normalizeAutoStatusFields(input: {
   direction?: KpiDirection | null;
   toleranceType?: KpiToleranceType | null;
+  greenTolerance?: number | null;
   yellowTolerance?: number | null;
   targetValue?: string | null;
 }): {
   direction: KpiDirection | null;
   tolerance_type: KpiToleranceType | null;
+  green_tolerance: number | null;
   yellow_tolerance: number | null;
 } {
   const direction = input.direction ?? null;
@@ -125,6 +130,7 @@ function normalizeAutoStatusFields(input: {
     return {
       direction: null,
       tolerance_type: null,
+      green_tolerance: null,
       yellow_tolerance: null,
     };
   }
@@ -133,12 +139,22 @@ function normalizeAutoStatusFields(input: {
     input.yellowTolerance != null && Number.isFinite(input.yellowTolerance)
       ? input.yellowTolerance
       : null;
+  const green =
+    input.greenTolerance != null && Number.isFinite(input.greenTolerance)
+      ? input.greenTolerance
+      : null;
+
+  const toleranceError = validateGreenYellowTolerances(green, yellow);
+  if (toleranceError) {
+    throw new Error(toleranceError);
+  }
 
   return {
     direction,
     tolerance_type:
       input.toleranceType ??
       defaultToleranceTypeForTarget(input.targetValue ?? null),
+    green_tolerance: green,
     yellow_tolerance: yellow,
   };
 }
@@ -147,6 +163,7 @@ function normalizeAutoStatusFields(input: {
 function resolveSnapshotStatus(input: {
   direction: KpiDirection | null;
   toleranceType: KpiToleranceType | null;
+  greenTolerance: number | null;
   yellowTolerance: number | null;
   currentValue?: string | null;
   targetValue?: string | null;
@@ -155,6 +172,7 @@ function resolveSnapshotStatus(input: {
   const computed = computeKpiStatus({
     direction: input.direction,
     toleranceType: input.toleranceType,
+    greenTolerance: input.greenTolerance,
     yellowTolerance: input.yellowTolerance,
     value: input.currentValue,
     target: input.targetValue,
@@ -223,6 +241,7 @@ export async function createKPI(input: CreateKPIInput): Promise<KPI> {
   const auto = normalizeAutoStatusFields({
     direction: input.direction,
     toleranceType: input.toleranceType,
+    greenTolerance: input.greenTolerance,
     yellowTolerance: input.yellowTolerance,
     targetValue: input.targetValue,
   });
@@ -231,6 +250,7 @@ export async function createKPI(input: CreateKPIInput): Promise<KPI> {
   const status = resolveSnapshotStatus({
     direction: auto.direction,
     toleranceType: auto.tolerance_type,
+    greenTolerance: auto.green_tolerance,
     yellowTolerance: auto.yellow_tolerance,
     currentValue,
     targetValue,
@@ -248,6 +268,7 @@ export async function createKPI(input: CreateKPIInput): Promise<KPI> {
     trend: input.trend,
     direction: auto.direction,
     tolerance_type: auto.tolerance_type,
+    green_tolerance: auto.green_tolerance,
     yellow_tolerance: auto.yellow_tolerance,
   };
 
@@ -308,6 +329,7 @@ export async function updateKPI(input: UpdateKPIInput): Promise<KPI> {
   const auto = normalizeAutoStatusFields({
     direction: input.direction,
     toleranceType: input.toleranceType,
+    greenTolerance: input.greenTolerance,
     yellowTolerance: input.yellowTolerance,
     targetValue: input.targetValue,
   });
@@ -316,6 +338,7 @@ export async function updateKPI(input: UpdateKPIInput): Promise<KPI> {
   const status = resolveSnapshotStatus({
     direction: auto.direction,
     toleranceType: auto.tolerance_type,
+    greenTolerance: auto.green_tolerance,
     yellowTolerance: auto.yellow_tolerance,
     currentValue,
     targetValue,
@@ -333,6 +356,7 @@ export async function updateKPI(input: UpdateKPIInput): Promise<KPI> {
     trend: input.trend,
     direction: auto.direction,
     tolerance_type: auto.tolerance_type,
+    green_tolerance: auto.green_tolerance,
     yellow_tolerance: auto.yellow_tolerance,
   };
 
@@ -348,7 +372,8 @@ export async function updateKPI(input: UpdateKPIInput): Promise<KPI> {
       trend: existing.trend,
       direction: existing.direction,
       tolerance_type: existing.tolerance_type,
-      yellow_tolerance: toYellowTolerance(existing.yellow_tolerance),
+      green_tolerance: toToleranceNumber(existing.green_tolerance),
+      yellow_tolerance: toToleranceNumber(existing.yellow_tolerance),
     },
     next,
     KPI_TRACKED_FIELDS,

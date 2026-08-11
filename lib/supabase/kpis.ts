@@ -12,6 +12,7 @@ export type KpiRow = {
   trend: string;
   direction: string | null;
   tolerance_type: string | null;
+  green_tolerance: number | string | null;
   yellow_tolerance: number | string | null;
   created_at: string;
   updated_at: string;
@@ -28,6 +29,7 @@ export type InsertKpiInput = {
   trend: string;
   direction: string | null;
   tolerance_type: string | null;
+  green_tolerance: number | null;
   yellow_tolerance: number | null;
 };
 
@@ -42,12 +44,13 @@ export type UpdateKpiRowInput = {
   trend: string;
   direction: string | null;
   tolerance_type: string | null;
+  green_tolerance: number | null;
   yellow_tolerance: number | null;
   updated_at: string;
 };
 
 const kpiSelect =
-  "id, business_area_id, name, category, target_value, current_value, unit, status, trend, direction, tolerance_type, yellow_tolerance, created_at, updated_at";
+  "id, business_area_id, name, category, target_value, current_value, unit, status, trend, direction, tolerance_type, green_tolerance, yellow_tolerance, created_at, updated_at";
 
 export async function fetchKpisByBusinessAreaId(
   businessAreaId: string,

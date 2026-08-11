@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { requireOperationalWriter } from "@/lib/auth/require-user";
+import { validateGreenYellowTolerances } from "@/lib/kpi/computeStatus";
 import { parseNumeric } from "@/lib/kpi/parseNumeric";
 import { createKPI, updateKPI } from "@/services/kpis";
 import type {
@@ -43,6 +44,7 @@ type ReadKpiFieldsResult =
       trendValue: string;
       direction: KpiDirection | null;
       toleranceType: KpiToleranceType | null;
+      greenTolerance: number | null;
       yellowTolerance: number | null;
     } }
   | { ok: false; error: string };
@@ -50,6 +52,7 @@ type ReadKpiFieldsResult =
 function readKpiFields(formData: FormData): ReadKpiFieldsResult {
   const directionRaw = String(formData.get("direction") ?? "").trim();
   const toleranceTypeRaw = String(formData.get("toleranceType") ?? "").trim();
+  const greenToleranceRaw = String(formData.get("greenTolerance") ?? "").trim();
   const yellowToleranceRaw = String(formData.get("yellowTolerance") ?? "").trim();
 
   let direction: KpiDirection | null = null;
@@ -68,6 +71,15 @@ function readKpiFields(formData: FormData): ReadKpiFieldsResult {
     toleranceType = toleranceTypeRaw;
   }
 
+  let greenTolerance: number | null = null;
+  if (greenToleranceRaw) {
+    const parsed = parseNumeric(greenToleranceRaw);
+    if (parsed === null || parsed < 0) {
+      return { ok: false, error: "Ogiltig grön tolerans." };
+    }
+    greenTolerance = parsed;
+  }
+
   let yellowTolerance: number | null = null;
   if (yellowToleranceRaw) {
     const parsed = parseNumeric(yellowToleranceRaw);
@@ -84,6 +96,14 @@ function readKpiFields(formData: FormData): ReadKpiFieldsResult {
     };
   }
 
+  const toleranceError = validateGreenYellowTolerances(
+    greenTolerance,
+    yellowTolerance,
+  );
+  if (toleranceError) {
+    return { ok: false, error: toleranceError };
+  }
+
   return {
     ok: true,
     fields: {
@@ -97,6 +117,7 @@ function readKpiFields(formData: FormData): ReadKpiFieldsResult {
       trendValue: String(formData.get("trend") ?? ""),
       direction,
       toleranceType,
+      greenTolerance,
       yellowTolerance,
     },
   };
@@ -142,6 +163,7 @@ export async function createKpiAction(formData: FormData) {
       trend: fields.trendValue,
       direction: fields.direction,
       toleranceType: fields.toleranceType,
+      greenTolerance: fields.greenTolerance,
       yellowTolerance: fields.yellowTolerance,
     });
   } catch (error) {
@@ -207,6 +229,7 @@ export async function updateKpiAction(formData: FormData) {
       trend: fields.trendValue,
       direction: fields.direction,
       toleranceType: fields.toleranceType,
+      greenTolerance: fields.greenTolerance,
       yellowTolerance: fields.yellowTolerance,
     });
   } catch (error) {

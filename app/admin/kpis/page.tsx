@@ -192,7 +192,7 @@ function KpiFormFields({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <label
             htmlFor="direction"
@@ -231,6 +231,31 @@ function KpiFormFields({
             <option value="ABSOLUTE">Absolut tolerans</option>
           </select>
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+          <label
+            htmlFor="greenTolerance"
+            className="block text-xs font-medium text-neutral-500"
+          >
+            Grön tolerans
+          </label>
+          <input
+            id="greenTolerance"
+            name="greenTolerance"
+            type="text"
+            inputMode="decimal"
+            defaultValue={
+              kpi?.greenTolerance != null ? String(kpi.greenTolerance) : ""
+            }
+            placeholder="valfritt, t.ex. 0,5"
+            className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
+          />
+          <p className="mt-1 text-[11px] text-neutral-500">
+            För Närmast mål. Tom = liten automatisk grön zon.
+          </p>
+        </div>
 
         <div>
           <label
@@ -251,10 +276,14 @@ function KpiFormFields({
             className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
           />
           <p className="mt-1 text-[11px] text-neutral-500">
-            Procentenheter eller absoluta enheter beroende på typ.
+            Grön tolerans får inte vara större än gul.
           </p>
         </div>
       </div>
+      <p className="text-[11px] text-neutral-500">
+        Absolut tolerans + enhet %: Avvikelsen anges i procentenheter från
+        målvärdet.
+      </p>
     </>
   );
 }

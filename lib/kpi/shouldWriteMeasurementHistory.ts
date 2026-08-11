@@ -1,8 +1,9 @@
 /**
  * Whether updateKPI should append a kpi_history measurement point.
  *
- * A) Definition/metadata (direction, tolerance_*, name, category, unit, target,
- *    trend, business_area) and auto-recomputed status → no history.
+ * A) Definition/metadata (direction, tolerance_*, green_tolerance, yellow_tolerance,
+ *    name, category, unit, target, trend, business_area) and auto-recomputed
+ *    status → no history.
  * B) Explicit current_value (utfall) change → history.
  *
  * createKPI still writes one initial history row when value/status exist

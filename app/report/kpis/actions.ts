@@ -115,6 +115,7 @@ export async function reportDailyKpiAction(input: {
   const computedStatus = computeKpiStatus({
     direction: kpi.direction,
     toleranceType: kpi.tolerance_type,
+    greenTolerance: kpi.green_tolerance,
     yellowTolerance: kpi.yellow_tolerance,
     value,
     target: kpi.target_value,

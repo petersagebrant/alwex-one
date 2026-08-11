@@ -23,6 +23,8 @@ export type {
   KPI,
   Kpi,
   KpiTrend,
+  KpiDirection,
+  KpiToleranceType,
   CreateKPIInput,
   UpdateKPIInput,
 } from "./kpi";

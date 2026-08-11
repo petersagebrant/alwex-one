@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { VdKpiReportingView } from "@/components/report/VdKpiReportingView";
 import { InfoPanel, SectionHeader } from "@/components/ui";
+import { canWriteOperational } from "@/lib/auth/roles";
 import { requireProfile } from "@/lib/auth/require-user";
 import { fetchBusinessAreas } from "@/lib/supabase/business-areas";
 import {
@@ -80,6 +81,27 @@ function ReportingProgress({
   );
 }
 
+function ReportPageActions({ canManageKpis }: { canManageKpis: boolean }) {
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      {canManageKpis ? (
+        <Link
+          href="/admin/kpis"
+          className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-800 shadow-sm transition hover:bg-slate-50"
+        >
+          Hantera KPI:er
+        </Link>
+      ) : null}
+      <Link
+        href="/"
+        className="text-sm font-medium text-slate-700 underline-offset-4 hover:underline"
+      >
+        Till Dashboard
+      </Link>
+    </div>
+  );
+}
+
 export default async function ReportKpisPage({
   searchParams: _searchParams,
 }: ReportKpisPageProps) {
@@ -88,6 +110,7 @@ export default async function ReportKpisPage({
   const isAoChef = profile.role === "ao_chef";
   const isLeadership =
     profile.role === "vd" || profile.role === "administrator";
+  const canManageKpis = canWriteOperational(profile.role);
 
   if (!isAoChef && !isLeadership) {
     redirect("/");
@@ -99,6 +122,10 @@ export default async function ReportKpisPage({
         <div className="flex min-h-full flex-1 flex-col bg-[#eef2f6] font-sans text-slate-800">
           <AppHeader current="kpis" />
           <main className="mx-auto w-full max-w-3xl flex-1 space-y-6 px-4 py-6 sm:px-6 sm:py-8">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <SectionHeader title="Mina KPI:er idag" />
+              <ReportPageActions canManageKpis={canManageKpis} />
+            </div>
             <InfoPanel title="Mina KPI:er idag" showLabel={false} compact>
               <p>
                 Ditt konto saknar kopplat affärsområde. Kontakta administratör.
@@ -125,12 +152,7 @@ export default async function ReportKpisPage({
               title="Mina KPI:er idag"
               description={`${reporting?.businessAreaName ?? "Affärsområde"} · ${reportDateLabel}`}
             />
-            <Link
-              href="/"
-              className="text-sm font-medium text-slate-700 underline-offset-4 hover:underline"
-            >
-              Till Dashboard
-            </Link>
+            <ReportPageActions canManageKpis={canManageKpis} />
           </div>
 
           {reporting ? <ReportingProgress reporting={reporting} /> : null}
@@ -152,12 +174,7 @@ export default async function ReportKpisPage({
             title="KPI-rapportering idag"
             description="Välj affärsområde för granskning"
           />
-          <Link
-            href="/"
-            className="text-sm font-medium text-slate-700 underline-offset-4 hover:underline"
-          >
-            Till Dashboard
-          </Link>
+          <ReportPageActions canManageKpis={canManageKpis} />
         </div>
 
         <VdKpiReportingView

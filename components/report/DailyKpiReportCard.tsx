@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition, type FormEvent } from "react";
 import { StatusBadge } from "@/components/ui";
+import { computeKpiStatus } from "@/lib/kpi/computeStatus";
 import { formatDateTimeSv } from "@/lib/format/date";
 import { formatKpiDisplayValue } from "@/lib/format/kpi";
 import { reportDailyKpiAction } from "@/app/report/kpis/actions";
@@ -31,7 +32,20 @@ export function DailyKpiReportCard({
   const [comment, setComment] = useState(item.todayReport?.comment ?? "");
   const [error, setError] = useState<string | null>(null);
 
-  const commentRequired = status === "Gul" || status === "Röd";
+  const autoStatusEnabled = Boolean(item.kpi.direction);
+  const liveComputedStatus = autoStatusEnabled
+    ? computeKpiStatus({
+        direction: item.kpi.direction,
+        toleranceType: item.kpi.toleranceType,
+        yellowTolerance: item.kpi.yellowTolerance,
+        value,
+        target: item.kpi.targetValue,
+      })
+    : null;
+
+  const effectiveStatus: StatusTone = liveComputedStatus ?? status;
+  const commentRequired =
+    effectiveStatus === "Gul" || effectiveStatus === "Röd";
   const unit = item.kpi.unit;
   const showForm = expanded && editing;
   const showReportedSummary = expanded && item.isReported && !editing;
@@ -53,7 +67,7 @@ export function DailyKpiReportCard({
       const result = await reportDailyKpiAction({
         kpiId: item.kpi.id,
         value,
-        status,
+        status: effectiveStatus,
         comment,
       });
 
@@ -192,23 +206,46 @@ export function DailyKpiReportCard({
               >
                 Status
               </label>
-              <select
-                id={`status-${item.kpi.id}`}
-                name="status"
-                value={status}
-                onChange={(event) =>
-                  setStatus(event.target.value as StatusTone)
-                }
-                disabled={isPending}
-                className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
-              >
-                <option value="Grön">Grön</option>
-                <option value="Gul">Gul</option>
-                <option value="Röd">Röd</option>
-              </select>
-              <p className="mt-1 text-[11px] text-slate-500">
-                Välj status manuellt (ingen automatisk beräkning ännu).
-              </p>
+              {autoStatusEnabled ? (
+                <div className="mt-1.5 space-y-1.5">
+                  <input
+                    type="hidden"
+                    name="status"
+                    value={effectiveStatus}
+                  />
+                  <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                    <StatusBadge status={effectiveStatus} />
+                    <span className="text-xs text-slate-600">
+                      {liveComputedStatus
+                        ? "Beräknas automatiskt"
+                        : "Ange ett giltigt värde för beräkning"}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    Status beräknas från målvärde och tolerans.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <select
+                    id={`status-${item.kpi.id}`}
+                    name="status"
+                    value={status}
+                    onChange={(event) =>
+                      setStatus(event.target.value as StatusTone)
+                    }
+                    disabled={isPending}
+                    className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                  >
+                    <option value="Grön">Grön</option>
+                    <option value="Gul">Gul</option>
+                    <option value="Röd">Röd</option>
+                  </select>
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    Välj status manuellt.
+                  </p>
+                </>
+              )}
             </div>
           </div>
 

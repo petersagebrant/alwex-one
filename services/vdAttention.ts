@@ -1,3 +1,4 @@
+import { parseNumeric } from "@/lib/kpi/parseNumeric";
 import type { StatusTone } from "@/types";
 import type { KPIListItem } from "@/services/kpis";
 import type { ActivityListItem } from "@/services/activities";
@@ -41,14 +42,6 @@ function cleanOwner(owner: string | null | undefined): string | null {
     return null;
   }
   return name;
-}
-
-function parseNumeric(value: string | null | undefined): number | null {
-  if (!value) return null;
-  const normalized = value.replace(/\s/g, "").replace(",", ".").replace(/[^\d.-]/g, "");
-  if (!normalized) return null;
-  const parsed = Number.parseFloat(normalized);
-  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function formatValue(value: string | null | undefined, unit?: string | null): string {

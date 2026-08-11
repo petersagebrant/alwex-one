@@ -167,6 +167,9 @@ function KpiFormFields({
             <option value="Gul">Gul</option>
             <option value="Röd">Röd</option>
           </select>
+          <p className="mt-1 text-[11px] text-neutral-500">
+            Vid automatisk riktning beräknas status om värde och mål finns.
+          </p>
         </div>
 
         <div>
@@ -186,6 +189,70 @@ function KpiFormFields({
             <option value="Oförändrad">Oförändrad</option>
             <option value="Ner">Ner</option>
           </select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div>
+          <label
+            htmlFor="direction"
+            className="block text-xs font-medium text-neutral-500"
+          >
+            Riktning
+          </label>
+          <select
+            id="direction"
+            name="direction"
+            defaultValue={kpi?.direction ?? ""}
+            className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
+          >
+            <option value="">Manuell status</option>
+            <option value="HIGHER_IS_BETTER">Högre är bättre</option>
+            <option value="LOWER_IS_BETTER">Lägre är bättre</option>
+            <option value="TARGET_IS_BEST">Närmast mål är bäst</option>
+          </select>
+        </div>
+
+        <div>
+          <label
+            htmlFor="toleranceType"
+            className="block text-xs font-medium text-neutral-500"
+          >
+            Toleranstyp
+          </label>
+          <select
+            id="toleranceType"
+            name="toleranceType"
+            defaultValue={kpi?.toleranceType ?? ""}
+            className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
+          >
+            <option value="">Standard (procent / absolut vid ≈0)</option>
+            <option value="PERCENT">Procentuell tolerans</option>
+            <option value="ABSOLUTE">Absolut tolerans</option>
+          </select>
+        </div>
+
+        <div>
+          <label
+            htmlFor="yellowTolerance"
+            className="block text-xs font-medium text-neutral-500"
+          >
+            Gul tolerans
+          </label>
+          <input
+            id="yellowTolerance"
+            name="yellowTolerance"
+            type="text"
+            inputMode="decimal"
+            defaultValue={
+              kpi?.yellowTolerance != null ? String(kpi.yellowTolerance) : ""
+            }
+            placeholder="t.ex. 5 eller 0,2"
+            className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
+          />
+          <p className="mt-1 text-[11px] text-neutral-500">
+            Procentenheter eller absoluta enheter beroende på typ.
+          </p>
         </div>
       </div>
     </>

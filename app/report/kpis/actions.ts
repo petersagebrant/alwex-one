@@ -5,6 +5,7 @@ import {
   requireOperationalWriter,
   requireProfile,
 } from "@/lib/auth/require-user";
+import { computeKpiStatus } from "@/lib/kpi/computeStatus";
 import {
   fetchBusinessAreaById,
   fetchBusinessAreaBySlug,
@@ -88,18 +89,6 @@ export async function reportDailyKpiAction(input: {
     return { ok: false, error: "Ange dagens värde." };
   }
 
-  if (!isStatus(input.status)) {
-    return { ok: false, error: "Ogiltig status." };
-  }
-
-  const comment = input.comment?.trim() ?? "";
-  if ((input.status === "Gul" || input.status === "Röd") && !comment) {
-    return {
-      ok: false,
-      error: "Beskriv kort varför KPI:n avviker.",
-    };
-  }
-
   const kpi = await fetchKpiById(kpiId).catch(() => null);
   if (!kpi) {
     return { ok: false, error: "KPI hittades inte." };
@@ -121,6 +110,33 @@ export async function reportDailyKpiAction(input: {
     return { ok: false, error: "Du saknar behörighet att rapportera KPI." };
   }
 
+  // When direction is set and computable, use server-side status (ignore client).
+  // Otherwise fall back to manual client status.
+  const computedStatus = computeKpiStatus({
+    direction: kpi.direction,
+    toleranceType: kpi.tolerance_type,
+    yellowTolerance: kpi.yellow_tolerance,
+    value,
+    target: kpi.target_value,
+  });
+
+  let status: StatusTone;
+  if (computedStatus) {
+    status = computedStatus;
+  } else if (isStatus(input.status)) {
+    status = input.status;
+  } else {
+    return { ok: false, error: "Ogiltig status." };
+  }
+
+  const comment = input.comment?.trim() ?? "";
+  if ((status === "Gul" || status === "Röd") && !comment) {
+    return {
+      ok: false,
+      error: "Beskriv kort varför KPI:n avviker.",
+    };
+  }
+
   const reportDate = toStockholmReportDate(new Date());
 
   try {
@@ -128,7 +144,7 @@ export async function reportDailyKpiAction(input: {
       kpiId,
       reportDate,
       value,
-      status: input.status,
+      status,
       comment: comment || undefined,
       recordedBy: profile.id,
     });

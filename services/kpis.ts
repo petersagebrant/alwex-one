@@ -1,3 +1,11 @@
+import {
+  computeKpiStatus,
+  defaultToleranceTypeForTarget,
+  type KpiDirection,
+  type KpiToleranceType,
+} from "@/lib/kpi/computeStatus";
+import { parseNumeric } from "@/lib/kpi/parseNumeric";
+import { shouldWriteKpiMeasurementHistory } from "@/lib/kpi/shouldWriteMeasurementHistory";
 import { fetchBusinessAreas } from "@/lib/supabase/business-areas";
 import {
   fetchAllKpis,
@@ -5,13 +13,13 @@ import {
   fetchKpisByBusinessAreaId,
   insertKpi,
   updateKpiRow,
+  type KpiRow,
 } from "@/lib/supabase/kpis";
 import { recordAuditLog } from "@/services/auditLog";
 import {
   collectFieldChanges,
   formatEntityChangeDescription,
   formatEntityCreateDescription,
-  hasFieldChange,
   resolveActorName,
   snapshotCreateChanges,
 } from "@/services/changeHistory";
@@ -36,6 +44,9 @@ const KPI_TRACKED_FIELDS = [
   "status",
   "trend",
   "business_area_id",
+  "direction",
+  "tolerance_type",
+  "yellow_tolerance",
 ] as const;
 
 function toStatusTone(value: string): StatusTone {
@@ -52,19 +63,35 @@ function toTrend(value: string): KpiTrend {
   return "Oförändrad";
 }
 
-function mapKpiRow(row: {
-  id: string;
-  business_area_id: string;
-  name: string;
-  category: string | null;
-  target_value: string | null;
-  current_value: string | null;
-  unit: string | null;
-  status: string;
-  trend: string;
-  created_at: string;
-  updated_at: string;
-}): KPI {
+function toDirection(
+  value: string | null | undefined,
+): KpiDirection | null {
+  if (
+    value === "HIGHER_IS_BETTER" ||
+    value === "LOWER_IS_BETTER" ||
+    value === "TARGET_IS_BEST"
+  ) {
+    return value;
+  }
+  return null;
+}
+
+function toToleranceType(
+  value: string | null | undefined,
+): KpiToleranceType | null {
+  if (value === "PERCENT" || value === "ABSOLUTE") {
+    return value;
+  }
+  return null;
+}
+
+function toYellowTolerance(
+  value: number | string | null | undefined,
+): number | null {
+  return parseNumeric(value);
+}
+
+function mapKpiRow(row: KpiRow): KPI {
   return {
     id: row.id,
     businessAreaId: row.business_area_id,
@@ -75,9 +102,64 @@ function mapKpiRow(row: {
     unit: row.unit,
     status: toStatusTone(row.status),
     trend: toTrend(row.trend),
+    direction: toDirection(row.direction),
+    toleranceType: toToleranceType(row.tolerance_type),
+    yellowTolerance: toYellowTolerance(row.yellow_tolerance),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function normalizeAutoStatusFields(input: {
+  direction?: KpiDirection | null;
+  toleranceType?: KpiToleranceType | null;
+  yellowTolerance?: number | null;
+  targetValue?: string | null;
+}): {
+  direction: KpiDirection | null;
+  tolerance_type: KpiToleranceType | null;
+  yellow_tolerance: number | null;
+} {
+  const direction = input.direction ?? null;
+  if (!direction) {
+    return {
+      direction: null,
+      tolerance_type: null,
+      yellow_tolerance: null,
+    };
+  }
+
+  const yellow =
+    input.yellowTolerance != null && Number.isFinite(input.yellowTolerance)
+      ? input.yellowTolerance
+      : null;
+
+  return {
+    direction,
+    tolerance_type:
+      input.toleranceType ??
+      defaultToleranceTypeForTarget(input.targetValue ?? null),
+    yellow_tolerance: yellow,
+  };
+}
+
+/** Prefer computed status when direction + values allow it. */
+function resolveSnapshotStatus(input: {
+  direction: KpiDirection | null;
+  toleranceType: KpiToleranceType | null;
+  yellowTolerance: number | null;
+  currentValue?: string | null;
+  targetValue?: string | null;
+  fallbackStatus: StatusTone;
+}): StatusTone {
+  const computed = computeKpiStatus({
+    direction: input.direction,
+    toleranceType: input.toleranceType,
+    yellowTolerance: input.yellowTolerance,
+    value: input.currentValue,
+    target: input.targetValue,
+  });
+  return computed ?? input.fallbackStatus;
 }
 
 export type KPIListItem = KPI & {
@@ -138,15 +220,35 @@ export async function createKPI(input: CreateKPIInput): Promise<KPI> {
     throw new Error("businessAreaId är obligatoriskt.");
   }
 
+  const auto = normalizeAutoStatusFields({
+    direction: input.direction,
+    toleranceType: input.toleranceType,
+    yellowTolerance: input.yellowTolerance,
+    targetValue: input.targetValue,
+  });
+  const targetValue = input.targetValue?.trim() || null;
+  const currentValue = input.currentValue?.trim() || null;
+  const status = resolveSnapshotStatus({
+    direction: auto.direction,
+    toleranceType: auto.tolerance_type,
+    yellowTolerance: auto.yellow_tolerance,
+    currentValue,
+    targetValue,
+    fallbackStatus: input.status,
+  });
+
   const payload = {
     business_area_id: input.businessAreaId,
     name,
     category: input.category?.trim() || null,
-    target_value: input.targetValue?.trim() || null,
-    current_value: input.currentValue?.trim() || null,
+    target_value: targetValue,
+    current_value: currentValue,
     unit: input.unit?.trim() || null,
-    status: input.status,
+    status,
     trend: input.trend,
+    direction: auto.direction,
+    tolerance_type: auto.tolerance_type,
+    yellow_tolerance: auto.yellow_tolerance,
   };
 
   const row = await insertKpi(payload);
@@ -203,15 +305,35 @@ export async function updateKPI(input: UpdateKPIInput): Promise<KPI> {
     throw new Error("KPI hittades inte.");
   }
 
+  const auto = normalizeAutoStatusFields({
+    direction: input.direction,
+    toleranceType: input.toleranceType,
+    yellowTolerance: input.yellowTolerance,
+    targetValue: input.targetValue,
+  });
+  const targetValue = input.targetValue?.trim() || null;
+  const currentValue = input.currentValue?.trim() || null;
+  const status = resolveSnapshotStatus({
+    direction: auto.direction,
+    toleranceType: auto.tolerance_type,
+    yellowTolerance: auto.yellow_tolerance,
+    currentValue,
+    targetValue,
+    fallbackStatus: input.status,
+  });
+
   const next = {
     business_area_id: input.businessAreaId,
     name,
     category: input.category?.trim() || null,
-    target_value: input.targetValue?.trim() || null,
-    current_value: input.currentValue?.trim() || null,
+    target_value: targetValue,
+    current_value: currentValue,
     unit: input.unit?.trim() || null,
-    status: input.status,
+    status,
     trend: input.trend,
+    direction: auto.direction,
+    tolerance_type: auto.tolerance_type,
+    yellow_tolerance: auto.yellow_tolerance,
   };
 
   const changes = collectFieldChanges(
@@ -224,6 +346,9 @@ export async function updateKPI(input: UpdateKPIInput): Promise<KPI> {
       unit: existing.unit,
       status: existing.status,
       trend: existing.trend,
+      direction: existing.direction,
+      tolerance_type: existing.tolerance_type,
+      yellow_tolerance: toYellowTolerance(existing.yellow_tolerance),
     },
     next,
     KPI_TRACKED_FIELDS,
@@ -246,7 +371,12 @@ export async function updateKPI(input: UpdateKPIInput): Promise<KPI> {
       changes: { fields: changes },
     });
 
-    if (hasFieldChange(changes, "current_value", "status")) {
+    // Measurement history only when utfall (current_value) changes.
+    // Metadata (direction/tolerance/target/name/…) may recompute status on the
+    // kpis row for snapshot consistency — that must not insert kpi_history.
+    // Status-only admin edits also skip history; use /admin/kpis/[id] or daily
+    // report for intentional measurement points.
+    if (shouldWriteKpiMeasurementHistory(changes)) {
       const historyValue =
         next.current_value?.trim() ||
         existing.current_value?.trim() ||

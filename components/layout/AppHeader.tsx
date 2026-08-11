@@ -22,7 +22,7 @@ const navItems: { key: AppNavKey; href: string; label: string }[] = [
   { key: "goals", href: "/admin/goals", label: "Mål" },
   { key: "activities", href: "/admin/activities", label: "Aktiviteter" },
   { key: "decisions", href: "/admin/decisions", label: "Beslut" },
-  { key: "kpis", href: "/admin/kpis", label: "KPI" },
+  { key: "kpis", href: "/report/kpis", label: "KPI" },
   { key: "assistant", href: "/assistant", label: "AI-assistent" },
 ];
 

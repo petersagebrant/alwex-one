@@ -185,6 +185,8 @@ export async function fetchRecentKpiHistoryForKpis(
     .from("kpi_history")
     .select(kpiHistorySelect)
     .in("kpi_id", kpiIds)
+    // Daily trends first (report_date desc, nulls last), then recorded_at.
+    .order("report_date", { ascending: false, nullsFirst: false })
     .order("recorded_at", { ascending: false });
 
   if (error) {

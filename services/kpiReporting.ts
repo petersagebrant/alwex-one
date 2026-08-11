@@ -95,7 +95,8 @@ export async function getKpisForTodayReporting(
     const kpiIds = kpis.map((kpi) => kpi.id);
     const [todayRows, recentHistory] = await Promise.all([
       fetchKpiHistoryByReportDateForKpis(kpiIds, reportDate).catch(() => []),
-      getRecentKpiHistoryForKpis(kpiIds, 4).catch(() => []),
+      // Enough rows to skip today and still find a prior daily report_date.
+      getRecentKpiHistoryForKpis(kpiIds, 8).catch(() => []),
     ]);
 
     const todayByKpi = new Map(
@@ -112,8 +113,14 @@ export async function getKpisForTodayReporting(
     const items: DailyKpiReportItem[] = kpis.map((kpi) => {
       const todayReport = todayByKpi.get(kpi.id) ?? null;
       const history = historyByKpi.get(kpi.id) ?? [];
+      // Prefer dated daily rows (report_date) for trends; fall back to any prior entry.
       const previousEntry =
-        history.find((entry) => entry.reportDate !== reportDate) ?? null;
+        history.find(
+          (entry) =>
+            entry.reportDate != null && entry.reportDate !== reportDate,
+        ) ??
+        history.find((entry) => entry.reportDate !== reportDate) ??
+        null;
 
       if (todayReport) {
         return {

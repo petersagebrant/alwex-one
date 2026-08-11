@@ -64,7 +64,9 @@ function toStatus(value: string | null | undefined): StatusTone | null {
   return null;
 }
 
-function toneForStatus(status: StatusTone | null | undefined): YesterdayChangeTone {
+function toneForStatus(
+  status: StatusTone | "Statistik" | string | null | undefined,
+): YesterdayChangeTone {
   if (status === "Röd") return "red";
   if (status === "Gul") return "yellow";
   if (status === "Grön") return "green";

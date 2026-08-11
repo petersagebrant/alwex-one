@@ -1,6 +1,12 @@
 import OpenAI from "openai";
 import { getCurrentUser } from "@/lib/auth/require-user";
 import { formatDateTimeSv } from "@/lib/format/date";
+import {
+  countTargetKpiStatuses,
+  isStatusTone,
+  isTargetKpi,
+  type KpiStoredStatus,
+} from "@/lib/kpi/kind";
 import { fetchBusinessAreas } from "@/lib/supabase/business-areas";
 import type { BusinessAreaRow } from "@/lib/supabase/business-areas";
 import { getActivities, type ActivityListItem } from "@/services/activities";
@@ -106,8 +112,8 @@ export type AssistantKpiTrend = {
   areaName: string;
   previousValue: string | null;
   currentValue: string | null;
-  previousStatus: StatusTone | null;
-  currentStatus: StatusTone;
+  previousStatus: KpiStoredStatus | null;
+  currentStatus: KpiStoredStatus;
   unit: string | null;
   direction: AssistantTrendDirection;
   previousRecordedAt: string | null;
@@ -136,8 +142,8 @@ export type AssistantKpiLastChange = {
   lastChangedAt: string | null;
   previousValue: string | null;
   currentValue: string | null;
-  previousStatus: StatusTone | null;
-  currentStatus: StatusTone;
+  previousStatus: KpiStoredStatus | null;
+  currentStatus: KpiStoredStatus;
   unit: string | null;
   source: "kpi_history" | "audit_log" | "updated_at" | "none";
 };
@@ -305,7 +311,7 @@ export async function buildAssistantContext(): Promise<AssistantContext> {
   const date = todayDateKey();
   const dateLabel = formatDateLabel(date);
 
-  const kpiCounts = countStatuses(allKpis.map((kpi) => kpi.status));
+  const kpiCounts = countTargetKpiStatuses(allKpis);
   const goalCounts = countStatuses(allGoals.map((goal) => goal.status));
 
   const dashboardSituation =
@@ -941,7 +947,9 @@ function isResultBudgetQuestion(q: string): boolean {
 }
 
 function answerYellowKpis(context: AssistantContext): string {
-  const yellow = (context.kpis ?? []).filter((kpi) => kpi.status === "Gul");
+  const yellow = (context.kpis ?? []).filter(
+    (kpi) => isTargetKpi(kpi) && kpi.status === "Gul",
+  );
   if (yellow.length === 0) {
     return "Inga KPI:er är gula just nu.";
   }
@@ -956,7 +964,8 @@ function answerYellowKpis(context: AssistantContext): string {
 
 function answerFollowUpKpis(context: AssistantContext): string {
   const follow = (context.kpis ?? []).filter(
-    (kpi) => kpi.status === "Gul" || kpi.status === "Röd",
+    (kpi) =>
+      isTargetKpi(kpi) && (kpi.status === "Gul" || kpi.status === "Röd"),
   );
   if (follow.length === 0) {
     return "Inga KPI kräver uppföljning just nu.";
@@ -1323,7 +1332,9 @@ function mondayCutoffStockholm(): Date {
   return new Date(todayNoon.getTime() - daysSinceMonday * 24 * 60 * 60 * 1000);
 }
 
-function statusRank(status: StatusTone | null | undefined): number {
+function statusRank(
+  status: StatusTone | "Statistik" | null | undefined,
+): number {
   if (status === "Grön") return 2;
   if (status === "Gul") return 1;
   if (status === "Röd") return 0;
@@ -1331,8 +1342,8 @@ function statusRank(status: StatusTone | null | undefined): number {
 }
 
 function directionFromStatuses(
-  previous: StatusTone | null,
-  current: StatusTone,
+  previous: KpiStoredStatus | null,
+  current: KpiStoredStatus,
 ): AssistantTrendDirection {
   if (!previous) {
     return "okänd";
@@ -2040,7 +2051,7 @@ function filterContextToArea(
     summary: {
       ...full.summary,
       areaCount: 1,
-      kpiCounts: countStatuses(kpis.map((kpi) => kpi.status)),
+      kpiCounts: countTargetKpiStatuses(kpis),
       goalCounts: countStatuses(goals.map((goal) => goal.status)),
       delayedActivityCount: delayedFirst.filter(isDelayedActivity).length,
       openDecisionCount: decisions.length,
@@ -2070,7 +2081,9 @@ function filterContextToArea(
 function slimBroadContext(full: AssistantContext): AssistantContext {
   const followKpis = sortFollowUpFirst(
     (full.kpis ?? []).filter(
-      (kpi) => kpi.status === "Röd" || kpi.status === "Gul",
+      (kpi) =>
+        isTargetKpi(kpi) &&
+        (kpi.status === "Röd" || kpi.status === "Gul"),
     ),
   ).slice(0, 12);
 
@@ -2108,8 +2121,10 @@ function slimBroadContext(full: AssistantContext): AssistantContext {
   };
 }
 
-function sortFollowUpFirst<T extends { status: StatusTone }>(items: T[]): T[] {
-  const rank = (status: StatusTone) => {
+function sortFollowUpFirst<
+  T extends { status: StatusTone | "Statistik" },
+>(items: T[]): T[] {
+  const rank = (status: StatusTone | "Statistik") => {
     if (status === "Röd") return 0;
     if (status === "Gul") return 1;
     return 2;
@@ -2146,9 +2161,10 @@ function toCompactOpenAiContext(
     kpis: (context.kpis ?? []).map((kpi) => ({
       name: kpi.name,
       area: kpi.businessAreaName,
+      kind: kpi.kind,
       status: kpi.status,
       currentValue: kpi.currentValue,
-      targetValue: kpi.targetValue,
+      targetValue: kpi.kind === "STATISTIC" ? null : kpi.targetValue,
       unit: kpi.unit,
       trend: kpi.trend,
     })),
@@ -3031,7 +3047,9 @@ function findKpiByKeywords(
   );
 }
 
-function isFollowUpStatus(status: StatusTone | null | undefined): boolean {
+function isFollowUpStatus(
+  status: StatusTone | "Statistik" | null | undefined,
+): boolean {
   return status === "Gul" || status === "Röd";
 }
 
@@ -3361,7 +3379,9 @@ function answerPriority(context: AssistantContext): string {
 }
 
 function answerRedKpis(context: AssistantContext): string {
-  const red = (context.kpis ?? []).filter((kpi) => kpi.status === "Röd");
+  const red = (context.kpis ?? []).filter(
+    (kpi) => isTargetKpi(kpi) && kpi.status === "Röd",
+  );
   if (red.length === 0) {
     return "Inga KPI är röda just nu.";
   }
@@ -3432,7 +3452,11 @@ function answerAreaStatus(
     (kpi) => kpi.businessAreaId === area.id,
   );
   const followKpis = areaKpis
-    .filter((kpi) => kpi.status === "Röd" || kpi.status === "Gul")
+    .filter(
+      (kpi) =>
+        isTargetKpi(kpi) &&
+        (kpi.status === "Röd" || kpi.status === "Gul"),
+    )
     .sort((a, b) => {
       if (a.status === b.status) return 0;
       return a.status === "Röd" ? -1 : 1;

@@ -11,11 +11,11 @@ import {
   getRecentKpiHistoryForKpis,
   toStockholmReportDate,
 } from "@/services/kpiHistory";
+import { parseKpiStoredStatus } from "@/lib/kpi/kind";
 import type {
   DailyKpiReportItem,
   KPIHistory,
   MyKpisForTodayReporting,
-  StatusTone,
   TodayOrgReportingStats,
 } from "@/types";
 
@@ -25,19 +25,12 @@ export type {
   TodayOrgReportingStats,
 } from "@/types";
 
-function toStatusTone(value: string): StatusTone {
-  if (value === "Grön" || value === "Gul" || value === "Röd") {
-    return value;
-  }
-  return "Gul";
-}
-
 function mapHistoryRow(row: KpiHistoryRow): KPIHistory {
   return {
     id: row.id,
     kpiId: row.kpi_id,
     value: row.value,
-    status: toStatusTone(row.status),
+    status: parseKpiStoredStatus(row.status),
     comment: row.comment,
     recordedAt: row.recorded_at,
     createdAt: row.created_at,

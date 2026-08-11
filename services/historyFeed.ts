@@ -68,12 +68,26 @@ function formatFieldChange(change: AuditFieldChange): string | null {
 export function formatAuditChangeSummary(
   fields: AuditFieldChange[] | null | undefined,
   limit = 2,
+  options?: { currentValueLabel?: string },
 ): string | null {
   if (!fields?.length) {
     return null;
   }
+  const currentValueLabel = options?.currentValueLabel ?? "Utfall";
   const parts = fields
-    .map(formatFieldChange)
+    .map((change) => {
+      if (!DISPLAY_FIELDS.has(change.field)) {
+        return null;
+      }
+      if (change.field === "business_area_id") {
+        return null;
+      }
+      const label =
+        change.field === "current_value"
+          ? currentValueLabel
+          : (FIELD_LABELS[change.field] ?? change.field);
+      return `${label}: ${displayValue(change.from)} → ${displayValue(change.to)}`;
+    })
     .filter((part): part is string => Boolean(part))
     .slice(0, limit);
   return parts.length > 0 ? parts.join(" · ") : null;
@@ -172,7 +186,16 @@ function defaultTone(entityType: string, action: string): VdDiaryTone {
 export function buildDashboardHistoryEvents(input: {
   auditEntries: AuditLogListItem[];
   kpiHistory: KPIHistory[];
-  kpiMeta: Map<string, { name: string; area: string; owner: string }>;
+  kpiMeta: Map<
+    string,
+    {
+      name: string;
+      area: string;
+      owner: string;
+      kind?: "TARGET" | "STATISTIC";
+      unit?: string | null;
+    }
+  >;
   goalTitles?: Map<string, string>;
   activityTitles?: Map<string, string>;
   decisionTitles?: Map<string, string>;
@@ -189,7 +212,14 @@ export function buildDashboardHistoryEvents(input: {
     }
 
     const fields = entry.changes?.fields ?? [];
-    const changeSummary = formatAuditChangeSummary(fields);
+    const kpiMetaForEntry =
+      entry.entityType === "kpi" && entry.entityId
+        ? input.kpiMeta.get(entry.entityId)
+        : undefined;
+    const changeSummary = formatAuditChangeSummary(fields, 2, {
+      currentValueLabel:
+        kpiMetaForEntry?.kind === "STATISTIC" ? "Rapporterat värde" : "Utfall",
+    });
 
     // Prefer concrete updates; still include creates without field diffs.
     if (
@@ -294,12 +324,20 @@ export function buildDashboardHistoryEvents(input: {
     }
 
     const meta = input.kpiMeta.get(kpiId);
+    const isStatistic = meta?.kind === "STATISTIC";
+    const unitSuffix = meta?.unit?.trim() ? ` ${meta.unit.trim()}` : "";
     const parts: string[] = [];
-    if (previous.status !== latest.status) {
+    if (!isStatistic && previous.status !== latest.status) {
       parts.push(`Status: ${previous.status} → ${latest.status}`);
     }
     if (previous.value !== latest.value) {
-      parts.push(`Utfall: ${previous.value} → ${latest.value}`);
+      if (isStatistic) {
+        parts.push(
+          `Rapporterat värde: ${previous.value} → ${latest.value}${unitSuffix}`,
+        );
+      } else {
+        parts.push(`Utfall: ${previous.value} → ${latest.value}`);
+      }
     }
     if (parts.length === 0) {
       continue;

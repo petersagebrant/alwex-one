@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { KPI } from "@/types";
+import { StatistikTypeBadge } from "@/components/kpis/StatistikTypeBadge";
 import { StatusBadge } from "@/components/ui";
+import { isStatisticKpi, isStatusTone } from "@/lib/kpi/kind";
 
 type AreaKpiListProps = {
   kpis: KPI[];
@@ -19,7 +21,7 @@ export function AreaKpiList({ kpis }: AreaKpiListProps) {
       <div className="border-b border-neutral-200 px-5 py-4">
         <h2 className="text-sm font-semibold text-neutral-900">KPI</h2>
         <p className="mt-0.5 text-xs text-neutral-500">
-          Nyckeltal mot mål för affärsområdet
+          Nyckeltal och statistik för affärsområdet
         </p>
       </div>
 
@@ -50,6 +52,11 @@ export function AreaKpiList({ kpis }: AreaKpiListProps) {
                       className="hover:underline"
                     >
                       {kpi.name}
+                      {isStatisticKpi(kpi) ? (
+                        <span className="mt-0.5 block text-xs font-normal text-neutral-500">
+                          Typ: Statistik
+                        </span>
+                      ) : null}
                     </Link>
                   </td>
                   <td className="border-b border-neutral-100 px-3 py-3 text-neutral-700">
@@ -65,7 +72,9 @@ export function AreaKpiList({ kpis }: AreaKpiListProps) {
                       href={`/admin/kpis/${kpi.id}`}
                       className="block hover:text-neutral-900"
                     >
-                      {formatValue(kpi.targetValue, kpi.unit)}
+                      {isStatisticKpi(kpi)
+                        ? "—"
+                        : formatValue(kpi.targetValue, kpi.unit)}
                     </Link>
                   </td>
                   <td className="border-b border-neutral-100 px-3 py-3 text-neutral-700">
@@ -78,7 +87,11 @@ export function AreaKpiList({ kpis }: AreaKpiListProps) {
                   </td>
                   <td className="border-b border-neutral-100 px-3 py-3">
                     <Link href={`/admin/kpis/${kpi.id}`} className="inline-flex">
-                      <StatusBadge status={kpi.status} />
+                      {isStatisticKpi(kpi) ? (
+                        <StatistikTypeBadge />
+                      ) : isStatusTone(kpi.status) ? (
+                        <StatusBadge status={kpi.status} />
+                      ) : null}
                     </Link>
                   </td>
                 </tr>

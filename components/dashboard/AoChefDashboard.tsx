@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { VdDiaryTimeline } from "@/components/dashboard/VdDiaryTimeline";
+import { StatistikTypeBadge } from "@/components/kpis/StatistikTypeBadge";
 import {
   InfoPanel,
   SectionHeader,
@@ -8,6 +9,7 @@ import {
   SummaryCard,
 } from "@/components/ui";
 import { formatKpiDisplayValue } from "@/lib/format/kpi";
+import { isStatusTone } from "@/lib/kpi/kind";
 import type { AoChefDashboardData } from "@/services/aoChefDashboard";
 
 function yesterdayChangeDot(tone: string): string {
@@ -169,11 +171,16 @@ export function AoChefDashboard({ data }: AoChefDashboardProps) {
                         {kpi.name}
                       </p>
                       <p className="text-xs text-slate-500">
-                        {formatKpiDisplayValue(kpi.currentValue, kpi.unit)} mot
-                        mål {formatKpiDisplayValue(kpi.targetValue, kpi.unit)}
+                        {kpi.kind === "STATISTIC"
+                          ? `${formatKpiDisplayValue(kpi.currentValue, kpi.unit)} · Typ: Statistik`
+                          : `${formatKpiDisplayValue(kpi.currentValue, kpi.unit)} mot mål ${formatKpiDisplayValue(kpi.targetValue, kpi.unit)}`}
                       </p>
                     </div>
-                    <StatusBadge status={kpi.status} />
+                    {kpi.kind === "STATISTIC" ? (
+                      <StatistikTypeBadge />
+                    ) : isStatusTone(kpi.status) ? (
+                      <StatusBadge status={kpi.status} />
+                    ) : null}
                   </Link>
                 </li>
               ))}

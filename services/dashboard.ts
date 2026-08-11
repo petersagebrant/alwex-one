@@ -628,11 +628,19 @@ export async function getDashboardData(): Promise<DashboardData> {
   );
 
   const followUpKpis = (allKpis ?? []).filter(
-    (kpi) => kpi.status === "Gul" || kpi.status === "Röd",
+    (kpi) =>
+      kpi.kind !== "STATISTIC" &&
+      (kpi.status === "Gul" || kpi.status === "Röd"),
   );
-  const greenKpis = (allKpis ?? []).filter((kpi) => kpi.status === "Grön");
-  const yellowKpis = (allKpis ?? []).filter((kpi) => kpi.status === "Gul");
-  const redKpis = (allKpis ?? []).filter((kpi) => kpi.status === "Röd");
+  const greenKpis = (allKpis ?? []).filter(
+    (kpi) => kpi.kind !== "STATISTIC" && kpi.status === "Grön",
+  );
+  const yellowKpis = (allKpis ?? []).filter(
+    (kpi) => kpi.kind !== "STATISTIC" && kpi.status === "Gul",
+  );
+  const redKpis = (allKpis ?? []).filter(
+    (kpi) => kpi.kind !== "STATISTIC" && kpi.status === "Röd",
+  );
   const redAreaRows = (areaRows ?? []).filter(
     (area) => toStatusTone(area.status) === "Röd",
   );
@@ -675,7 +683,7 @@ export async function getDashboardData(): Promise<DashboardData> {
           name: topFollowUpKpi.name,
           owner:
             areaManagers.get(topFollowUpKpi.businessAreaId) ?? "ansvarig",
-          status: topFollowUpKpi.status,
+          status: topFollowUpKpi.status as StatusTone,
           areaName: topFollowUpKpi.businessAreaName,
         }
       : null,
@@ -699,7 +707,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       id: kpi.id,
       name: kpi.name,
       area: kpi.businessAreaName,
-      status: kpi.status,
+      status: kpi.status as StatusTone,
       trend: kpi.trend,
       owner: areaManagers.get(kpi.businessAreaId) ?? "Ej angiven",
       href: `/admin/kpis/${kpi.id}`,
@@ -757,6 +765,8 @@ export async function getDashboardData(): Promise<DashboardData> {
         name: kpi.name,
         area: kpi.businessAreaName,
         owner: areaManagers.get(kpi.businessAreaId) ?? "Ej angiven",
+        kind: kpi.kind,
+        unit: kpi.unit,
       },
     ]),
   );

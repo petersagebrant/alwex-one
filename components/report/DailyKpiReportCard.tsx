@@ -2,8 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition, type FormEvent } from "react";
+import { StatistikTypeBadge } from "@/components/kpis/StatistikTypeBadge";
 import { StatusBadge } from "@/components/ui";
 import { computeKpiStatus } from "@/lib/kpi/computeStatus";
+import { isStatisticKpi, isStatusTone } from "@/lib/kpi/kind";
 import { formatDateTimeSv } from "@/lib/format/date";
 import { formatKpiDisplayValue } from "@/lib/format/kpi";
 import { reportDailyKpiAction } from "@/app/report/kpis/actions";
@@ -15,6 +17,12 @@ type DailyKpiReportCardProps = {
   onToggle: () => void;
 };
 
+function seedStatus(item: DailyKpiReportItem): StatusTone {
+  const raw =
+    item.todayReport?.status ?? item.previousStatus ?? item.kpi.status;
+  return isStatusTone(raw) ? raw : "Gul";
+}
+
 export function DailyKpiReportCard({
   item,
   expanded,
@@ -23,16 +31,14 @@ export function DailyKpiReportCard({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [editing, setEditing] = useState(!item.isReported);
-  const [value, setValue] = useState(
-    item.todayReport?.value ?? "",
-  );
-  const [status, setStatus] = useState<StatusTone>(
-    item.todayReport?.status ?? item.previousStatus ?? "Gul",
-  );
+  const [value, setValue] = useState(item.todayReport?.value ?? "");
+  const [status, setStatus] = useState<StatusTone>(() => seedStatus(item));
   const [comment, setComment] = useState(item.todayReport?.comment ?? "");
   const [error, setError] = useState<string | null>(null);
 
-  const autoStatusEnabled = Boolean(item.kpi.direction);
+  const isStatistic =
+    isStatisticKpi(item.kpi) || item.kpi.status === "Statistik";
+  const autoStatusEnabled = !isStatistic && Boolean(item.kpi.direction);
   const liveComputedStatus = autoStatusEnabled
     ? computeKpiStatus({
         direction: item.kpi.direction,
@@ -46,10 +52,14 @@ export function DailyKpiReportCard({
 
   const effectiveStatus: StatusTone = liveComputedStatus ?? status;
   const commentRequired =
-    effectiveStatus === "Gul" || effectiveStatus === "Röd";
+    !isStatistic &&
+    (effectiveStatus === "Gul" || effectiveStatus === "Röd");
   const unit = item.kpi.unit;
   const showForm = expanded && editing;
   const showReportedSummary = expanded && item.isReported && !editing;
+  const todayTone = isStatusTone(item.todayReport?.status)
+    ? item.todayReport.status
+    : null;
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -68,7 +78,7 @@ export function DailyKpiReportCard({
       const result = await reportDailyKpiAction({
         kpiId: item.kpi.id,
         value,
-        status: effectiveStatus,
+        status: isStatistic ? "Statistik" : effectiveStatus,
         comment,
       });
 
@@ -84,7 +94,7 @@ export function DailyKpiReportCard({
 
   function startEdit() {
     setValue(item.todayReport?.value ?? "");
-    setStatus(item.todayReport?.status ?? item.previousStatus ?? "Gul");
+    setStatus(seedStatus(item));
     setComment(item.todayReport?.comment ?? "");
     setError(null);
     setEditing(true);
@@ -106,30 +116,54 @@ export function DailyKpiReportCard({
         className="flex w-full cursor-pointer flex-wrap items-start justify-between gap-3 rounded-2xl p-4 text-left transition hover:bg-slate-50/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 sm:p-5"
       >
         <div className="min-w-0">
-          <h3 className="text-base font-semibold tracking-tight text-slate-900">
-            {item.kpi.name}
-          </h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-base font-semibold tracking-tight text-slate-900">
+              {item.kpi.name}
+            </h3>
+            {isStatistic ? <StatistikTypeBadge /> : null}
+          </div>
           <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600">
-            <div>
-              <dt className="inline text-slate-500">Mål: </dt>
-              <dd className="inline font-medium text-slate-800">
-                {formatKpiDisplayValue(item.kpi.targetValue, unit)}
-              </dd>
-            </div>
-            <div>
-              <dt className="inline text-slate-500">Föregående: </dt>
-              <dd className="inline font-medium text-slate-800">
-                {formatKpiDisplayValue(item.previousValue, unit)}
-              </dd>
-            </div>
-            {item.isReported && item.todayReport ? (
-              <div>
-                <dt className="inline text-slate-500">Idag: </dt>
-                <dd className="inline font-medium text-slate-800">
-                  {formatKpiDisplayValue(item.todayReport.value, unit)}
-                </dd>
-              </div>
-            ) : null}
+            {isStatistic ? (
+              <>
+                {item.isReported && item.todayReport ? (
+                  <div>
+                    <dt className="inline text-slate-500">Idag: </dt>
+                    <dd className="inline font-medium text-slate-800">
+                      {formatKpiDisplayValue(item.todayReport.value, unit)}
+                    </dd>
+                  </div>
+                ) : null}
+                <div>
+                  <dt className="inline text-slate-500">Föregående: </dt>
+                  <dd className="inline font-medium text-slate-800">
+                    {formatKpiDisplayValue(item.previousValue, unit)}
+                  </dd>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <dt className="inline text-slate-500">Mål: </dt>
+                  <dd className="inline font-medium text-slate-800">
+                    {formatKpiDisplayValue(item.kpi.targetValue, unit)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="inline text-slate-500">Föregående: </dt>
+                  <dd className="inline font-medium text-slate-800">
+                    {formatKpiDisplayValue(item.previousValue, unit)}
+                  </dd>
+                </div>
+                {item.isReported && item.todayReport ? (
+                  <div>
+                    <dt className="inline text-slate-500">Idag: </dt>
+                    <dd className="inline font-medium text-slate-800">
+                      {formatKpiDisplayValue(item.todayReport.value, unit)}
+                    </dd>
+                  </div>
+                ) : null}
+              </>
+            )}
           </dl>
         </div>
 
@@ -143,13 +177,18 @@ export function DailyKpiReportCard({
           >
             {item.isReported ? "Rapporterad" : "Ej rapporterad"}
           </span>
-          {item.isReported && item.todayReport ? (
+          {!isStatistic && item.isReported && todayTone ? (
             <>
-              <StatusBadge status={item.todayReport.status} />
+              <StatusBadge status={todayTone} />
               <p className="text-[11px] text-slate-500">
-                {formatDateTimeSv(item.todayReport.updatedAt)}
+                {formatDateTimeSv(item.todayReport!.updatedAt)}
               </p>
             </>
+          ) : null}
+          {isStatistic && item.isReported && item.todayReport ? (
+            <p className="text-[11px] text-slate-500">
+              {formatDateTimeSv(item.todayReport.updatedAt)}
+            </p>
           ) : null}
         </div>
       </div>
@@ -178,7 +217,9 @@ export function DailyKpiReportCard({
           onClick={(event) => event.stopPropagation()}
           className="space-y-3 border-t border-slate-100 px-4 pb-4 pt-4 sm:px-5 sm:pb-5"
         >
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div
+            className={`grid grid-cols-1 gap-3 ${isStatistic ? "" : "sm:grid-cols-2"}`}
+          >
             <div>
               <label
                 htmlFor={`value-${item.kpi.id}`}
@@ -200,54 +241,56 @@ export function DailyKpiReportCard({
               />
             </div>
 
-            <div>
-              <label
-                htmlFor={`status-${item.kpi.id}`}
-                className="block text-xs font-medium text-slate-500"
-              >
-                Status
-              </label>
-              {autoStatusEnabled ? (
-                <div className="mt-1.5 space-y-1.5">
-                  <input
-                    type="hidden"
-                    name="status"
-                    value={effectiveStatus}
-                  />
-                  <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                    <StatusBadge status={effectiveStatus} />
-                    <span className="text-xs text-slate-600">
-                      {liveComputedStatus
-                        ? "Beräknas automatiskt"
-                        : "Ange ett giltigt värde för beräkning"}
-                    </span>
+            {!isStatistic ? (
+              <div>
+                <label
+                  htmlFor={`status-${item.kpi.id}`}
+                  className="block text-xs font-medium text-slate-500"
+                >
+                  Status
+                </label>
+                {autoStatusEnabled ? (
+                  <div className="mt-1.5 space-y-1.5">
+                    <input
+                      type="hidden"
+                      name="status"
+                      value={effectiveStatus}
+                    />
+                    <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                      <StatusBadge status={effectiveStatus} />
+                      <span className="text-xs text-slate-600">
+                        {liveComputedStatus
+                          ? "Beräknas automatiskt"
+                          : "Ange ett giltigt värde för beräkning"}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Status beräknas från målvärde och tolerans.
+                    </p>
                   </div>
-                  <p className="text-[11px] text-slate-500">
-                    Status beräknas från målvärde och tolerans.
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <select
-                    id={`status-${item.kpi.id}`}
-                    name="status"
-                    value={status}
-                    onChange={(event) =>
-                      setStatus(event.target.value as StatusTone)
-                    }
-                    disabled={isPending}
-                    className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
-                  >
-                    <option value="Grön">Grön</option>
-                    <option value="Gul">Gul</option>
-                    <option value="Röd">Röd</option>
-                  </select>
-                  <p className="mt-1 text-[11px] text-slate-500">
-                    Välj status manuellt.
-                  </p>
-                </>
-              )}
-            </div>
+                ) : (
+                  <>
+                    <select
+                      id={`status-${item.kpi.id}`}
+                      name="status"
+                      value={status}
+                      onChange={(event) =>
+                        setStatus(event.target.value as StatusTone)
+                      }
+                      disabled={isPending}
+                      className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                    >
+                      <option value="Grön">Grön</option>
+                      <option value="Gul">Gul</option>
+                      <option value="Röd">Röd</option>
+                    </select>
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      Välj status manuellt.
+                    </p>
+                  </>
+                )}
+              </div>
+            ) : null}
           </div>
 
           <div>

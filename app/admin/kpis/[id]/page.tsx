@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { KpiHistoryChart } from "@/components/kpis/KpiHistoryChart";
+import { StatistikTypeBadge } from "@/components/kpis/StatistikTypeBadge";
 import {
   InfoPanel,
   MetricCard,
@@ -10,6 +11,7 @@ import {
   StatusBadge,
 } from "@/components/ui";
 import { formatDateSv, formatDateTimeSv } from "@/lib/format/date";
+import { isStatisticKpi, isStatusTone } from "@/lib/kpi/kind";
 import { getKPIById } from "@/services/kpis";
 import { getKPIHistory } from "@/services/kpiHistory";
 import { addKpiHistoryAction } from "./actions";
@@ -99,7 +101,11 @@ export default async function KpiDetailPage({
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge status={kpi.status} />
+              {isStatisticKpi(kpi) ? (
+                <StatistikTypeBadge />
+              ) : isStatusTone(kpi.status) ? (
+                <StatusBadge status={kpi.status} />
+              ) : null}
               <Link
                 href={`/admin/kpis?edit=${kpi.id}`}
                 className="text-sm font-medium text-neutral-700 underline-offset-4 hover:underline"
@@ -120,9 +126,13 @@ export default async function KpiDetailPage({
           <MetricCard
             name="Aktuellt värde"
             currentValue={formatValue(kpi.currentValue, kpi.unit)}
-            targetValue={formatValue(kpi.targetValue, kpi.unit)}
+            targetValue={
+              isStatisticKpi(kpi)
+                ? "Inget mål (statistik)"
+                : formatValue(kpi.targetValue, kpi.unit)
+            }
             trend={kpi.trend}
-            status={kpi.status}
+            status={isStatusTone(kpi.status) ? kpi.status : undefined}
           />
           <InfoPanel
             title="Översikt"
@@ -145,9 +155,17 @@ export default async function KpiDetailPage({
                 </dd>
               </div>
               <div className="flex items-baseline justify-between gap-3">
+                <dt className="text-slate-500">Typ</dt>
+                <dd className="font-medium text-slate-800">
+                  {isStatisticKpi(kpi) ? "Statistik" : "KPI med mål"}
+                </dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-3">
                 <dt className="text-slate-500">Målvärde</dt>
                 <dd className="font-medium text-slate-800">
-                  {formatValue(kpi.targetValue, kpi.unit)}
+                  {isStatisticKpi(kpi)
+                    ? "—"
+                    : formatValue(kpi.targetValue, kpi.unit)}
                 </dd>
               </div>
               <div className="flex items-baseline justify-between gap-3">
@@ -155,9 +173,15 @@ export default async function KpiDetailPage({
                 <dd className="font-medium text-slate-800">{kpi.trend}</dd>
               </div>
               <div className="flex items-baseline justify-between gap-3">
-                <dt className="text-slate-500">Status</dt>
+                <dt className="text-slate-500">
+                  {isStatisticKpi(kpi) ? "Status" : "Status"}
+                </dt>
                 <dd>
-                  <StatusBadge status={kpi.status} />
+                  {isStatisticKpi(kpi) ? (
+                    <StatistikTypeBadge />
+                  ) : isStatusTone(kpi.status) ? (
+                    <StatusBadge status={kpi.status} />
+                  ) : null}
                 </dd>
               </div>
             </dl>
@@ -167,7 +191,11 @@ export default async function KpiDetailPage({
         <section className="rounded-xl border border-neutral-200 bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-6">
           <SectionHeader
             title="Värde över tid"
-            description="Utfall och målvärde baserat på kpi_history"
+            description={
+              isStatisticKpi(kpi)
+                ? "Rapporterade värden baserat på kpi_history"
+                : "Utfall och målvärde baserat på kpi_history"
+            }
           />
           <div className="mt-4">
             {history.length === 0 ? (
@@ -177,8 +205,9 @@ export default async function KpiDetailPage({
             ) : (
               <KpiHistoryChart
                 points={chartPoints}
-                targetValue={kpi.targetValue}
+                targetValue={isStatisticKpi(kpi) ? null : kpi.targetValue}
                 unit={kpi.unit}
+                isStatistic={isStatisticKpi(kpi)}
               />
             )}
           </div>
@@ -205,7 +234,9 @@ export default async function KpiDetailPage({
                       Datum
                     </th>
                     <th className="px-3 py-2.5 font-semibold">Värde</th>
-                    <th className="px-3 py-2.5 font-semibold">Status</th>
+                    <th className="px-3 py-2.5 font-semibold">
+                      {isStatisticKpi(kpi) ? "Typ" : "Status"}
+                    </th>
                     <th className="rounded-r-lg px-3 py-2.5 font-semibold">
                       Kommentar
                     </th>
@@ -221,7 +252,11 @@ export default async function KpiDetailPage({
                         {formatValue(entry.value, kpi.unit)}
                       </td>
                       <td className="border-b border-neutral-100 px-3 py-3">
-                        <StatusBadge status={entry.status} />
+                        {isStatisticKpi(kpi) || entry.status === "Statistik" ? (
+                          <StatistikTypeBadge />
+                        ) : isStatusTone(entry.status) ? (
+                          <StatusBadge status={entry.status} />
+                        ) : null}
                       </td>
                       <td className="border-b border-neutral-100 px-3 py-3 text-neutral-600">
                         {entry.comment || "—"}
@@ -262,22 +297,30 @@ export default async function KpiDetailPage({
             </div>
 
             <div>
-              <label
-                htmlFor="status"
-                className="block text-xs font-medium text-neutral-500"
-              >
-                Status
-              </label>
-              <select
-                id="status"
-                name="status"
-                defaultValue={kpi.status}
-                className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
-              >
-                <option value="Grön">Grön</option>
-                <option value="Gul">Gul</option>
-                <option value="Röd">Röd</option>
-              </select>
+              {isStatisticKpi(kpi) ? (
+                <input type="hidden" name="status" value="Statistik" />
+              ) : (
+                <>
+                  <label
+                    htmlFor="status"
+                    className="block text-xs font-medium text-neutral-500"
+                  >
+                    Status
+                  </label>
+                  <select
+                    id="status"
+                    name="status"
+                    defaultValue={
+                      isStatusTone(kpi.status) ? kpi.status : "Gul"
+                    }
+                    className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
+                  >
+                    <option value="Grön">Grön</option>
+                    <option value="Gul">Gul</option>
+                    <option value="Röd">Röd</option>
+                  </select>
+                </>
+              )}
             </div>
 
             <div>

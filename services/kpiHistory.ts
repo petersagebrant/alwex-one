@@ -15,26 +15,20 @@ import {
   formatEntityChangeDescription,
   resolveActorName,
 } from "@/services/changeHistory";
+import { parseKpiStoredStatus } from "@/lib/kpi/kind";
 import type {
   CreateKPIHistoryInput,
   KPIHistory,
-  StatusTone,
+  KpiStoredStatus,
   UpsertDailyKpiReportInput,
 } from "@/types";
-
-function toStatusTone(value: string): StatusTone {
-  if (value === "Grön" || value === "Gul" || value === "Röd") {
-    return value;
-  }
-  return "Gul";
-}
 
 function mapKpiHistoryRow(row: KpiHistoryRow): KPIHistory {
   return {
     id: row.id,
     kpiId: row.kpi_id,
     value: row.value,
-    status: toStatusTone(row.status),
+    status: parseKpiStoredStatus(row.status),
     comment: row.comment,
     recordedAt: row.recorded_at,
     createdAt: row.created_at,
@@ -75,7 +69,7 @@ function isValidReportDate(value: string): boolean {
 async function syncCurrentKpiFromHistory(input: {
   kpiId: string;
   value: string;
-  status: StatusTone;
+  status: KpiStoredStatus;
   recordedAt: Date;
   existingNewestRecordedAt: string | null;
 }): Promise<void> {

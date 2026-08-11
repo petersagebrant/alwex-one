@@ -77,12 +77,15 @@ export function formatSinceLoginTime(iso: string): string {
   return formatDateTimeSv(iso);
 }
 
-function toneForStatus(status: StatusTone): SinceLoginTone {
+function toneForStatus(status: string): SinceLoginTone {
   if (status === "Röd") {
     return "red";
   }
   if (status === "Gul") {
     return "yellow";
+  }
+  if (status === "Statistik") {
+    return "slate";
   }
   return "green";
 }

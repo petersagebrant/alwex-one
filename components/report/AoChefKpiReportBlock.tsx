@@ -2,8 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition, type FormEvent } from "react";
+import { StatistikTypeBadge } from "@/components/kpis/StatistikTypeBadge";
 import { StatusBadge } from "@/components/ui";
 import { computeKpiStatus } from "@/lib/kpi/computeStatus";
+import { isStatisticKpi, isStatusTone } from "@/lib/kpi/kind";
 import { formatKpiDisplayValue } from "@/lib/format/kpi";
 import { reportDailyKpiAction } from "@/app/report/kpis/actions";
 import type { DailyKpiReportItem, StatusTone } from "@/types";
@@ -25,22 +27,25 @@ export function AoChefKpiReportBlock({ item }: AoChefKpiReportBlockProps) {
   const [error, setError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
 
-  const autoStatusEnabled = Boolean(item.kpi.direction);
+  const isStatistic =
+    isStatisticKpi(item.kpi) || item.kpi.status === "Statistik";
+  const autoStatusEnabled = !isStatistic && Boolean(item.kpi.direction);
   const unit = item.kpi.unit;
 
   const lastValue = item.isReported
     ? item.todayReport?.value ?? item.previousValue
     : item.previousValue;
-  const lastStatus: StatusTone | null = item.isReported
+  const lastStatus = item.isReported
     ? item.todayReport?.status ?? item.previousStatus
     : item.previousStatus;
+  const lastTone = isStatusTone(lastStatus) ? lastStatus : null;
 
   useEffect(() => {
     setValue(item.todayReport?.value ?? "");
     setComment(item.todayReport?.comment ?? "");
-    setManualStatus(
-      item.todayReport?.status ?? item.previousStatus ?? item.kpi.status ?? "Gul",
-    );
+    const seed =
+      item.todayReport?.status ?? item.previousStatus ?? item.kpi.status;
+    setManualStatus(isStatusTone(seed) ? seed : "Gul");
   }, [
     item.kpi.id,
     item.kpi.status,
@@ -65,6 +70,7 @@ export function AoChefKpiReportBlock({ item }: AoChefKpiReportBlockProps) {
   const effectiveStatus: StatusTone =
     liveComputedStatus ?? manualStatus;
   const commentRequired =
+    !isStatistic &&
     Boolean(value.trim()) &&
     (effectiveStatus === "Gul" || effectiveStatus === "Röd");
 
@@ -86,7 +92,7 @@ export function AoChefKpiReportBlock({ item }: AoChefKpiReportBlockProps) {
       const result = await reportDailyKpiAction({
         kpiId: item.kpi.id,
         value,
-        status: effectiveStatus,
+        status: isStatistic ? "Statistik" : effectiveStatus,
         comment,
       });
 
@@ -96,7 +102,9 @@ export function AoChefKpiReportBlock({ item }: AoChefKpiReportBlockProps) {
       }
 
       setSavedMessage(
-        `Sparad: ${formatKpiDisplayValue(value, unit)} · ${effectiveStatus}`,
+        isStatistic
+          ? `Sparad: ${formatKpiDisplayValue(value, unit)}`
+          : `Sparad: ${formatKpiDisplayValue(value, unit)} · ${effectiveStatus}`,
       );
       router.refresh();
     });
@@ -106,22 +114,46 @@ export function AoChefKpiReportBlock({ item }: AoChefKpiReportBlockProps) {
     <article className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,0.05)] sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1.5">
-          <h3 className="text-base font-semibold tracking-tight text-slate-900">
-            {item.kpi.name}
-          </h3>
-          <p className="text-sm text-slate-600">
-            <span className="text-slate-500">Mål: </span>
-            <span className="font-medium text-slate-800">
-              {formatKpiDisplayValue(item.kpi.targetValue, unit)}
-            </span>
-          </p>
-          <p className="text-sm text-slate-600">
-            <span className="text-slate-500">Senast rapporterat: </span>
-            <span className="font-medium text-slate-800">
-              {formatKpiDisplayValue(lastValue, unit)}
-              {lastStatus ? ` – ${lastStatus}` : ""}
-            </span>
-          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-base font-semibold tracking-tight text-slate-900">
+              {item.kpi.name}
+            </h3>
+            {isStatistic ? <StatistikTypeBadge /> : null}
+          </div>
+          {isStatistic ? (
+            <dl className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600">
+              {item.isReported && item.todayReport ? (
+                <div>
+                  <dt className="inline text-slate-500">Idag: </dt>
+                  <dd className="inline font-medium text-slate-800">
+                    {formatKpiDisplayValue(item.todayReport.value, unit)}
+                  </dd>
+                </div>
+              ) : null}
+              <div>
+                <dt className="inline text-slate-500">Föregående: </dt>
+                <dd className="inline font-medium text-slate-800">
+                  {formatKpiDisplayValue(item.previousValue, unit)}
+                </dd>
+              </div>
+            </dl>
+          ) : (
+            <>
+              <p className="text-sm text-slate-600">
+                <span className="text-slate-500">Mål: </span>
+                <span className="font-medium text-slate-800">
+                  {formatKpiDisplayValue(item.kpi.targetValue, unit)}
+                </span>
+              </p>
+              <p className="text-sm text-slate-600">
+                <span className="text-slate-500">Senast rapporterat: </span>
+                <span className="font-medium text-slate-800">
+                  {formatKpiDisplayValue(lastValue, unit)}
+                  {lastTone ? ` – ${lastTone}` : ""}
+                </span>
+              </p>
+            </>
+          )}
         </div>
 
         <div className="flex flex-col items-end gap-1.5">
@@ -134,7 +166,7 @@ export function AoChefKpiReportBlock({ item }: AoChefKpiReportBlockProps) {
           >
             {item.isReported ? "Rapporterad idag" : "Ej rapporterad idag"}
           </span>
-          {lastStatus ? <StatusBadge status={lastStatus} /> : null}
+          {!isStatistic && lastTone ? <StatusBadge status={lastTone} /> : null}
         </div>
       </div>
 
@@ -161,7 +193,7 @@ export function AoChefKpiReportBlock({ item }: AoChefKpiReportBlockProps) {
             placeholder="Ange värde"
             autoComplete="off"
           />
-          {autoStatusEnabled ? (
+          {!isStatistic && autoStatusEnabled ? (
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-600">
               <span>Ny status:</span>
               {liveComputedStatus ? (
@@ -175,7 +207,8 @@ export function AoChefKpiReportBlock({ item }: AoChefKpiReportBlockProps) {
                 (beräknas automatiskt)
               </span>
             </div>
-          ) : (
+          ) : null}
+          {!isStatistic && !autoStatusEnabled ? (
             <div className="mt-2">
               <label
                 htmlFor={`ao-status-${item.kpi.id}`}
@@ -198,7 +231,7 @@ export function AoChefKpiReportBlock({ item }: AoChefKpiReportBlockProps) {
                 <option value="Röd">Röd</option>
               </select>
             </div>
-          )}
+          ) : null}
         </div>
 
         <div>

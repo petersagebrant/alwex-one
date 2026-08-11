@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { requireOperationalWriter } from "@/lib/auth/require-user";
 import { validateGreenYellowTolerances } from "@/lib/kpi/computeStatus";
+import { isKpiKind, type KpiKind } from "@/lib/kpi/kind";
 import { parseNumeric } from "@/lib/kpi/parseNumeric";
 import { createKPI, updateKPI } from "@/services/kpis";
 import type {
@@ -33,23 +34,54 @@ function isToleranceType(value: string): value is KpiToleranceType {
 }
 
 type ReadKpiFieldsResult =
-  | { ok: true; fields: {
-      businessAreaId: string;
-      name: string;
-      category: string;
-      targetValue: string;
-      currentValue: string;
-      unit: string;
-      statusValue: string;
-      trendValue: string;
-      direction: KpiDirection | null;
-      toleranceType: KpiToleranceType | null;
-      greenTolerance: number | null;
-      yellowTolerance: number | null;
-    } }
+  | {
+      ok: true;
+      fields: {
+        businessAreaId: string;
+        name: string;
+        category: string;
+        targetValue: string;
+        currentValue: string;
+        unit: string;
+        statusValue: string;
+        trendValue: string;
+        kind: KpiKind;
+        direction: KpiDirection | null;
+        toleranceType: KpiToleranceType | null;
+        greenTolerance: number | null;
+        yellowTolerance: number | null;
+      };
+    }
   | { ok: false; error: string };
 
 function readKpiFields(formData: FormData): ReadKpiFieldsResult {
+  const kindRaw = String(formData.get("kpiKind") ?? "TARGET").trim();
+  if (!isKpiKind(kindRaw)) {
+    return { ok: false, error: "Ogiltig KPI-typ." };
+  }
+  const kind = kindRaw;
+
+  if (kind === "STATISTIC") {
+    return {
+      ok: true,
+      fields: {
+        businessAreaId: String(formData.get("businessAreaId") ?? ""),
+        name: String(formData.get("name") ?? ""),
+        category: String(formData.get("category") ?? ""),
+        targetValue: "",
+        currentValue: String(formData.get("currentValue") ?? ""),
+        unit: String(formData.get("unit") ?? ""),
+        statusValue: "Gul",
+        trendValue: String(formData.get("trend") ?? "Oförändrad"),
+        kind,
+        direction: null,
+        toleranceType: null,
+        greenTolerance: null,
+        yellowTolerance: null,
+      },
+    };
+  }
+
   const directionRaw = String(formData.get("direction") ?? "").trim();
   const toleranceTypeRaw = String(formData.get("toleranceType") ?? "").trim();
   const greenToleranceRaw = String(formData.get("greenTolerance") ?? "").trim();
@@ -115,6 +147,7 @@ function readKpiFields(formData: FormData): ReadKpiFieldsResult {
       unit: String(formData.get("unit") ?? ""),
       statusValue: String(formData.get("status") ?? ""),
       trendValue: String(formData.get("trend") ?? ""),
+      kind,
       direction,
       toleranceType,
       greenTolerance,
@@ -143,7 +176,7 @@ export async function createKpiAction(formData: FormData) {
     redirect("/admin/kpis?new=1&error=Namn%20%C3%A4r%20obligatoriskt.");
   }
 
-  if (!isStatus(fields.statusValue)) {
+  if (fields.kind === "TARGET" && !isStatus(fields.statusValue)) {
     redirect("/admin/kpis?new=1&error=Ogiltig%20status.");
   }
 
@@ -159,8 +192,9 @@ export async function createKpiAction(formData: FormData) {
       targetValue: fields.targetValue,
       currentValue: fields.currentValue,
       unit: fields.unit,
-      status: fields.statusValue,
+      status: fields.kind === "STATISTIC" ? "Gul" : (fields.statusValue as StatusTone),
       trend: fields.trendValue,
+      kind: fields.kind,
       direction: fields.direction,
       toleranceType: fields.toleranceType,
       greenTolerance: fields.greenTolerance,
@@ -204,7 +238,7 @@ export async function updateKpiAction(formData: FormData) {
     );
   }
 
-  if (!isStatus(fields.statusValue)) {
+  if (fields.kind === "TARGET" && !isStatus(fields.statusValue)) {
     redirect(
       `/admin/kpis?edit=${encodeURIComponent(id)}&error=Ogiltig%20status.`,
     );
@@ -225,8 +259,9 @@ export async function updateKpiAction(formData: FormData) {
       targetValue: fields.targetValue,
       currentValue: fields.currentValue,
       unit: fields.unit,
-      status: fields.statusValue,
+      status: fields.kind === "STATISTIC" ? "Gul" : (fields.statusValue as StatusTone),
       trend: fields.trendValue,
+      kind: fields.kind,
       direction: fields.direction,
       toleranceType: fields.toleranceType,
       greenTolerance: fields.greenTolerance,

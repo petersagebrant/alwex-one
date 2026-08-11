@@ -1,5 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
 import type { AuthProfile } from "@/lib/auth/require-user";
+import {
+  isStatusTone,
+  isTargetKpi,
+  parseKpiStoredStatus,
+  parseStatusTone,
+} from "@/lib/kpi/kind";
 import { fetchBusinessAreaById } from "@/lib/supabase/business-areas";
 import { getActivitiesByBusinessAreaId } from "@/services/activities";
 import {
@@ -37,7 +43,8 @@ import type {
 export type AoChefDashboardKpi = {
   id: string;
   name: string;
-  status: StatusTone;
+  kind: "TARGET" | "STATISTIC";
+  status: StatusTone | "Statistik";
   currentValue: string | null;
   targetValue: string | null;
   unit: string | null;
@@ -96,10 +103,7 @@ export type AoChefDashboardData = {
 };
 
 function toStatusTone(value: string | null | undefined): StatusTone {
-  if (value === "Grön" || value === "Gul" || value === "Röd") {
-    return value;
-  }
-  return "Gul";
+  return parseStatusTone(value);
 }
 
 function countByStatus(statuses: StatusTone[]) {
@@ -399,6 +403,8 @@ export async function getAoChefDashboardData(
           name: kpi.name,
           area: areaName,
           owner: areaRow.manager?.trim() || "Ej angiven",
+          kind: kpi.kind,
+          unit: kpi.unit,
         },
       ]),
     ),
@@ -423,7 +429,10 @@ export async function getAoChefDashboardData(
     auditEntries: scopedRecentAudit,
   });
 
-  const kpiStatuses = kpis.map((kpi) => toStatusTone(kpi.status));
+  const kpiStatuses = kpis
+    .filter(isTargetKpi)
+    .map((kpi) => kpi.status)
+    .filter(isStatusTone);
   const goalStatuses = goals.map((goal) => toStatusTone(goal.status));
   const delayed = activities.filter(isDelayedActivity);
   const ongoing = activities.filter((activity) => activity.status === "Pågår");
@@ -452,7 +461,8 @@ export async function getAoChefDashboardData(
     kpis: kpis.map((kpi) => ({
       id: kpi.id,
       name: kpi.name,
-      status: toStatusTone(kpi.status),
+      kind: kpi.kind,
+      status: parseKpiStoredStatus(kpi.status),
       currentValue: kpi.currentValue,
       targetValue: kpi.targetValue,
       unit: kpi.unit,

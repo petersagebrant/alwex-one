@@ -1,10 +1,10 @@
-import type { StatusTone } from "./status";
+import type { KpiStoredStatus } from "@/lib/kpi/kind";
 
 export type KPIHistory = {
   id: string;
   kpiId: string;
   value: string;
-  status: StatusTone;
+  status: KpiStoredStatus;
   comment: string | null;
   recordedAt: string;
   createdAt: string;
@@ -18,7 +18,7 @@ export type KPIHistory = {
 export type CreateKPIHistoryInput = {
   kpiId: string;
   value: string;
-  status: StatusTone;
+  status: KpiStoredStatus;
   comment?: string;
   recordedAt: string;
   /** Optional; normally resolved from the signed-in user. */
@@ -30,7 +30,7 @@ export type UpsertDailyKpiReportInput = {
   /** YYYY-MM-DD (Europe/Stockholm calendar day). */
   reportDate: string;
   value: string;
-  status: StatusTone;
+  status: KpiStoredStatus;
   comment?: string;
   /** Optional; defaults to signed-in user inside the RPC when omitted. */
   recordedBy?: string | null;

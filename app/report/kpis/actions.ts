@@ -110,6 +110,29 @@ export async function reportDailyKpiAction(input: {
     return { ok: false, error: "Du saknar behörighet att rapportera KPI." };
   }
 
+  // Statistics KPIs never use Grön/Gul/Röd — store Statistik and skip comment gate.
+  if (kpi.kpi_kind === "STATISTIC") {
+    const reportDate = toStockholmReportDate(new Date());
+    try {
+      await upsertDailyKpiReport({
+        kpiId,
+        reportDate,
+        value,
+        status: "Statistik",
+        comment: (input.comment?.trim() || undefined),
+        recordedBy: profile.id,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Kunde inte spara rapporten.";
+      return { ok: false, error: message };
+    }
+
+    revalidatePath("/report/kpis");
+    revalidatePath("/");
+    return { ok: true };
+  }
+
   // When direction is set and computable, use server-side status (ignore client).
   // Otherwise fall back to manual client status.
   const computedStatus = computeKpiStatus({

@@ -158,6 +158,7 @@ export function buildVdAttentionItems(input: {
 
   // 1) Red KPIs
   for (const kpi of input.kpis) {
+    if (kpi.kind === "STATISTIC") continue;
     if (kpi.status !== "Röd") continue;
     push({
       id: `kpi-red-${kpi.id}`,
@@ -178,6 +179,7 @@ export function buildVdAttentionItems(input: {
 
   // 2) Significant negative KPI deviations (not already covered as red-only)
   for (const kpi of input.kpis) {
+    if (kpi.kind === "STATISTIC") continue;
     if (kpi.status === "Grön") continue;
     if (!isSignificantDeviation(kpi)) continue;
     const alreadyRed = seen.has(`kpi-red-${kpi.id}`);
@@ -251,6 +253,7 @@ export function buildVdAttentionItems(input: {
 
   // 5) Yellow KPIs with clear negative trend
   for (const kpi of input.kpis) {
+    if (kpi.kind === "STATISTIC") continue;
     if (kpi.status !== "Gul" || kpi.trend !== "Ner") continue;
     if (seen.has(`kpi-red-${kpi.id}`) || seen.has(`kpi-gap-${kpi.id}`)) {
       continue;

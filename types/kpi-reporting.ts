@@ -1,12 +1,12 @@
 import type { KPI } from "./kpi";
 import type { KPIHistory } from "./kpi-history";
-import type { StatusTone } from "./status";
+import type { KpiStoredStatus } from "@/lib/kpi/kind";
 
 export type DailyKpiReportItem = {
   kpi: KPI;
   /** Senaste värde före dagens rapport (eller aktuellt om ej rapporterat idag). */
   previousValue: string | null;
-  previousStatus: StatusTone | null;
+  previousStatus: KpiStoredStatus | null;
   todayReport: KPIHistory | null;
   isReported: boolean;
 };

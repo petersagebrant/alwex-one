@@ -10,9 +10,15 @@ import type { DailyKpiReportItem, StatusTone } from "@/types";
 
 type DailyKpiReportCardProps = {
   item: DailyKpiReportItem;
+  expanded: boolean;
+  onToggle: () => void;
 };
 
-export function DailyKpiReportCard({ item }: DailyKpiReportCardProps) {
+export function DailyKpiReportCard({
+  item,
+  expanded,
+  onToggle,
+}: DailyKpiReportCardProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [editing, setEditing] = useState(!item.isReported);
@@ -27,6 +33,8 @@ export function DailyKpiReportCard({ item }: DailyKpiReportCardProps) {
 
   const commentRequired = status === "Gul" || status === "Röd";
   const unit = item.kpi.unit;
+  const showForm = expanded && editing;
+  const showReportedSummary = expanded && item.isReported && !editing;
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -68,8 +76,20 @@ export function DailyKpiReportCard({ item }: DailyKpiReportCardProps) {
   }
 
   return (
-    <article className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,0.05)] sm:p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <article className="rounded-2xl border border-slate-200/80 bg-white shadow-[0_6px_18px_rgba(15,23,42,0.05)]">
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onToggle}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onToggle();
+          }
+        }}
+        aria-expanded={expanded}
+        className="flex w-full cursor-pointer flex-wrap items-start justify-between gap-3 rounded-2xl p-4 text-left transition hover:bg-slate-50/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 sm:p-5"
+      >
         <div className="min-w-0">
           <h3 className="text-base font-semibold tracking-tight text-slate-900">
             {item.kpi.name}
@@ -119,8 +139,8 @@ export function DailyKpiReportCard({ item }: DailyKpiReportCardProps) {
         </div>
       </div>
 
-      {item.isReported && !editing ? (
-        <div className="mt-4 space-y-2 border-t border-slate-100 pt-4">
+      {showReportedSummary ? (
+        <div className="space-y-2 border-t border-slate-100 px-4 pb-4 pt-4 sm:px-5 sm:pb-5">
           {item.todayReport?.comment ? (
             <p className="text-sm text-slate-600">
               <span className="font-medium text-slate-700">Kommentar: </span>
@@ -137,8 +157,12 @@ export function DailyKpiReportCard({ item }: DailyKpiReportCardProps) {
         </div>
       ) : null}
 
-      {editing ? (
-        <form onSubmit={handleSubmit} className="mt-4 space-y-3 border-t border-slate-100 pt-4">
+      {showForm ? (
+        <form
+          onSubmit={handleSubmit}
+          onClick={(event) => event.stopPropagation()}
+          className="space-y-3 border-t border-slate-100 px-4 pb-4 pt-4 sm:px-5 sm:pb-5"
+        >
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label

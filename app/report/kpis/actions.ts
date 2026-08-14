@@ -94,6 +94,20 @@ export async function reportDailyKpiAction(input: {
     return { ok: false, error: "KPI hittades inte." };
   }
 
+  if (kpi.archived_at) {
+    return {
+      ok: false,
+      error: "Arkiverade KPI:er kan inte rapporteras. Återaktivera först.",
+    };
+  }
+
+  if (kpi.kpi_kind === "CALCULATED" || kpi.calc_operator) {
+    return {
+      ok: false,
+      error: "Beräknade KPI:er rapporteras inte manuellt.",
+    };
+  }
+
   // AO-chef may only report KPIs for their business_area_id.
   // VD/admin may report for any area (validated via requireOperationalWriter).
   if (profile.role === "ao_chef") {

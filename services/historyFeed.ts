@@ -7,6 +7,7 @@ const FIELD_LABELS: Record<string, string> = {
   status: "Status",
   current_value: "Utfall",
   target_value: "Målvärde",
+  archived_at: "Arkiverad",
   deadline: "Deadline",
   owner: "Ansvarig",
   manager: "Ansvarig",
@@ -192,7 +193,7 @@ export function buildDashboardHistoryEvents(input: {
       name: string;
       area: string;
       owner: string;
-      kind?: "TARGET" | "STATISTIC";
+      kind?: "TARGET" | "STATISTIC" | "CALCULATED";
       unit?: string | null;
     }
   >;
@@ -218,7 +219,10 @@ export function buildDashboardHistoryEvents(input: {
         : undefined;
     const changeSummary = formatAuditChangeSummary(fields, 2, {
       currentValueLabel:
-        kpiMetaForEntry?.kind === "STATISTIC" ? "Rapporterat värde" : "Utfall",
+        kpiMetaForEntry?.kind === "STATISTIC" ||
+        kpiMetaForEntry?.kind === "CALCULATED"
+          ? "Rapporterat värde"
+          : "Utfall",
     });
 
     // Prefer concrete updates; still include creates without field diffs.
@@ -324,7 +328,8 @@ export function buildDashboardHistoryEvents(input: {
     }
 
     const meta = input.kpiMeta.get(kpiId);
-    const isStatistic = meta?.kind === "STATISTIC";
+    const isStatistic =
+      meta?.kind === "STATISTIC" || meta?.kind === "CALCULATED";
     const unitSuffix = meta?.unit?.trim() ? ` ${meta.unit.trim()}` : "";
     const parts: string[] = [];
     if (!isStatistic && previous.status !== latest.status) {

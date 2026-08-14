@@ -1,4 +1,5 @@
 import { parseNumeric } from "@/lib/kpi/parseNumeric";
+import { isExcludedFromVdAttention } from "@/lib/kpi/vdAttentionFilter";
 import type { StatusTone } from "@/types";
 import type { KPIListItem } from "@/services/kpis";
 import type { ActivityListItem } from "@/services/activities";
@@ -158,7 +159,8 @@ export function buildVdAttentionItems(input: {
 
   // 1) Red KPIs
   for (const kpi of input.kpis) {
-    if (kpi.kind === "STATISTIC") continue;
+    if (kpi.kind !== "TARGET") continue;
+    if (isExcludedFromVdAttention(kpi)) continue;
     if (kpi.status !== "Röd") continue;
     push({
       id: `kpi-red-${kpi.id}`,
@@ -179,7 +181,8 @@ export function buildVdAttentionItems(input: {
 
   // 2) Significant negative KPI deviations (not already covered as red-only)
   for (const kpi of input.kpis) {
-    if (kpi.kind === "STATISTIC") continue;
+    if (kpi.kind !== "TARGET") continue;
+    if (isExcludedFromVdAttention(kpi)) continue;
     if (kpi.status === "Grön") continue;
     if (!isSignificantDeviation(kpi)) continue;
     const alreadyRed = seen.has(`kpi-red-${kpi.id}`);
@@ -253,7 +256,8 @@ export function buildVdAttentionItems(input: {
 
   // 5) Yellow KPIs with clear negative trend
   for (const kpi of input.kpis) {
-    if (kpi.kind === "STATISTIC") continue;
+    if (kpi.kind !== "TARGET") continue;
+    if (isExcludedFromVdAttention(kpi)) continue;
     if (kpi.status !== "Gul" || kpi.trend !== "Ner") continue;
     if (seen.has(`kpi-red-${kpi.id}`) || seen.has(`kpi-gap-${kpi.id}`)) {
       continue;

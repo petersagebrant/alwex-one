@@ -1,0 +1,115 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import {
+  computeCalculatedValue,
+  computeDivideValue,
+  computeRatioPercentValue,
+  computeWeightedRatioPercent,
+  formatCalculatedValueSv,
+} from "./calculated";
+
+describe("calculated KPI helpers", () => {
+  it("formats Swedish decimals without trailing zeros", () => {
+    assert.equal(formatCalculatedValueSv(12), "12");
+    assert.equal(formatCalculatedValueSv(12.5), "12,5");
+    assert.equal(formatCalculatedValueSv(12.125), "12,125");
+  });
+
+  it("divides Körda mil / Antal RC", () => {
+    assert.equal(computeDivideValue("2500", "20"), "125");
+    assert.equal(computeDivideValue("1 250,5", "10"), "125,05");
+  });
+
+  it("does not compute when denominator missing or zero", () => {
+    assert.equal(computeDivideValue("100", null), null);
+    assert.equal(computeDivideValue("100", "0"), null);
+    assert.equal(computeDivideValue("100", ""), null);
+    assert.equal(computeDivideValue(null, "10"), null);
+  });
+
+  it("computes RATIO_PERCENT as percent", () => {
+    assert.equal(computeRatioPercentValue("32", "1000"), "3,2");
+    assert.equal(computeRatioPercentValue("1 250,5", "10000"), "12,505");
+  });
+
+  it("skips RATIO_PERCENT when denominator missing or zero", () => {
+    assert.equal(computeRatioPercentValue("32", null), null);
+    assert.equal(computeRatioPercentValue("32", "0"), null);
+    assert.equal(computeRatioPercentValue(null, "1000"), null);
+  });
+
+  it("computes WEIGHTED_RATIO_PERCENT as sum/sum×100, not average of %", () => {
+    // AO1: 10/100 = 10%, AO2: 10/900 ≈ 1.11% — average would be ~5.55%
+    // Weighted: 20/1000 = 2%
+    const result = computeWeightedRatioPercent([
+      { numeratorValue: "10", denominatorValue: "100" },
+      { numeratorValue: "10", denominatorValue: "900" },
+    ]);
+    assert.equal(result.value, "2");
+    assert.equal(result.reportedParts, 2);
+    assert.equal(result.totalParts, 2);
+    assert.equal(result.isComplete, true);
+    assert.equal(result.completenessLabel, "2 av 2 affärsområden rapporterade");
+  });
+
+  it("excludes incomplete parts from weighted sum and surfaces completeness", () => {
+    const result = computeWeightedRatioPercent([
+      { numeratorValue: "32", denominatorValue: "1000" },
+      { numeratorValue: "10", denominatorValue: null },
+      { numeratorValue: null, denominatorValue: "500" },
+      { numeratorValue: "5", denominatorValue: "0" },
+      { numeratorValue: "20", denominatorValue: "500" },
+    ]);
+    // Only pairs 1 and 5: (32+20)/(1000+500) = 52/1500 ≈ 3.467
+    assert.equal(result.value, "3,467");
+    assert.equal(result.reportedParts, 2);
+    assert.equal(result.totalParts, 5);
+    assert.equal(result.isComplete, false);
+    assert.equal(result.completenessLabel, "2 av 5 affärsområden rapporterade");
+  });
+
+  it("returns null weighted value when no complete parts", () => {
+    const result = computeWeightedRatioPercent([
+      { numeratorValue: "10", denominatorValue: null },
+      { numeratorValue: null, denominatorValue: "100" },
+    ]);
+    assert.equal(result.value, null);
+    assert.equal(result.reportedParts, 0);
+    assert.equal(result.isComplete, false);
+  });
+
+  it("supports DIVIDE and RATIO_PERCENT in computeCalculatedValue", () => {
+    assert.equal(
+      computeCalculatedValue({
+        operator: "DIVIDE",
+        numeratorValue: "100",
+        denominatorValue: "4",
+      }),
+      "25",
+    );
+    assert.equal(
+      computeCalculatedValue({
+        operator: "RATIO_PERCENT",
+        numeratorValue: "32",
+        denominatorValue: "1000",
+      }),
+      "3,2",
+    );
+    assert.equal(
+      computeCalculatedValue({
+        operator: "WEIGHTED_RATIO_PERCENT",
+        numeratorValue: "32",
+        denominatorValue: "1000",
+      }),
+      null,
+    );
+    assert.equal(
+      computeCalculatedValue({
+        operator: null,
+        numeratorValue: "100",
+        denominatorValue: "4",
+      }),
+      null,
+    );
+  });
+});

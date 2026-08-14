@@ -3,6 +3,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { AoChefKpiReportList } from "@/components/report/AoChefKpiReportList";
+import { CalculatedKpiReportSection } from "@/components/report/CalculatedKpiReportSection";
+import { RatioPercentReportSection } from "@/components/report/RatioPercentReportSection";
 import { VdKpiReportingView } from "@/components/report/VdKpiReportingView";
 import { InfoPanel, SectionHeader } from "@/components/ui";
 import { requireProfile } from "@/lib/auth/require-user";
@@ -69,13 +71,23 @@ function AoChefReportingProgress({
         </div>
       </InfoPanel>
 
-      {total > 0 ? (
+      {reporting.ratioGroups.length > 0 ? (
+        <RatioPercentReportSection groups={reporting.ratioGroups} />
+      ) : null}
+
+      {reporting.items.length > 0 ? (
         <AoChefKpiReportList items={reporting.items} />
-      ) : (
+      ) : null}
+
+      {total === 0 &&
+      reporting.ratioGroups.length === 0 &&
+      reporting.calculatedItems.length === 0 ? (
         <p className="rounded-2xl border border-slate-200/80 bg-white p-5 text-sm text-slate-600 shadow-[0_6px_18px_rgba(15,23,42,0.05)]">
           Inga KPI:er är skapade för {reporting.businessAreaName}.
         </p>
-      )}
+      ) : null}
+
+      <CalculatedKpiReportSection items={reporting.calculatedItems} />
     </>
   );
 }

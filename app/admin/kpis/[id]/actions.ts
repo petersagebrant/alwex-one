@@ -36,6 +36,12 @@ export async function addKpiHistoryAction(formData: FormData) {
   }
 
   const kind = parseKpiKind(kpi.kpi_kind);
+  if (kind === "CALCULATED" || kpi.calc_operator) {
+    redirect(
+      `/admin/kpis/${encodeURIComponent(kpiId)}?error=${encodeURIComponent("Beräknade KPI:er får endast uppdateras via indata.")}`,
+    );
+  }
+
   const status =
     kind === "STATISTIC"
       ? STATISTIC_STATUS

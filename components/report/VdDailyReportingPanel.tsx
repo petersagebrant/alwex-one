@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { InfoPanel } from "@/components/ui";
+import { CalculatedKpiReportSection } from "@/components/report/CalculatedKpiReportSection";
 import { DailyKpiReportList } from "@/components/report/DailyKpiReportList";
+import { RatioPercentReportSection } from "@/components/report/RatioPercentReportSection";
 import { loadVdAreaReportingAction } from "@/app/report/kpis/actions";
 import type { MyKpisForTodayReporting } from "@/types";
 
@@ -163,13 +165,23 @@ function ReportingBody({
         </div>
       </InfoPanel>
 
-      {total > 0 ? (
+      {reporting.ratioGroups.length > 0 ? (
+        <RatioPercentReportSection groups={reporting.ratioGroups} />
+      ) : null}
+
+      {reporting.items.length > 0 ? (
         <DailyKpiReportList items={reporting.items} />
-      ) : (
+      ) : null}
+
+      {total === 0 &&
+      reporting.ratioGroups.length === 0 &&
+      reporting.calculatedItems.length === 0 ? (
         <p className="rounded-2xl border border-slate-200/80 bg-white p-5 text-sm text-slate-600 shadow-[0_6px_18px_rgba(15,23,42,0.05)]">
           Inga KPI:er är skapade för {reporting.businessAreaName}.
         </p>
-      )}
+      ) : null}
+
+      <CalculatedKpiReportSection items={reporting.calculatedItems} />
     </>
   );
 }

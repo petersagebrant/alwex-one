@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { AoChefDashboard } from "@/components/dashboard/AoChefDashboard";
+import { SjukfranvaroComparisonPanel } from "@/components/dashboard/SjukfranvaroComparisonPanel";
 import { VdAttentionList } from "@/components/dashboard/VdAttentionList";
 import { VdBriefingPanel } from "@/components/dashboard/VdBriefingPanel";
 import { VdDiaryTimeline } from "../components/dashboard/VdDiaryTimeline";
@@ -19,6 +20,7 @@ import { getAoChefDashboardData } from "@/services/aoChefDashboard";
 import { getDashboardData } from "@/services/dashboard";
 import { getKPIs } from "@/services/kpis";
 import { getDashboardReportingContext } from "@/services/kpiReporting";
+import { getSjukfranvaroComparison } from "@/services/sjukfranvaro";
 import { getCurrentUser } from "@/lib/auth/require-user";
 import { fetchProfileByUserId } from "@/lib/supabase/profiles";
 import { formatDateTimeSv } from "@/lib/format/date";
@@ -79,7 +81,7 @@ export default async function Home() {
     return <AoChefDashboard data={aoData} />;
   }
 
-  const [data, kpiDetails, reportingContext] = await Promise.all([
+  const [data, kpiDetails, reportingContext, sjukfranvaro] = await Promise.all([
     getDashboardData(),
     getKPIs().catch(() => []),
     profileRow
@@ -96,6 +98,11 @@ export default async function Home() {
           myReporting: null,
           orgStats: null,
         }),
+    getSjukfranvaroComparison().catch(() => ({
+      reportDate: "",
+      company: null,
+      areas: [],
+    })),
   ]);
   const kpis = data?.kpis ?? [];
   const businessAreas = data?.businessAreas ?? [];
@@ -491,6 +498,10 @@ export default async function Home() {
           </dl>
 
           <VdAttentionList items={vdFocus.priorityItems ?? []} />
+
+          <div className="mt-4">
+            <SjukfranvaroComparisonPanel data={sjukfranvaro} />
+          </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
             <Link

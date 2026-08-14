@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { VdDiaryTimeline } from "@/components/dashboard/VdDiaryTimeline";
+import { BeraknadTypeBadge } from "@/components/kpis/BeraknadTypeBadge";
 import { StatistikTypeBadge } from "@/components/kpis/StatistikTypeBadge";
 import {
   InfoPanel,
@@ -173,11 +174,17 @@ export function AoChefDashboard({ data }: AoChefDashboardProps) {
                       <p className="text-xs text-slate-500">
                         {kpi.kind === "STATISTIC"
                           ? `${formatKpiDisplayValue(kpi.currentValue, kpi.unit)} · Typ: Statistik`
-                          : `${formatKpiDisplayValue(kpi.currentValue, kpi.unit)} mot mål ${formatKpiDisplayValue(kpi.targetValue, kpi.unit)}`}
+                          : kpi.kind === "CALCULATED"
+                            ? `${formatKpiDisplayValue(kpi.currentValue, kpi.unit)} · Typ: Beräknad`
+                            : kpi.calcOperator
+                              ? `${formatKpiDisplayValue(kpi.currentValue, kpi.unit)} mot mål ${formatKpiDisplayValue(kpi.targetValue, kpi.unit)} · Beräknas automatiskt`
+                              : `${formatKpiDisplayValue(kpi.currentValue, kpi.unit)} mot mål ${formatKpiDisplayValue(kpi.targetValue, kpi.unit)}`}
                       </p>
                     </div>
                     {kpi.kind === "STATISTIC" ? (
                       <StatistikTypeBadge />
+                    ) : kpi.kind === "CALCULATED" ? (
+                      <BeraknadTypeBadge />
                     ) : isStatusTone(kpi.status) ? (
                       <StatusBadge status={kpi.status} />
                     ) : null}

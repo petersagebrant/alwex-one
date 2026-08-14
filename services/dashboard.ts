@@ -1,6 +1,7 @@
 import { getCurrentUser } from "@/lib/auth/require-user";
 import { fetchBusinessAreas } from "@/lib/supabase/business-areas";
 import { formatDateSv, formatDateTimeSv } from "@/lib/format/date";
+import { isExcludedFromVdAttention } from "@/lib/kpi/vdAttentionFilter";
 import { getActivities, type ActivityListItem } from "@/services/activities";
 import { getAllActivityComments } from "@/services/activityComments";
 import {
@@ -629,17 +630,24 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   const followUpKpis = (allKpis ?? []).filter(
     (kpi) =>
-      kpi.kind !== "STATISTIC" &&
+      kpi.kind === "TARGET" &&
+      !isExcludedFromVdAttention(kpi) &&
       (kpi.status === "Gul" || kpi.status === "Röd"),
   );
   const greenKpis = (allKpis ?? []).filter(
-    (kpi) => kpi.kind !== "STATISTIC" && kpi.status === "Grön",
+    (kpi) => kpi.kind === "TARGET" && kpi.status === "Grön",
   );
   const yellowKpis = (allKpis ?? []).filter(
-    (kpi) => kpi.kind !== "STATISTIC" && kpi.status === "Gul",
+    (kpi) =>
+      kpi.kind === "TARGET" &&
+      !isExcludedFromVdAttention(kpi) &&
+      kpi.status === "Gul",
   );
   const redKpis = (allKpis ?? []).filter(
-    (kpi) => kpi.kind !== "STATISTIC" && kpi.status === "Röd",
+    (kpi) =>
+      kpi.kind === "TARGET" &&
+      !isExcludedFromVdAttention(kpi) &&
+      kpi.status === "Röd",
   );
   const redAreaRows = (areaRows ?? []).filter(
     (area) => toStatusTone(area.status) === "Röd",

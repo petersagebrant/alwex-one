@@ -1,3 +1,5 @@
+import { isKpiArchived } from "@/lib/kpi/archive";
+import { parseKpiCalcOperator } from "@/lib/kpi/calculated";
 import {
   computeKpiStatus,
   defaultToleranceTypeForTarget,
@@ -6,10 +8,14 @@ import {
   type KpiToleranceType,
 } from "@/lib/kpi/computeStatus";
 import {
+  isCalculatedKpi,
+  isNonTargetKpi,
   isStatisticKpi,
+  isSystemComputedKpi,
   parseKpiKind,
   parseKpiStoredStatus,
   STATISTIC_STATUS,
+  type KpiCalcOperator,
   type KpiKind,
 } from "@/lib/kpi/kind";
 import { parseNumeric } from "@/lib/kpi/parseNumeric";
@@ -20,6 +26,7 @@ import {
   fetchKpiById,
   fetchKpisByBusinessAreaId,
   insertKpi,
+  updateKpiArchivedAt,
   updateKpiRow,
   type KpiRow,
 } from "@/lib/supabase/kpis";
@@ -58,6 +65,9 @@ const KPI_TRACKED_FIELDS = [
   "tolerance_type",
   "green_tolerance",
   "yellow_tolerance",
+  "calc_operator",
+  "calc_numerator_kpi_id",
+  "calc_denominator_kpi_id",
 ] as const;
 
 function toTrend(value: string): KpiTrend {
@@ -97,6 +107,11 @@ function toToleranceNumber(
 
 function mapKpiRow(row: KpiRow): KPI {
   const kind = parseKpiKind(row.kpi_kind);
+  const nonTarget = isNonTargetKpi({ kind });
+  const calcOperator = parseKpiCalcOperator(row.calc_operator);
+  const hasCalc =
+    kind === "CALCULATED" ||
+    (kind === "TARGET" && calcOperator != null);
   return {
     id: row.id,
     businessAreaId: row.business_area_id,
@@ -108,13 +123,14 @@ function mapKpiRow(row: KpiRow): KPI {
     status: parseKpiStoredStatus(row.status),
     trend: toTrend(row.trend),
     kind,
-    direction: kind === "STATISTIC" ? null : toDirection(row.direction),
-    toleranceType:
-      kind === "STATISTIC" ? null : toToleranceType(row.tolerance_type),
-    greenTolerance:
-      kind === "STATISTIC" ? null : toToleranceNumber(row.green_tolerance),
-    yellowTolerance:
-      kind === "STATISTIC" ? null : toToleranceNumber(row.yellow_tolerance),
+    direction: nonTarget ? null : toDirection(row.direction),
+    toleranceType: nonTarget ? null : toToleranceType(row.tolerance_type),
+    greenTolerance: nonTarget ? null : toToleranceNumber(row.green_tolerance),
+    yellowTolerance: nonTarget ? null : toToleranceNumber(row.yellow_tolerance),
+    calcOperator: hasCalc ? calcOperator : null,
+    calcNumeratorKpiId: hasCalc ? row.calc_numerator_kpi_id ?? null : null,
+    calcDenominatorKpiId: hasCalc ? row.calc_denominator_kpi_id ?? null : null,
+    archivedAt: row.archived_at ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -196,6 +212,10 @@ function resolveKindPayload(input: {
   toleranceType?: KpiToleranceType | null;
   greenTolerance?: number | null;
   yellowTolerance?: number | null;
+  calcOperator?: KpiCalcOperator | null;
+  calcNumeratorKpiId?: string | null;
+  calcDenominatorKpiId?: string | null;
+  selfId?: string | null;
 }): {
   kpi_kind: KpiKind;
   status: KpiStoredStatus;
@@ -205,8 +225,16 @@ function resolveKindPayload(input: {
   tolerance_type: KpiToleranceType | null;
   green_tolerance: number | null;
   yellow_tolerance: number | null;
+  calc_operator: KpiCalcOperator | null;
+  calc_numerator_kpi_id: string | null;
+  calc_denominator_kpi_id: string | null;
 } {
-  const kind = input.kind === "STATISTIC" ? "STATISTIC" : "TARGET";
+  const kind =
+    input.kind === "STATISTIC"
+      ? "STATISTIC"
+      : input.kind === "CALCULATED"
+        ? "CALCULATED"
+        : "TARGET";
   const currentValue = input.currentValue?.trim() || null;
 
   if (kind === "STATISTIC") {
@@ -219,6 +247,42 @@ function resolveKindPayload(input: {
       tolerance_type: null,
       green_tolerance: null,
       yellow_tolerance: null,
+      calc_operator: null,
+      calc_numerator_kpi_id: null,
+      calc_denominator_kpi_id: null,
+    };
+  }
+
+  if (kind === "CALCULATED") {
+    const operator = input.calcOperator === "DIVIDE" ? "DIVIDE" : null;
+    const numeratorId = input.calcNumeratorKpiId?.trim() || null;
+    const denominatorId = input.calcDenominatorKpiId?.trim() || null;
+
+    if (!operator) {
+      throw new Error("Välj beräkningsoperator (DIVIDE).");
+    }
+    if (!numeratorId || !denominatorId) {
+      throw new Error("Välj täljare och nämnare för beräknad KPI.");
+    }
+    if (numeratorId === denominatorId) {
+      throw new Error("Täljare och nämnare måste vara olika KPI:er.");
+    }
+    if (input.selfId && (numeratorId === input.selfId || denominatorId === input.selfId)) {
+      throw new Error("En beräknad KPI kan inte referera till sig själv.");
+    }
+
+    return {
+      kpi_kind: "CALCULATED",
+      status: STATISTIC_STATUS,
+      target_value: null,
+      current_value: currentValue,
+      direction: null,
+      tolerance_type: null,
+      green_tolerance: null,
+      yellow_tolerance: null,
+      calc_operator: operator,
+      calc_numerator_kpi_id: numeratorId,
+      calc_denominator_kpi_id: denominatorId,
     };
   }
 
@@ -240,6 +304,65 @@ function resolveKindPayload(input: {
     fallbackStatus: input.status,
   });
 
+  // Preserve / set system-computed TARGET ratio metadata (seeded Sjukfrånvaro).
+  const targetCalcOperator =
+    input.calcOperator === "RATIO_PERCENT" ||
+    input.calcOperator === "WEIGHTED_RATIO_PERCENT"
+      ? input.calcOperator
+      : null;
+
+  if (targetCalcOperator === "RATIO_PERCENT") {
+    const numeratorId = input.calcNumeratorKpiId?.trim() || null;
+    const denominatorId = input.calcDenominatorKpiId?.trim() || null;
+    if (!numeratorId || !denominatorId) {
+      throw new Error("Välj täljare och nämnare för beräknad andel.");
+    }
+    if (numeratorId === denominatorId) {
+      throw new Error("Täljare och nämnare måste vara olika KPI:er.");
+    }
+    if (!targetValue) {
+      throw new Error("Målvärde krävs för beräknad TARGET-KPI.");
+    }
+    if (!auto.direction) {
+      throw new Error("Riktning krävs för beräknad TARGET-KPI.");
+    }
+    return {
+      kpi_kind: "TARGET",
+      status,
+      target_value: targetValue,
+      current_value: currentValue,
+      direction: auto.direction,
+      tolerance_type: auto.tolerance_type,
+      green_tolerance: auto.green_tolerance,
+      yellow_tolerance: auto.yellow_tolerance,
+      calc_operator: "RATIO_PERCENT",
+      calc_numerator_kpi_id: numeratorId,
+      calc_denominator_kpi_id: denominatorId,
+    };
+  }
+
+  if (targetCalcOperator === "WEIGHTED_RATIO_PERCENT") {
+    if (!targetValue) {
+      throw new Error("Målvärde krävs för viktad beräknad TARGET-KPI.");
+    }
+    if (!auto.direction) {
+      throw new Error("Riktning krävs för viktad beräknad TARGET-KPI.");
+    }
+    return {
+      kpi_kind: "TARGET",
+      status,
+      target_value: targetValue,
+      current_value: currentValue,
+      direction: auto.direction,
+      tolerance_type: auto.tolerance_type,
+      green_tolerance: auto.green_tolerance,
+      yellow_tolerance: auto.yellow_tolerance,
+      calc_operator: "WEIGHTED_RATIO_PERCENT",
+      calc_numerator_kpi_id: null,
+      calc_denominator_kpi_id: null,
+    };
+  }
+
   return {
     kpi_kind: "TARGET",
     status,
@@ -249,18 +372,53 @@ function resolveKindPayload(input: {
     tolerance_type: auto.tolerance_type,
     green_tolerance: auto.green_tolerance,
     yellow_tolerance: auto.yellow_tolerance,
+    calc_operator: null,
+    calc_numerator_kpi_id: null,
+    calc_denominator_kpi_id: null,
   };
+}
+
+async function assertCalcInputsSameArea(input: {
+  businessAreaId: string;
+  numeratorId: string;
+  denominatorId: string;
+}): Promise<void> {
+  const [numerator, denominator] = await Promise.all([
+    fetchKpiById(input.numeratorId),
+    fetchKpiById(input.denominatorId),
+  ]);
+  if (!numerator || !denominator) {
+    throw new Error("Täljare eller nämnare hittades inte.");
+  }
+  if (
+    numerator.business_area_id !== input.businessAreaId ||
+    denominator.business_area_id !== input.businessAreaId
+  ) {
+    throw new Error(
+      "Täljare och nämnare måste tillhöra samma affärsområde som den beräknade KPI:n.",
+    );
+  }
+  if (parseKpiKind(numerator.kpi_kind) === "CALCULATED") {
+    throw new Error("Täljaren får inte vara en beräknad KPI.");
+  }
+  if (parseKpiKind(denominator.kpi_kind) === "CALCULATED") {
+    throw new Error("Nämnaren får inte vara en beräknad KPI.");
+  }
 }
 
 export type KPIListItem = KPI & {
   businessAreaName: string;
 };
 
+export { isKpiArchived };
+
 export async function getKPIsByBusinessArea(
   businessAreaId: string,
 ): Promise<KPI[]> {
   try {
-    const rows = await fetchKpisByBusinessAreaId(businessAreaId);
+    const rows = await fetchKpisByBusinessAreaId(businessAreaId, {
+      includeArchived: false,
+    });
     return rows.map(mapKpiRow);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -271,9 +429,11 @@ export async function getKPIsByBusinessArea(
   }
 }
 
-export async function getKPIs(): Promise<KPIListItem[]> {
+export async function getKPIs(options?: {
+  includeArchived?: boolean;
+}): Promise<KPIListItem[]> {
   const [rows, areas] = await Promise.all([
-    fetchAllKpis(),
+    fetchAllKpis({ includeArchived: options?.includeArchived ?? false }),
     fetchBusinessAreas(),
   ]);
 
@@ -319,7 +479,23 @@ export async function createKPI(input: CreateKPIInput): Promise<KPI> {
     toleranceType: input.toleranceType,
     greenTolerance: input.greenTolerance,
     yellowTolerance: input.yellowTolerance,
+    calcOperator: input.calcOperator,
+    calcNumeratorKpiId: input.calcNumeratorKpiId,
+    calcDenominatorKpiId: input.calcDenominatorKpiId,
   });
+
+  if (
+    (resolved.kpi_kind === "CALCULATED" ||
+      resolved.calc_operator === "RATIO_PERCENT") &&
+    resolved.calc_numerator_kpi_id &&
+    resolved.calc_denominator_kpi_id
+  ) {
+    await assertCalcInputsSameArea({
+      businessAreaId: input.businessAreaId,
+      numeratorId: resolved.calc_numerator_kpi_id,
+      denominatorId: resolved.calc_denominator_kpi_id,
+    });
+  }
 
   const payload = {
     business_area_id: input.businessAreaId,
@@ -335,6 +511,9 @@ export async function createKPI(input: CreateKPIInput): Promise<KPI> {
     tolerance_type: resolved.tolerance_type,
     green_tolerance: resolved.green_tolerance,
     yellow_tolerance: resolved.yellow_tolerance,
+    calc_operator: resolved.calc_operator,
+    calc_numerator_kpi_id: resolved.calc_numerator_kpi_id,
+    calc_denominator_kpi_id: resolved.calc_denominator_kpi_id,
   };
 
   const row = await insertKpi(payload);
@@ -351,7 +530,14 @@ export async function createKPI(input: CreateKPIInput): Promise<KPI> {
     changes: createChanges.length > 0 ? { fields: createChanges } : null,
   });
 
-  if (row.current_value || row.status) {
+  if (
+    resolved.kpi_kind !== "CALCULATED" &&
+    !isSystemComputedKpi({
+      kind: resolved.kpi_kind,
+      calcOperator: resolved.calc_operator,
+    }) &&
+    (row.current_value || row.status)
+  ) {
     try {
       await addKPIHistoryEntry(
         {
@@ -391,16 +577,52 @@ export async function updateKPI(input: UpdateKPIInput): Promise<KPI> {
     throw new Error("KPI hittades inte.");
   }
 
+  const nextKind = input.kind ?? parseKpiKind(existing.kpi_kind);
+  const existingCalc = parseKpiCalcOperator(existing.calc_operator);
+  // Admin forms may omit calc fields — preserve seeded system-computed TARGET links.
+  const preserveTargetCalc =
+    nextKind === "TARGET" &&
+    existingCalc != null &&
+    input.calcOperator == null;
+
   const resolved = resolveKindPayload({
-    kind: input.kind ?? parseKpiKind(existing.kpi_kind),
+    kind: nextKind,
     status: input.status,
     targetValue: input.targetValue,
-    currentValue: input.currentValue,
+    currentValue:
+      nextKind === "CALCULATED" ||
+      (nextKind === "TARGET" &&
+        (input.calcOperator != null || existingCalc != null))
+        ? existing.current_value
+        : input.currentValue,
     direction: input.direction,
     toleranceType: input.toleranceType,
     greenTolerance: input.greenTolerance,
     yellowTolerance: input.yellowTolerance,
+    calcOperator: preserveTargetCalc
+      ? existingCalc
+      : input.calcOperator,
+    calcNumeratorKpiId: preserveTargetCalc
+      ? existing.calc_numerator_kpi_id
+      : input.calcNumeratorKpiId,
+    calcDenominatorKpiId: preserveTargetCalc
+      ? existing.calc_denominator_kpi_id
+      : input.calcDenominatorKpiId,
+    selfId: input.id,
   });
+
+  if (
+    (resolved.kpi_kind === "CALCULATED" ||
+      resolved.calc_operator === "RATIO_PERCENT") &&
+    resolved.calc_numerator_kpi_id &&
+    resolved.calc_denominator_kpi_id
+  ) {
+    await assertCalcInputsSameArea({
+      businessAreaId: input.businessAreaId,
+      numeratorId: resolved.calc_numerator_kpi_id,
+      denominatorId: resolved.calc_denominator_kpi_id,
+    });
+  }
 
   const next = {
     business_area_id: input.businessAreaId,
@@ -416,6 +638,9 @@ export async function updateKPI(input: UpdateKPIInput): Promise<KPI> {
     tolerance_type: resolved.tolerance_type,
     green_tolerance: resolved.green_tolerance,
     yellow_tolerance: resolved.yellow_tolerance,
+    calc_operator: resolved.calc_operator,
+    calc_numerator_kpi_id: resolved.calc_numerator_kpi_id,
+    calc_denominator_kpi_id: resolved.calc_denominator_kpi_id,
   };
 
   const changes = collectFieldChanges(
@@ -433,6 +658,9 @@ export async function updateKPI(input: UpdateKPIInput): Promise<KPI> {
       tolerance_type: existing.tolerance_type,
       green_tolerance: toToleranceNumber(existing.green_tolerance),
       yellow_tolerance: toToleranceNumber(existing.yellow_tolerance),
+      calc_operator: existing.calc_operator,
+      calc_numerator_kpi_id: existing.calc_numerator_kpi_id,
+      calc_denominator_kpi_id: existing.calc_denominator_kpi_id,
     },
     next,
     KPI_TRACKED_FIELDS,
@@ -486,4 +714,89 @@ export async function updateKPI(input: UpdateKPIInput): Promise<KPI> {
   return mapKpiRow(row);
 }
 
-export { isStatisticKpi };
+export async function archiveKPI(id: string): Promise<KPIListItem> {
+  const existing = await fetchKpiById(id);
+  if (!existing) {
+    throw new Error("KPI hittades inte.");
+  }
+  if (existing.archived_at) {
+    throw new Error("KPI:n är redan arkiverad.");
+  }
+
+  const row = await updateKpiArchivedAt(id, new Date().toISOString());
+  const areas = await fetchBusinessAreas();
+  const areaName =
+    areas.find((area) => area.id === row.business_area_id)?.name ??
+    "Okänt område";
+
+  const actorName = await resolveActorName(DEFAULT_ACTOR);
+  await recordAuditLog({
+    entityType: "kpi",
+    entityId: row.id,
+    action: "updated",
+    description: `KPI:n "${row.name}" arkiverades (${areaName}).`,
+    actorName,
+    businessAreaId: row.business_area_id,
+    changes: {
+      fields: [
+        {
+          field: "archived_at",
+          from: null,
+          to: row.archived_at,
+        },
+      ],
+    },
+  });
+
+  return {
+    ...mapKpiRow(row),
+    businessAreaName: areaName,
+  };
+}
+
+export async function unarchiveKPI(id: string): Promise<KPIListItem> {
+  const existing = await fetchKpiById(id);
+  if (!existing) {
+    throw new Error("KPI hittades inte.");
+  }
+  if (!existing.archived_at) {
+    throw new Error("KPI:n är redan aktiv.");
+  }
+
+  const row = await updateKpiArchivedAt(id, null);
+  const areas = await fetchBusinessAreas();
+  const areaName =
+    areas.find((area) => area.id === row.business_area_id)?.name ??
+    "Okänt område";
+
+  const actorName = await resolveActorName(DEFAULT_ACTOR);
+  await recordAuditLog({
+    entityType: "kpi",
+    entityId: row.id,
+    action: "updated",
+    description: `KPI:n "${row.name}" återaktiverades (${areaName}).`,
+    actorName,
+    businessAreaId: row.business_area_id,
+    changes: {
+      fields: [
+        {
+          field: "archived_at",
+          from: existing.archived_at,
+          to: null,
+        },
+      ],
+    },
+  });
+
+  return {
+    ...mapKpiRow(row),
+    businessAreaName: areaName,
+  };
+}
+
+export {
+  isCalculatedKpi,
+  isNonTargetKpi,
+  isStatisticKpi,
+  isSystemComputedKpi,
+};

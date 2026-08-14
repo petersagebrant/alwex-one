@@ -26,6 +26,7 @@ export type {
   KpiDirection,
   KpiToleranceType,
   KpiKind,
+  KpiCalcOperator,
   KpiStoredStatus,
   CreateKPIInput,
   UpdateKPIInput,
@@ -36,8 +37,10 @@ export type {
   UpsertDailyKpiReportInput,
 } from "./kpi-history";
 export type {
+  DailyKpiComputationMeta,
   DailyKpiReportItem,
   MyKpisForTodayReporting,
+  RatioPercentReportGroup,
   TodayOrgReportingStats,
 } from "./kpi-reporting";
 export type { HistoryEvent } from "./history";

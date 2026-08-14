@@ -1,11 +1,21 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireOperationalWriter } from "@/lib/auth/require-user";
+import {
+  requireBusinessAreaManager,
+  requireOperationalWriter,
+} from "@/lib/auth/require-user";
 import { validateGreenYellowTolerances } from "@/lib/kpi/computeStatus";
+import { isKpiCalcOperator, type KpiCalcOperator } from "@/lib/kpi/calculated";
 import { isKpiKind, type KpiKind } from "@/lib/kpi/kind";
 import { parseNumeric } from "@/lib/kpi/parseNumeric";
-import { createKPI, updateKPI } from "@/services/kpis";
+import {
+  archiveKPI,
+  createKPI,
+  unarchiveKPI,
+  updateKPI,
+} from "@/services/kpis";
 import type {
   KpiDirection,
   KpiToleranceType,
@@ -50,6 +60,9 @@ type ReadKpiFieldsResult =
         toleranceType: KpiToleranceType | null;
         greenTolerance: number | null;
         yellowTolerance: number | null;
+        calcOperator: KpiCalcOperator | null;
+        calcNumeratorKpiId: string | null;
+        calcDenominatorKpiId: string | null;
       };
     }
   | { ok: false; error: string };
@@ -78,6 +91,47 @@ function readKpiFields(formData: FormData): ReadKpiFieldsResult {
         toleranceType: null,
         greenTolerance: null,
         yellowTolerance: null,
+        calcOperator: null,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+      },
+    };
+  }
+
+  if (kind === "CALCULATED") {
+    const calcOperatorRaw = String(formData.get("calcOperator") ?? "DIVIDE").trim();
+    if (!isKpiCalcOperator(calcOperatorRaw)) {
+      return { ok: false, error: "Ogiltig beräkningsoperator." };
+    }
+    const calcNumeratorKpiId = String(
+      formData.get("calcNumeratorKpiId") ?? "",
+    ).trim();
+    const calcDenominatorKpiId = String(
+      formData.get("calcDenominatorKpiId") ?? "",
+    ).trim();
+    if (!calcNumeratorKpiId || !calcDenominatorKpiId) {
+      return { ok: false, error: "Välj täljare och nämnare." };
+    }
+
+    return {
+      ok: true,
+      fields: {
+        businessAreaId: String(formData.get("businessAreaId") ?? ""),
+        name: String(formData.get("name") ?? ""),
+        category: String(formData.get("category") ?? ""),
+        targetValue: "",
+        currentValue: "",
+        unit: String(formData.get("unit") ?? ""),
+        statusValue: "Gul",
+        trendValue: String(formData.get("trend") ?? "Oförändrad"),
+        kind,
+        direction: null,
+        toleranceType: null,
+        greenTolerance: null,
+        yellowTolerance: null,
+        calcOperator: calcOperatorRaw,
+        calcNumeratorKpiId,
+        calcDenominatorKpiId,
       },
     };
   }
@@ -152,8 +206,18 @@ function readKpiFields(formData: FormData): ReadKpiFieldsResult {
       toleranceType,
       greenTolerance,
       yellowTolerance,
+      calcOperator: null,
+      calcNumeratorKpiId: null,
+      calcDenominatorKpiId: null,
     },
   };
+}
+
+function fallbackStatusForKind(kind: KpiKind, statusValue: string): StatusTone {
+  if (kind === "STATISTIC" || kind === "CALCULATED") {
+    return "Gul";
+  }
+  return statusValue as StatusTone;
 }
 
 export async function createKpiAction(formData: FormData) {
@@ -192,13 +256,16 @@ export async function createKpiAction(formData: FormData) {
       targetValue: fields.targetValue,
       currentValue: fields.currentValue,
       unit: fields.unit,
-      status: fields.kind === "STATISTIC" ? "Gul" : (fields.statusValue as StatusTone),
+      status: fallbackStatusForKind(fields.kind, fields.statusValue),
       trend: fields.trendValue,
       kind: fields.kind,
       direction: fields.direction,
       toleranceType: fields.toleranceType,
       greenTolerance: fields.greenTolerance,
       yellowTolerance: fields.yellowTolerance,
+      calcOperator: fields.calcOperator,
+      calcNumeratorKpiId: fields.calcNumeratorKpiId,
+      calcDenominatorKpiId: fields.calcDenominatorKpiId,
     });
   } catch (error) {
     const message =
@@ -259,13 +326,16 @@ export async function updateKpiAction(formData: FormData) {
       targetValue: fields.targetValue,
       currentValue: fields.currentValue,
       unit: fields.unit,
-      status: fields.kind === "STATISTIC" ? "Gul" : (fields.statusValue as StatusTone),
+      status: fallbackStatusForKind(fields.kind, fields.statusValue),
       trend: fields.trendValue,
       kind: fields.kind,
       direction: fields.direction,
       toleranceType: fields.toleranceType,
       greenTolerance: fields.greenTolerance,
       yellowTolerance: fields.yellowTolerance,
+      calcOperator: fields.calcOperator,
+      calcNumeratorKpiId: fields.calcNumeratorKpiId,
+      calcDenominatorKpiId: fields.calcDenominatorKpiId,
     });
   } catch (error) {
     const message =
@@ -276,4 +346,58 @@ export async function updateKpiAction(formData: FormData) {
   }
 
   redirect("/admin/kpis");
+}
+
+export type ArchiveKpiResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+/** VD/admin only — soft-archive KPI (history preserved). */
+export async function archiveKpiAction(
+  kpiId: string,
+): Promise<ArchiveKpiResult> {
+  await requireBusinessAreaManager();
+  const id = kpiId.trim();
+  if (!id) {
+    return { ok: false, error: "Saknar KPI-id." };
+  }
+
+  try {
+    await archiveKPI(id);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Kunde inte arkivera KPI.";
+    return { ok: false, error: message };
+  }
+
+  revalidatePath("/admin/kpis");
+  revalidatePath(`/admin/kpis/${id}`);
+  revalidatePath("/report/kpis");
+  revalidatePath("/");
+  return { ok: true };
+}
+
+/** VD/admin only — restore archived KPI to active lists. */
+export async function unarchiveKpiAction(
+  kpiId: string,
+): Promise<ArchiveKpiResult> {
+  await requireBusinessAreaManager();
+  const id = kpiId.trim();
+  if (!id) {
+    return { ok: false, error: "Saknar KPI-id." };
+  }
+
+  try {
+    await unarchiveKPI(id);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Kunde inte återaktivera KPI.";
+    return { ok: false, error: message };
+  }
+
+  revalidatePath("/admin/kpis");
+  revalidatePath(`/admin/kpis/${id}`);
+  revalidatePath("/report/kpis");
+  revalidatePath("/");
+  return { ok: true };
 }

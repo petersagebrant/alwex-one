@@ -1,8 +1,15 @@
 import Link from "next/link";
 import type { KPI } from "@/types";
+import { BeraknadTypeBadge } from "@/components/kpis/BeraknadTypeBadge";
 import { StatistikTypeBadge } from "@/components/kpis/StatistikTypeBadge";
 import { StatusBadge } from "@/components/ui";
-import { isStatisticKpi, isStatusTone } from "@/lib/kpi/kind";
+import {
+  isCalculatedKpi,
+  isNonTargetKpi,
+  isStatisticKpi,
+  isStatusTone,
+  isSystemComputedKpi,
+} from "@/lib/kpi/kind";
 
 type AreaKpiListProps = {
   kpis: KPI[];
@@ -57,6 +64,16 @@ export function AreaKpiList({ kpis }: AreaKpiListProps) {
                           Typ: Statistik
                         </span>
                       ) : null}
+                      {isCalculatedKpi(kpi) ? (
+                        <span className="mt-0.5 block text-xs font-normal text-neutral-500">
+                          Typ: Beräknad
+                        </span>
+                      ) : null}
+                      {isSystemComputedKpi(kpi) && !isCalculatedKpi(kpi) ? (
+                        <span className="mt-0.5 block text-xs font-normal text-neutral-500">
+                          Beräknas automatiskt
+                        </span>
+                      ) : null}
                     </Link>
                   </td>
                   <td className="border-b border-neutral-100 px-3 py-3 text-neutral-700">
@@ -72,7 +89,7 @@ export function AreaKpiList({ kpis }: AreaKpiListProps) {
                       href={`/admin/kpis/${kpi.id}`}
                       className="block hover:text-neutral-900"
                     >
-                      {isStatisticKpi(kpi)
+                      {isNonTargetKpi(kpi)
                         ? "—"
                         : formatValue(kpi.targetValue, kpi.unit)}
                     </Link>
@@ -89,6 +106,8 @@ export function AreaKpiList({ kpis }: AreaKpiListProps) {
                     <Link href={`/admin/kpis/${kpi.id}`} className="inline-flex">
                       {isStatisticKpi(kpi) ? (
                         <StatistikTypeBadge />
+                      ) : isCalculatedKpi(kpi) ? (
+                        <BeraknadTypeBadge />
                       ) : isStatusTone(kpi.status) ? (
                         <StatusBadge status={kpi.status} />
                       ) : null}

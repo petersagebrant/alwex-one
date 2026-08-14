@@ -1,20 +1,47 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { BeraknadTypeBadge } from "@/components/kpis/BeraknadTypeBadge";
 import { StatistikTypeBadge } from "@/components/kpis/StatistikTypeBadge";
 import type { KPIListItem } from "@/services/kpis";
 import type { KpiKind } from "@/types";
 
 type AreaOption = { id: string; name: string };
 
+type KpiOption = {
+  id: string;
+  name: string;
+  businessAreaId: string;
+  kind: KpiKind;
+};
+
 type KpiAdminFormFieldsProps = {
   areas: AreaOption[];
+  kpis?: KpiOption[];
   kpi?: KPIListItem | null;
 };
 
-export function KpiAdminFormFields({ areas, kpi }: KpiAdminFormFieldsProps) {
+export function KpiAdminFormFields({
+  areas,
+  kpis = [],
+  kpi,
+}: KpiAdminFormFieldsProps) {
   const [kind, setKind] = useState<KpiKind>(kpi?.kind ?? "TARGET");
+  const [businessAreaId, setBusinessAreaId] = useState(
+    kpi?.businessAreaId ?? "",
+  );
   const isStatistic = kind === "STATISTIC";
+  const isCalculated = kind === "CALCULATED";
+  const isNonTarget = isStatistic || isCalculated;
+
+  const inputOptions = useMemo(() => {
+    return kpis.filter(
+      (option) =>
+        option.businessAreaId === businessAreaId &&
+        option.kind !== "CALCULATED" &&
+        option.id !== kpi?.id,
+    );
+  }, [businessAreaId, kpi?.id, kpis]);
 
   return (
     <>
@@ -34,11 +61,21 @@ export function KpiAdminFormFields({ areas, kpi }: KpiAdminFormFieldsProps) {
         >
           <option value="TARGET">Vanlig KPI (med mål / status)</option>
           <option value="STATISTIC">Statistik / inget mål</option>
+          <option value="CALCULATED">Beräknad (t.ex. division)</option>
         </select>
         {isStatistic ? (
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-neutral-600">
             <StatistikTypeBadge />
             <span>Ingen Grön/Gul/Röd-status. Värden sparas i historiken.</span>
+          </div>
+        ) : null}
+        {isCalculated ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-neutral-600">
+            <BeraknadTypeBadge />
+            <span>
+              Beräknas automatiskt från andra KPI:er. Syns inte i manuell
+              rapportering.
+            </span>
           </div>
         ) : null}
       </div>
@@ -54,7 +91,8 @@ export function KpiAdminFormFields({ areas, kpi }: KpiAdminFormFieldsProps) {
           id="businessAreaId"
           name="businessAreaId"
           required
-          defaultValue={kpi?.businessAreaId ?? ""}
+          value={businessAreaId}
+          onChange={(event) => setBusinessAreaId(event.target.value)}
           className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
         >
           <option value="" disabled>
@@ -101,26 +139,97 @@ export function KpiAdminFormFields({ areas, kpi }: KpiAdminFormFieldsProps) {
         />
       </div>
 
-      <div
-        className={`grid grid-cols-1 gap-4 ${isStatistic ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}
-      >
-        <div>
-          <label
-            htmlFor="currentValue"
-            className="block text-xs font-medium text-neutral-500"
-          >
-            Nuvarande värde
-          </label>
-          <input
-            id="currentValue"
-            name="currentValue"
-            type="text"
-            defaultValue={kpi?.currentValue ?? ""}
-            className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
-          />
+      {isCalculated ? (
+        <div className="space-y-4 rounded-lg border border-neutral-200 bg-neutral-50/70 p-4">
+          <input type="hidden" name="calcOperator" value="DIVIDE" />
+          <p className="text-xs font-medium text-neutral-700">
+            Beräkning: täljare ÷ nämnare (samma rapportdatum)
+          </p>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label
+                htmlFor="calcNumeratorKpiId"
+                className="block text-xs font-medium text-neutral-500"
+              >
+                Täljare
+              </label>
+              <select
+                id="calcNumeratorKpiId"
+                name="calcNumeratorKpiId"
+                required
+                defaultValue={kpi?.calcNumeratorKpiId ?? ""}
+                className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
+              >
+                <option value="" disabled>
+                  Välj KPI
+                </option>
+                {inputOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label
+                htmlFor="calcDenominatorKpiId"
+                className="block text-xs font-medium text-neutral-500"
+              >
+                Nämnare
+              </label>
+              <select
+                id="calcDenominatorKpiId"
+                name="calcDenominatorKpiId"
+                required
+                defaultValue={kpi?.calcDenominatorKpiId ?? ""}
+                className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
+              >
+                <option value="" disabled>
+                  Välj KPI
+                </option>
+                {inputOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          {!businessAreaId ? (
+            <p className="text-[11px] text-neutral-500">
+              Välj affärsområde för att se tillgängliga KPI:er.
+            </p>
+          ) : inputOptions.length === 0 ? (
+            <p className="text-[11px] text-amber-700">
+              Inga manuella KPI:er i området ännu. Skapa Statistik/mål-KPI:er
+              först.
+            </p>
+          ) : null}
         </div>
+      ) : null}
 
-        {!isStatistic ? (
+      <div
+        className={`grid grid-cols-1 gap-4 ${isNonTarget ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}
+      >
+        {!isCalculated ? (
+          <div>
+            <label
+              htmlFor="currentValue"
+              className="block text-xs font-medium text-neutral-500"
+            >
+              Nuvarande värde
+            </label>
+            <input
+              id="currentValue"
+              name="currentValue"
+              type="text"
+              defaultValue={kpi?.currentValue ?? ""}
+              className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
+            />
+          </div>
+        ) : null}
+
+        {!isNonTarget ? (
           <div>
             <label
               htmlFor="targetValue"
@@ -156,7 +265,7 @@ export function KpiAdminFormFields({ areas, kpi }: KpiAdminFormFieldsProps) {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {!isStatistic ? (
+        {!isNonTarget ? (
           <div>
             <label
               htmlFor="status"
@@ -202,7 +311,7 @@ export function KpiAdminFormFields({ areas, kpi }: KpiAdminFormFieldsProps) {
         </div>
       </div>
 
-      {!isStatistic ? (
+      {!isNonTarget ? (
         <>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>

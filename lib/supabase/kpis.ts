@@ -15,6 +15,10 @@ export type KpiRow = {
   tolerance_type: string | null;
   green_tolerance: number | string | null;
   yellow_tolerance: number | string | null;
+  calc_operator: string | null;
+  calc_numerator_kpi_id: string | null;
+  calc_denominator_kpi_id: string | null;
+  archived_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -33,6 +37,9 @@ export type InsertKpiInput = {
   tolerance_type: string | null;
   green_tolerance: number | null;
   yellow_tolerance: number | null;
+  calc_operator: string | null;
+  calc_numerator_kpi_id: string | null;
+  calc_denominator_kpi_id: string | null;
 };
 
 export type UpdateKpiRowInput = {
@@ -49,22 +56,36 @@ export type UpdateKpiRowInput = {
   tolerance_type: string | null;
   green_tolerance: number | null;
   yellow_tolerance: number | null;
+  calc_operator: string | null;
+  calc_numerator_kpi_id: string | null;
+  calc_denominator_kpi_id: string | null;
   updated_at: string;
 };
 
-const kpiSelect =
-  "id, business_area_id, name, category, target_value, current_value, unit, status, trend, kpi_kind, direction, tolerance_type, green_tolerance, yellow_tolerance, created_at, updated_at";
+export type FetchKpisOptions = {
+  /** Default false — operational views exclude archived KPIs. */
+  includeArchived?: boolean;
+};
 
+const kpiSelect =
+  "id, business_area_id, name, category, target_value, current_value, unit, status, trend, kpi_kind, direction, tolerance_type, green_tolerance, yellow_tolerance, calc_operator, calc_numerator_kpi_id, calc_denominator_kpi_id, archived_at, created_at, updated_at";
 export async function fetchKpisByBusinessAreaId(
   businessAreaId: string,
+  options?: FetchKpisOptions,
 ): Promise<KpiRow[]> {
   const supabase = await createClient();
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("kpis")
     .select(kpiSelect)
     .eq("business_area_id", businessAreaId)
     .order("name", { ascending: true });
+
+  if (!options?.includeArchived) {
+    query = query.is("archived_at", null);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     throw new Error(`Kunde inte hämta kpis: ${error.message}`);
@@ -73,13 +94,21 @@ export async function fetchKpisByBusinessAreaId(
   return data ?? [];
 }
 
-export async function fetchAllKpis(): Promise<KpiRow[]> {
+export async function fetchAllKpis(
+  options?: FetchKpisOptions,
+): Promise<KpiRow[]> {
   const supabase = await createClient();
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("kpis")
     .select(kpiSelect)
     .order("updated_at", { ascending: false });
+
+  if (!options?.includeArchived) {
+    query = query.is("archived_at", null);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     throw new Error(`Kunde inte hämta kpis: ${error.message}`);
@@ -135,6 +164,29 @@ export async function updateKpiRow(
 
   if (error) {
     throw new Error(`Kunde inte uppdatera kpi: ${error.message}`);
+  }
+
+  return data;
+}
+
+export async function updateKpiArchivedAt(
+  id: string,
+  archivedAt: string | null,
+): Promise<KpiRow> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("kpis")
+    .update({
+      archived_at: archivedAt,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .select(kpiSelect)
+    .single();
+
+  if (error) {
+    throw new Error(`Kunde inte uppdatera KPI-arkivering: ${error.message}`);
   }
 
   return data;

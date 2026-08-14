@@ -43,7 +43,8 @@ import type {
 export type AoChefDashboardKpi = {
   id: string;
   name: string;
-  kind: "TARGET" | "STATISTIC";
+  kind: "TARGET" | "STATISTIC" | "CALCULATED";
+  calcOperator: string | null;
   status: StatusTone | "Statistik";
   currentValue: string | null;
   targetValue: string | null;
@@ -462,6 +463,7 @@ export async function getAoChefDashboardData(
       id: kpi.id,
       name: kpi.name,
       kind: kpi.kind,
+      calcOperator: kpi.calcOperator,
       status: parseKpiStoredStatus(kpi.status),
       currentValue: kpi.currentValue,
       targetValue: kpi.targetValue,

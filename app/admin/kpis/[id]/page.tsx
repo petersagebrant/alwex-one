@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppHeader } from "@/components/layout/AppHeader";
+import { KpiArchiveControls } from "@/components/admin/KpiArchiveControls";
 import { KpiHistoryChart } from "@/components/kpis/KpiHistoryChart";
+import { BeraknadTypeBadge } from "@/components/kpis/BeraknadTypeBadge";
 import { StatistikTypeBadge } from "@/components/kpis/StatistikTypeBadge";
 import {
   InfoPanel,
@@ -10,9 +12,17 @@ import {
   SectionHeader,
   StatusBadge,
 } from "@/components/ui";
+import { requireProfile } from "@/lib/auth/require-user";
+import { canManageBusinessAreas } from "@/lib/auth/roles";
 import { formatDateSv, formatDateTimeSv } from "@/lib/format/date";
-import { isStatisticKpi, isStatusTone } from "@/lib/kpi/kind";
-import { getKPIById } from "@/services/kpis";
+import {
+  isCalculatedKpi,
+  isNonTargetKpi,
+  isStatisticKpi,
+  isStatusTone,
+  isSystemComputedKpi,
+} from "@/lib/kpi/kind";
+import { getKPIById, isKpiArchived } from "@/services/kpis";
 import { getKPIHistory } from "@/services/kpiHistory";
 import { addKpiHistoryAction } from "./actions";
 
@@ -61,11 +71,15 @@ export default async function KpiDetailPage({
   const { id } = await params;
   const { error } = await searchParams;
 
+  const profile = await requireProfile();
+  const canArchive = canManageBusinessAreas(profile.role);
+
   const kpi = await getKPIById(id).catch(() => null);
   if (!kpi) {
     notFound();
   }
 
+  const archived = isKpiArchived(kpi);
   const history = await getKPIHistory(kpi.id);
   const historyNewestFirst = [...history].reverse();
   const today = toDateInputValue(new Date().toISOString());
@@ -101,8 +115,15 @@ export default async function KpiDetailPage({
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              {archived ? (
+                <span className="inline-flex rounded-md bg-neutral-100 px-2 py-1 text-xs font-semibold text-neutral-600">
+                  Arkiverad
+                </span>
+              ) : null}
               {isStatisticKpi(kpi) ? (
                 <StatistikTypeBadge />
+              ) : isCalculatedKpi(kpi) ? (
+                <BeraknadTypeBadge />
               ) : isStatusTone(kpi.status) ? (
                 <StatusBadge status={kpi.status} />
               ) : null}
@@ -112,6 +133,14 @@ export default async function KpiDetailPage({
               >
                 Ändra KPI
               </Link>
+              {canArchive ? (
+                <KpiArchiveControls
+                  kpiId={kpi.id}
+                  kpiName={kpi.name}
+                  businessAreaName={kpi.businessAreaName}
+                  archived={archived}
+                />
+              ) : null}
             </div>
           </div>
         </div>
@@ -129,7 +158,9 @@ export default async function KpiDetailPage({
             targetValue={
               isStatisticKpi(kpi)
                 ? "Inget mål (statistik)"
-                : formatValue(kpi.targetValue, kpi.unit)
+                : isCalculatedKpi(kpi)
+                  ? "Inget mål (beräknad)"
+                  : formatValue(kpi.targetValue, kpi.unit)
             }
             trend={kpi.trend}
             status={isStatusTone(kpi.status) ? kpi.status : undefined}
@@ -157,13 +188,17 @@ export default async function KpiDetailPage({
               <div className="flex items-baseline justify-between gap-3">
                 <dt className="text-slate-500">Typ</dt>
                 <dd className="font-medium text-slate-800">
-                  {isStatisticKpi(kpi) ? "Statistik" : "KPI med mål"}
+                  {isStatisticKpi(kpi)
+                    ? "Statistik"
+                    : isCalculatedKpi(kpi)
+                      ? "Beräknad"
+                      : "KPI med mål"}
                 </dd>
               </div>
               <div className="flex items-baseline justify-between gap-3">
                 <dt className="text-slate-500">Målvärde</dt>
                 <dd className="font-medium text-slate-800">
-                  {isStatisticKpi(kpi)
+                  {isNonTargetKpi(kpi)
                     ? "—"
                     : formatValue(kpi.targetValue, kpi.unit)}
                 </dd>
@@ -173,12 +208,12 @@ export default async function KpiDetailPage({
                 <dd className="font-medium text-slate-800">{kpi.trend}</dd>
               </div>
               <div className="flex items-baseline justify-between gap-3">
-                <dt className="text-slate-500">
-                  {isStatisticKpi(kpi) ? "Status" : "Status"}
-                </dt>
+                <dt className="text-slate-500">Status</dt>
                 <dd>
                   {isStatisticKpi(kpi) ? (
                     <StatistikTypeBadge />
+                  ) : isCalculatedKpi(kpi) ? (
+                    <BeraknadTypeBadge />
                   ) : isStatusTone(kpi.status) ? (
                     <StatusBadge status={kpi.status} />
                   ) : null}
@@ -192,8 +227,8 @@ export default async function KpiDetailPage({
           <SectionHeader
             title="Värde över tid"
             description={
-              isStatisticKpi(kpi)
-                ? "Rapporterade värden baserat på kpi_history"
+              isNonTargetKpi(kpi)
+                ? "Värden baserat på kpi_history"
                 : "Utfall och målvärde baserat på kpi_history"
             }
           />
@@ -205,9 +240,9 @@ export default async function KpiDetailPage({
             ) : (
               <KpiHistoryChart
                 points={chartPoints}
-                targetValue={isStatisticKpi(kpi) ? null : kpi.targetValue}
+                targetValue={isNonTargetKpi(kpi) ? null : kpi.targetValue}
                 unit={kpi.unit}
-                isStatistic={isStatisticKpi(kpi)}
+                isStatistic={isNonTargetKpi(kpi)}
               />
             )}
           </div>
@@ -235,7 +270,7 @@ export default async function KpiDetailPage({
                     </th>
                     <th className="px-3 py-2.5 font-semibold">Värde</th>
                     <th className="px-3 py-2.5 font-semibold">
-                      {isStatisticKpi(kpi) ? "Typ" : "Status"}
+                      {isNonTargetKpi(kpi) ? "Typ" : "Status"}
                     </th>
                     <th className="rounded-r-lg px-3 py-2.5 font-semibold">
                       Kommentar
@@ -252,7 +287,10 @@ export default async function KpiDetailPage({
                         {formatValue(entry.value, kpi.unit)}
                       </td>
                       <td className="border-b border-neutral-100 px-3 py-3">
-                        {isStatisticKpi(kpi) || entry.status === "Statistik" ? (
+                        {isCalculatedKpi(kpi) ? (
+                          <BeraknadTypeBadge />
+                        ) : isStatisticKpi(kpi) ||
+                          entry.status === "Statistik" ? (
                           <StatistikTypeBadge />
                         ) : isStatusTone(entry.status) ? (
                           <StatusBadge status={entry.status} />
@@ -269,6 +307,7 @@ export default async function KpiDetailPage({
           )}
         </section>
 
+        {!isSystemComputedKpi(kpi) ? (
         <form
           action={addKpiHistoryAction}
           className="rounded-xl border border-neutral-200 bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-6"
@@ -365,6 +404,12 @@ export default async function KpiDetailPage({
             </button>
           </div>
         </form>
+        ) : (
+          <InfoPanel title="Beräknad KPI" variant="info" showLabel={false}>
+            Värdet uppdateras automatiskt när täljare och nämnare rapporteras för
+            samma datum. Manuell historikregistrering är avstängd.
+          </InfoPanel>
+        )}
       </main>
     </div>
   );

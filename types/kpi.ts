@@ -1,7 +1,7 @@
 import type { StatusTone } from "./status";
-import type { KpiKind, KpiStoredStatus } from "@/lib/kpi/kind";
+import type { KpiCalcOperator, KpiKind, KpiStoredStatus } from "@/lib/kpi/kind";
 
-export type { KpiKind, KpiStoredStatus } from "@/lib/kpi/kind";
+export type { KpiCalcOperator, KpiKind, KpiStoredStatus } from "@/lib/kpi/kind";
 
 export type KpiTrend = "Upp" | "Oförändrad" | "Ner";
 
@@ -20,17 +20,23 @@ export type KPI = {
   targetValue: string | null;
   currentValue: string | null;
   unit: string | null;
-  /** Grön/Gul/Röd for TARGET; Statistik for STATISTIC. */
+  /** Grön/Gul/Röd for TARGET (incl. system-computed ratio %); Statistik for STATISTIC/CALCULATED. */
   status: KpiStoredStatus;
   trend: KpiTrend;
-  /** TARGET = goal KPI; STATISTIC = measure without target/status. */
+  /** TARGET = goal (manual or system-computed); STATISTIC = manual measure; CALCULATED = derived Statistik. */
   kind: KpiKind;
-  /** NULL = manual status in daily reporting. Always null for STATISTIC. */
+  /** NULL = manual status in daily reporting. Always null for STATISTIC/CALCULATED. */
   direction: KpiDirection | null;
   toleranceType: KpiToleranceType | null;
   /** Optional green band for TARGET_IS_BEST. NULL = tiny heuristic. */
   greenTolerance: number | null;
   yellowTolerance: number | null;
+  /** CALCULATED DIVIDE, or TARGET RATIO_PERCENT / WEIGHTED_RATIO_PERCENT. */
+  calcOperator: KpiCalcOperator | null;
+  calcNumeratorKpiId: string | null;
+  calcDenominatorKpiId: string | null;
+  /** ISO timestamp when archived; null = active. */
+  archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -59,6 +65,9 @@ export type CreateKPIInput = {
   toleranceType?: KpiToleranceType | null;
   greenTolerance?: number | null;
   yellowTolerance?: number | null;
+  calcOperator?: KpiCalcOperator | null;
+  calcNumeratorKpiId?: string | null;
+  calcDenominatorKpiId?: string | null;
 };
 
 export type UpdateKPIInput = {
@@ -76,4 +85,7 @@ export type UpdateKPIInput = {
   toleranceType?: KpiToleranceType | null;
   greenTolerance?: number | null;
   yellowTolerance?: number | null;
+  calcOperator?: KpiCalcOperator | null;
+  calcNumeratorKpiId?: string | null;
+  calcDenominatorKpiId?: string | null;
 };

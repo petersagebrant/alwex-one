@@ -7,6 +7,7 @@ import {
   isTargetKpi,
   type KpiStoredStatus,
 } from "@/lib/kpi/kind";
+import { isExcludedFromVdAttention } from "@/lib/kpi/vdAttentionFilter";
 import { fetchBusinessAreas } from "@/lib/supabase/business-areas";
 import type { BusinessAreaRow } from "@/lib/supabase/business-areas";
 import { getActivities, type ActivityListItem } from "@/services/activities";
@@ -948,7 +949,10 @@ function isResultBudgetQuestion(q: string): boolean {
 
 function answerYellowKpis(context: AssistantContext): string {
   const yellow = (context.kpis ?? []).filter(
-    (kpi) => isTargetKpi(kpi) && kpi.status === "Gul",
+    (kpi) =>
+      isTargetKpi(kpi) &&
+      !isExcludedFromVdAttention(kpi) &&
+      kpi.status === "Gul",
   );
   if (yellow.length === 0) {
     return "Inga KPI:er är gula just nu.";
@@ -965,7 +969,9 @@ function answerYellowKpis(context: AssistantContext): string {
 function answerFollowUpKpis(context: AssistantContext): string {
   const follow = (context.kpis ?? []).filter(
     (kpi) =>
-      isTargetKpi(kpi) && (kpi.status === "Gul" || kpi.status === "Röd"),
+      isTargetKpi(kpi) &&
+      !isExcludedFromVdAttention(kpi) &&
+      (kpi.status === "Gul" || kpi.status === "Röd"),
   );
   if (follow.length === 0) {
     return "Inga KPI kräver uppföljning just nu.";
@@ -2083,6 +2089,7 @@ function slimBroadContext(full: AssistantContext): AssistantContext {
     (full.kpis ?? []).filter(
       (kpi) =>
         isTargetKpi(kpi) &&
+        !isExcludedFromVdAttention(kpi) &&
         (kpi.status === "Röd" || kpi.status === "Gul"),
     ),
   ).slice(0, 12);
@@ -2164,7 +2171,7 @@ function toCompactOpenAiContext(
       kind: kpi.kind,
       status: kpi.status,
       currentValue: kpi.currentValue,
-      targetValue: kpi.kind === "STATISTIC" ? null : kpi.targetValue,
+      targetValue: kpi.kind === "TARGET" ? kpi.targetValue : null,
       unit: kpi.unit,
       trend: kpi.trend,
     })),
@@ -3380,7 +3387,10 @@ function answerPriority(context: AssistantContext): string {
 
 function answerRedKpis(context: AssistantContext): string {
   const red = (context.kpis ?? []).filter(
-    (kpi) => isTargetKpi(kpi) && kpi.status === "Röd",
+    (kpi) =>
+      isTargetKpi(kpi) &&
+      !isExcludedFromVdAttention(kpi) &&
+      kpi.status === "Röd",
   );
   if (red.length === 0) {
     return "Inga KPI är röda just nu.";

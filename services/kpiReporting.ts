@@ -2,17 +2,21 @@ import type { AuthProfile } from "@/lib/auth/require-user";
 import {
   fetchKpiHistoryByReportDate,
   fetchKpiHistoryByReportDateForKpis,
+  fetchKpiHistoryInReportDateRangeForKpis,
   type KpiHistoryRow,
 } from "@/lib/supabase/kpi-history";
 import { fetchWeightedInputsForParents } from "@/lib/supabase/kpi-calc-weighted-inputs";
+import { fetchSumNumeratorsForParents } from "@/lib/supabase/kpi-calc-sum-numerators";
 import { fetchBusinessAreas } from "@/lib/supabase/business-areas";
 import { fetchAllKpis } from "@/lib/supabase/kpis";
 import { parseKpiCalcOperator } from "@/lib/kpi/calculated";
 import {
   hasValidKpiCurrentValue,
   isManualReportableKpi,
+  isMonthlyReportingKpi,
   isSystemComputedKpi,
   parseKpiKind,
+  parseKpiReportingFrequency,
   parseKpiStoredStatus,
 } from "@/lib/kpi/kind";
 import {
@@ -20,9 +24,11 @@ import {
   countDailyReportingProgress,
   findRatioPercentGroups,
 } from "@/lib/kpi/ratioGroup";
+import { countKpiSetReportingProgress } from "@/lib/kpi/reportingProgress";
 import { getKPIsByBusinessArea } from "@/services/kpis";
 import {
   getRecentKpiHistoryForKpis,
+  stockholmMonthStart,
   toStockholmReportDate,
 } from "@/services/kpiHistory";
 import type {
@@ -69,6 +75,7 @@ function emptyReporting(
     businessAreaName,
     items: [],
     ratioGroups: [],
+    monthlyItems: [],
     calculatedItems: [],
     reportedCount: 0,
     totalCount: 0,
@@ -127,10 +134,67 @@ function toReportItem(
   };
 }
 
+function sortReportItems(items: DailyKpiReportItem[]): DailyKpiReportItem[] {
+  return [...items].sort((a, b) => {
+    if (a.isReported !== b.isReported) {
+      return a.isReported ? 1 : -1;
+    }
+    return a.kpi.name.localeCompare(b.kpi.name, "sv");
+  });
+}
+
+/**
+ * MONTHLY KPIs: "Rapporterad" for the current Stockholm calendar month
+ * (any dated row in the month), not only today's report_date.
+ */
+function toMonthlyReportItem(
+  kpi: KPI,
+  reportDate: string,
+  monthByKpi: Map<string, KPIHistory>,
+  historyByKpi: Map<string, KPIHistory[]>,
+): DailyKpiReportItem {
+  const monthPrefix = reportDate.slice(0, 7);
+  const monthReport = monthByKpi.get(kpi.id) ?? null;
+  const history = historyByKpi.get(kpi.id) ?? [];
+  const previousEntry =
+    history.find(
+      (entry) =>
+        entry.reportDate != null &&
+        !entry.reportDate.startsWith(monthPrefix),
+    ) ??
+    history.find(
+      (entry) =>
+        entry.reportDate == null ||
+        !entry.reportDate.startsWith(monthPrefix),
+    ) ??
+    null;
+
+  const isReported = hasValidKpiCurrentValue(monthReport?.value);
+
+  if (monthReport && isReported) {
+    return {
+      kpi,
+      previousValue: previousEntry?.value ?? null,
+      previousStatus: previousEntry?.status ?? null,
+      todayReport: monthReport,
+      isReported: true,
+    };
+  }
+
+  return {
+    kpi,
+    previousValue: kpi.currentValue ?? previousEntry?.value ?? null,
+    previousStatus: kpi.status ?? previousEntry?.status ?? null,
+    todayReport: null,
+    isReported: false,
+  };
+}
+
 /**
  * KPIs for a business area with today's reporting state.
  * Unreported first, then reported (name ascending within each group).
  * System-computed KPIs (CALCULATED + TARGET ratio) go in `calculatedItems`.
+ * MONTHLY manual KPIs go in `monthlyItems` (excluded from daily progress).
  * Always returns a reporting object when the area id is valid — never null.
  */
 export async function getKpisForTodayReporting(
@@ -155,9 +219,16 @@ export async function getKpisForTodayReporting(
     }
 
     const reportableKpis = kpis.filter(isManualReportableKpi);
+    const dailyReportableKpis = reportableKpis.filter(
+      (kpi) => !isMonthlyReportingKpi(kpi),
+    );
+    const monthlyReportableKpis = reportableKpis.filter(isMonthlyReportingKpi);
     const calculatedKpis = kpis.filter(isSystemComputedKpi);
 
-    if (reportableKpis.length === 0 && calculatedKpis.length === 0) {
+    if (
+      reportableKpis.length === 0 &&
+      calculatedKpis.length === 0
+    ) {
       return emptyReporting(businessAreaId, businessAreaName, reportDate);
     }
 
@@ -170,16 +241,29 @@ export async function getKpisForTodayReporting(
     const weightedParents = calculatedKpis.filter(
       (kpi) => kpi.calcOperator === "WEIGHTED_RATIO_PERCENT",
     );
-    const weightedRows =
+    const sumDivideParents = calculatedKpis.filter(
+      (kpi) => kpi.calcOperator === "SUM_DIVIDE",
+    );
+
+    const [weightedRows, sumNumeratorRows] = await Promise.all([
       weightedParents.length > 0
-        ? await fetchWeightedInputsForParents(
+        ? fetchWeightedInputsForParents(
             weightedParents.map((kpi) => kpi.id),
           ).catch(() => [])
-        : [];
+        : Promise.resolve([]),
+      sumDivideParents.length > 0
+        ? fetchSumNumeratorsForParents(
+            sumDivideParents.map((kpi) => kpi.id),
+          ).catch(() => [])
+        : Promise.resolve([]),
+    ]);
 
     for (const row of weightedRows) {
       inputIds.add(row.numerator_kpi_id);
       inputIds.add(row.denominator_kpi_id);
+    }
+    for (const row of sumNumeratorRows) {
+      inputIds.add(row.numerator_kpi_id);
     }
 
     const kpiIds = [
@@ -190,9 +274,19 @@ export async function getKpisForTodayReporting(
       ]),
     ];
 
-    const [todayRows, recentHistory] = await Promise.all([
+    const monthlyKpiIds = monthlyReportableKpis.map((kpi) => kpi.id);
+    const monthStart = stockholmMonthStart(reportDate);
+
+    const [todayRows, recentHistory, monthRows] = await Promise.all([
       fetchKpiHistoryByReportDateForKpis(kpiIds, reportDate).catch(() => []),
       getRecentKpiHistoryForKpis(kpiIds, 8).catch(() => []),
+      monthlyKpiIds.length > 0
+        ? fetchKpiHistoryInReportDateRangeForKpis(
+            monthlyKpiIds,
+            monthStart,
+            reportDate,
+          ).catch(() => [])
+        : Promise.resolve([]),
     ]);
 
     const todayByKpi = new Map(
@@ -206,6 +300,13 @@ export async function getKpisForTodayReporting(
       historyByKpi.set(entry.kpiId, list);
     }
 
+    // Newest row per monthly KPI (query ordered by report_date desc).
+    const monthByKpi = new Map<string, KPIHistory>();
+    for (const row of monthRows) {
+      if (monthByKpi.has(row.kpi_id)) continue;
+      monthByKpi.set(row.kpi_id, mapHistoryRow(row));
+    }
+
     const weightedByParent = new Map<string, typeof weightedRows>();
     for (const row of weightedRows) {
       const list = weightedByParent.get(row.parent_kpi_id) ?? [];
@@ -213,16 +314,22 @@ export async function getKpisForTodayReporting(
       weightedByParent.set(row.parent_kpi_id, list);
     }
 
-    const allReportableItems: DailyKpiReportItem[] = reportableKpis.map(
+    const sumNumeratorsByParent = new Map<string, typeof sumNumeratorRows>();
+    for (const row of sumNumeratorRows) {
+      const list = sumNumeratorsByParent.get(row.parent_kpi_id) ?? [];
+      list.push(row);
+      sumNumeratorsByParent.set(row.parent_kpi_id, list);
+    }
+
+    const allDailyReportableItems: DailyKpiReportItem[] = dailyReportableKpis.map(
       (kpi) => toReportItem(kpi, reportDate, todayByKpi, historyByKpi),
     );
 
-    allReportableItems.sort((a, b) => {
-      if (a.isReported !== b.isReported) {
-        return a.isReported ? 1 : -1;
-      }
-      return a.kpi.name.localeCompare(b.kpi.name, "sv");
-    });
+    const monthlyItems = sortReportItems(
+      monthlyReportableKpis.map((kpi) =>
+        toMonthlyReportItem(kpi, reportDate, monthByKpi, historyByKpi),
+      ),
+    );
 
     const allCalculatedItems: DailyKpiReportItem[] = calculatedKpis
       .map((kpi) => {
@@ -260,6 +367,19 @@ export async function getKpisForTodayReporting(
             isComplete: complete,
             completenessLabel: null,
           };
+        } else if (kpi.calcOperator === "SUM_DIVIDE") {
+          const nums = sumNumeratorsByParent.get(kpi.id) ?? [];
+          const allNums =
+            nums.length > 0 &&
+            nums.every((row) =>
+              historyHasValue(todayByKpi, row.numerator_kpi_id),
+            );
+          const complete =
+            allNums && historyHasValue(todayByKpi, kpi.calcDenominatorKpiId);
+          computation = {
+            isComplete: complete,
+            completenessLabel: null,
+          };
         }
 
         return toReportItem(
@@ -272,9 +392,12 @@ export async function getKpisForTodayReporting(
       })
       .sort((a, b) => a.kpi.name.localeCompare(b.kpi.name, "sv"));
 
-    const groupDefs = findRatioPercentGroups([...reportableKpis, ...calculatedKpis]);
+    const groupDefs = findRatioPercentGroups([
+      ...dailyReportableKpis,
+      ...calculatedKpis,
+    ]);
     const reportableById = new Map(
-      allReportableItems.map((item) => [item.kpi.id, item]),
+      allDailyReportableItems.map((item) => [item.kpi.id, item]),
     );
     const calculatedById = new Map(
       allCalculatedItems.map((item) => [item.kpi.id, item]),
@@ -299,8 +422,8 @@ export async function getKpisForTodayReporting(
       })),
     );
 
-    const items = allReportableItems.filter(
-      (item) => !groupedIds.has(item.kpi.id),
+    const items = sortReportItems(
+      allDailyReportableItems.filter((item) => !groupedIds.has(item.kpi.id)),
     );
     const calculatedItems = allCalculatedItems.filter(
       (item) => !groupedIds.has(item.kpi.id),
@@ -317,6 +440,7 @@ export async function getKpisForTodayReporting(
       businessAreaName,
       items,
       ratioGroups,
+      monthlyItems,
       calculatedItems,
       reportedCount,
       totalCount,
@@ -358,18 +482,23 @@ export async function getTodayOrgReportingStats(): Promise<TodayOrgReportingStat
         .filter((row) => hasValidKpiCurrentValue(row.value))
         .map((row) => row.kpi_id),
     );
-    const reportable = kpis.filter((kpi) =>
-      isManualReportableKpi({
-        kind: parseKpiKind(kpi.kpi_kind),
-        calcOperator: parseKpiCalcOperator(kpi.calc_operator),
-      }),
+    const progressKpis = kpis.map((kpi) => ({
+      id: kpi.id,
+      kind: parseKpiKind(kpi.kpi_kind),
+      calcOperator: parseKpiCalcOperator(kpi.calc_operator),
+      calcNumeratorKpiId: kpi.calc_numerator_kpi_id,
+      calcDenominatorKpiId: kpi.calc_denominator_kpi_id,
+      reportingFrequency: parseKpiReportingFrequency(kpi.reporting_frequency),
+    }));
+    const { reportedCount, totalCount } = countKpiSetReportingProgress(
+      progressKpis,
+      reportedIds,
     );
-    const reported = reportable.filter((kpi) => reportedIds.has(kpi.id)).length;
 
     return {
       reportDate,
-      reported,
-      total: reportable.length,
+      reported: reportedCount,
+      total: totalCount,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

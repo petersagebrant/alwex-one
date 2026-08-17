@@ -1,7 +1,17 @@
 import type { StatusTone } from "./status";
-import type { KpiCalcOperator, KpiKind, KpiStoredStatus } from "@/lib/kpi/kind";
+import type {
+  KpiCalcOperator,
+  KpiKind,
+  KpiReportingFrequency,
+  KpiStoredStatus,
+} from "@/lib/kpi/kind";
 
-export type { KpiCalcOperator, KpiKind, KpiStoredStatus } from "@/lib/kpi/kind";
+export type {
+  KpiCalcOperator,
+  KpiKind,
+  KpiReportingFrequency,
+  KpiStoredStatus,
+} from "@/lib/kpi/kind";
 
 export type KpiTrend = "Upp" | "Oförändrad" | "Ner";
 
@@ -31,10 +41,12 @@ export type KPI = {
   /** Optional green band for TARGET_IS_BEST. NULL = tiny heuristic. */
   greenTolerance: number | null;
   yellowTolerance: number | null;
-  /** CALCULATED DIVIDE, or TARGET RATIO_PERCENT / WEIGHTED_RATIO_PERCENT. */
+  /** CALCULATED DIVIDE/SUM_DIVIDE, or TARGET RATIO_PERCENT / WEIGHTED_RATIO_PERCENT. */
   calcOperator: KpiCalcOperator | null;
   calcNumeratorKpiId: string | null;
   calcDenominatorKpiId: string | null;
+  /** DAILY (default) or MONTHLY — MONTHLY excluded from daily progress. */
+  reportingFrequency: KpiReportingFrequency;
   /** ISO timestamp when archived; null = active. */
   archivedAt: string | null;
   createdAt: string;
@@ -68,6 +80,7 @@ export type CreateKPIInput = {
   calcOperator?: KpiCalcOperator | null;
   calcNumeratorKpiId?: string | null;
   calcDenominatorKpiId?: string | null;
+  reportingFrequency?: KpiReportingFrequency;
 };
 
 export type UpdateKPIInput = {
@@ -88,4 +101,5 @@ export type UpdateKPIInput = {
   calcOperator?: KpiCalcOperator | null;
   calcNumeratorKpiId?: string | null;
   calcDenominatorKpiId?: string | null;
+  reportingFrequency?: KpiReportingFrequency;
 };

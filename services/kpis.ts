@@ -14,10 +14,12 @@ import {
   isStatisticKpi,
   isSystemComputedKpi,
   parseKpiKind,
+  parseKpiReportingFrequency,
   parseKpiStoredStatus,
   STATISTIC_STATUS,
   type KpiCalcOperator,
   type KpiKind,
+  type KpiReportingFrequency,
 } from "@/lib/kpi/kind";
 import { parseNumeric } from "@/lib/kpi/parseNumeric";
 import { shouldWriteKpiMeasurementHistory } from "@/lib/kpi/shouldWriteMeasurementHistory";
@@ -69,6 +71,7 @@ const KPI_TRACKED_FIELDS = [
   "calc_operator",
   "calc_numerator_kpi_id",
   "calc_denominator_kpi_id",
+  "reporting_frequency",
 ] as const;
 
 function toTrend(value: string): KpiTrend {
@@ -131,6 +134,7 @@ function mapKpiRow(row: KpiRow): KPI {
     calcOperator: hasCalc ? calcOperator : null,
     calcNumeratorKpiId: hasCalc ? row.calc_numerator_kpi_id ?? null : null,
     calcDenominatorKpiId: hasCalc ? row.calc_denominator_kpi_id ?? null : null,
+    reportingFrequency: parseKpiReportingFrequency(row.reporting_frequency),
     archivedAt: row.archived_at ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -216,6 +220,7 @@ function resolveKindPayload(input: {
   calcOperator?: KpiCalcOperator | null;
   calcNumeratorKpiId?: string | null;
   calcDenominatorKpiId?: string | null;
+  reportingFrequency?: KpiReportingFrequency | null;
   selfId?: string | null;
 }): {
   kpi_kind: KpiKind;
@@ -229,6 +234,7 @@ function resolveKindPayload(input: {
   calc_operator: KpiCalcOperator | null;
   calc_numerator_kpi_id: string | null;
   calc_denominator_kpi_id: string | null;
+  reporting_frequency: KpiReportingFrequency;
 } {
   const kind =
     input.kind === "STATISTIC"
@@ -237,6 +243,8 @@ function resolveKindPayload(input: {
         ? "CALCULATED"
         : "TARGET";
   const currentValue = input.currentValue?.trim() || null;
+  const reportingFrequency =
+    input.reportingFrequency === "MONTHLY" ? "MONTHLY" : "DAILY";
 
   if (kind === "STATISTIC") {
     return {
@@ -251,27 +259,57 @@ function resolveKindPayload(input: {
       calc_operator: null,
       calc_numerator_kpi_id: null,
       calc_denominator_kpi_id: null,
+      reporting_frequency: reportingFrequency,
     };
   }
 
   if (kind === "CALCULATED") {
-    const operator = input.calcOperator === "DIVIDE" ? "DIVIDE" : null;
+    const operator =
+      input.calcOperator === "DIVIDE" || input.calcOperator === "SUM_DIVIDE"
+        ? input.calcOperator
+        : null;
     const numeratorId = input.calcNumeratorKpiId?.trim() || null;
     const denominatorId = input.calcDenominatorKpiId?.trim() || null;
 
     if (!operator) {
-      throw new Error("Välj beräkningsoperator (DIVIDE).");
+      throw new Error("Välj beräkningsoperator (DIVIDE eller SUM_DIVIDE).");
     }
-    if (!numeratorId || !denominatorId) {
-      throw new Error("Välj täljare och nämnare för beräknad KPI.");
+    if (!denominatorId) {
+      throw new Error("Välj nämnare för beräknad KPI.");
     }
-    if (numeratorId === denominatorId) {
-      throw new Error("Täljare och nämnare måste vara olika KPI:er.");
-    }
-    if (input.selfId && (numeratorId === input.selfId || denominatorId === input.selfId)) {
-      throw new Error("En beräknad KPI kan inte referera till sig själv.");
+    if (operator === "DIVIDE") {
+      if (!numeratorId) {
+        throw new Error("Välj täljare och nämnare för beräknad KPI.");
+      }
+      if (numeratorId === denominatorId) {
+        throw new Error("Täljare och nämnare måste vara olika KPI:er.");
+      }
+      if (
+        input.selfId &&
+        (numeratorId === input.selfId || denominatorId === input.selfId)
+      ) {
+        throw new Error("En beräknad KPI kan inte referera till sig själv.");
+      }
+      return {
+        kpi_kind: "CALCULATED",
+        status: STATISTIC_STATUS,
+        target_value: null,
+        current_value: currentValue,
+        direction: null,
+        tolerance_type: null,
+        green_tolerance: null,
+        yellow_tolerance: null,
+        calc_operator: "DIVIDE",
+        calc_numerator_kpi_id: numeratorId,
+        calc_denominator_kpi_id: denominatorId,
+        reporting_frequency: reportingFrequency,
+      };
     }
 
+    // SUM_DIVIDE — numerators live in kpi_calc_sum_numerators junction
+    if (input.selfId && denominatorId === input.selfId) {
+      throw new Error("En beräknad KPI kan inte referera till sig själv.");
+    }
     return {
       kpi_kind: "CALCULATED",
       status: STATISTIC_STATUS,
@@ -281,9 +319,10 @@ function resolveKindPayload(input: {
       tolerance_type: null,
       green_tolerance: null,
       yellow_tolerance: null,
-      calc_operator: operator,
-      calc_numerator_kpi_id: numeratorId,
+      calc_operator: "SUM_DIVIDE",
+      calc_numerator_kpi_id: null,
       calc_denominator_kpi_id: denominatorId,
+      reporting_frequency: reportingFrequency,
     };
   }
 
@@ -339,6 +378,7 @@ function resolveKindPayload(input: {
       calc_operator: "RATIO_PERCENT",
       calc_numerator_kpi_id: numeratorId,
       calc_denominator_kpi_id: denominatorId,
+      reporting_frequency: reportingFrequency,
     };
   }
 
@@ -361,6 +401,7 @@ function resolveKindPayload(input: {
       calc_operator: "WEIGHTED_RATIO_PERCENT",
       calc_numerator_kpi_id: null,
       calc_denominator_kpi_id: null,
+      reporting_frequency: reportingFrequency,
     };
   }
 
@@ -376,6 +417,7 @@ function resolveKindPayload(input: {
     calc_operator: null,
     calc_numerator_kpi_id: null,
     calc_denominator_kpi_id: null,
+    reporting_frequency: reportingFrequency,
   };
 }
 
@@ -483,6 +525,7 @@ export async function createKPI(input: CreateKPIInput): Promise<KPI> {
     calcOperator: input.calcOperator,
     calcNumeratorKpiId: input.calcNumeratorKpiId,
     calcDenominatorKpiId: input.calcDenominatorKpiId,
+    reportingFrequency: input.reportingFrequency,
   });
 
   if (
@@ -496,6 +539,20 @@ export async function createKPI(input: CreateKPIInput): Promise<KPI> {
       numeratorId: resolved.calc_numerator_kpi_id,
       denominatorId: resolved.calc_denominator_kpi_id,
     });
+  } else if (
+    resolved.kpi_kind === "CALCULATED" &&
+    resolved.calc_operator === "SUM_DIVIDE" &&
+    resolved.calc_denominator_kpi_id
+  ) {
+    const denominator = await fetchKpiById(resolved.calc_denominator_kpi_id);
+    if (!denominator) {
+      throw new Error("Nämnare hittades inte.");
+    }
+    if (denominator.business_area_id !== input.businessAreaId) {
+      throw new Error(
+        "Nämnaren måste tillhöra samma affärsområde som den beräknade KPI:n.",
+      );
+    }
   }
 
   const payload = {
@@ -515,6 +572,7 @@ export async function createKPI(input: CreateKPIInput): Promise<KPI> {
     calc_operator: resolved.calc_operator,
     calc_numerator_kpi_id: resolved.calc_numerator_kpi_id,
     calc_denominator_kpi_id: resolved.calc_denominator_kpi_id,
+    reporting_frequency: resolved.reporting_frequency,
   };
 
   const row = await insertKpi(payload);
@@ -585,6 +643,10 @@ export async function updateKPI(input: UpdateKPIInput): Promise<KPI> {
     nextKind === "TARGET" &&
     existingCalc != null &&
     input.calcOperator == null;
+  // Admin DIVIDE form must not rewrite seeded SUM_DIVIDE (junction numerators).
+  const preserveSumDivide =
+    nextKind === "CALCULATED" && existingCalc === "SUM_DIVIDE";
+  const preserveCalc = preserveTargetCalc || preserveSumDivide;
 
   const resolved = resolveKindPayload({
     kind: nextKind,
@@ -600,15 +662,16 @@ export async function updateKPI(input: UpdateKPIInput): Promise<KPI> {
     toleranceType: input.toleranceType,
     greenTolerance: input.greenTolerance,
     yellowTolerance: input.yellowTolerance,
-    calcOperator: preserveTargetCalc
-      ? existingCalc
-      : input.calcOperator,
-    calcNumeratorKpiId: preserveTargetCalc
+    calcOperator: preserveCalc ? existingCalc : input.calcOperator,
+    calcNumeratorKpiId: preserveCalc
       ? existing.calc_numerator_kpi_id
       : input.calcNumeratorKpiId,
-    calcDenominatorKpiId: preserveTargetCalc
+    calcDenominatorKpiId: preserveCalc
       ? existing.calc_denominator_kpi_id
       : input.calcDenominatorKpiId,
+    reportingFrequency:
+      input.reportingFrequency ??
+      parseKpiReportingFrequency(existing.reporting_frequency),
     selfId: input.id,
   });
 
@@ -623,6 +686,20 @@ export async function updateKPI(input: UpdateKPIInput): Promise<KPI> {
       numeratorId: resolved.calc_numerator_kpi_id,
       denominatorId: resolved.calc_denominator_kpi_id,
     });
+  } else if (
+    resolved.kpi_kind === "CALCULATED" &&
+    resolved.calc_operator === "SUM_DIVIDE" &&
+    resolved.calc_denominator_kpi_id
+  ) {
+    const denominator = await fetchKpiById(resolved.calc_denominator_kpi_id);
+    if (!denominator) {
+      throw new Error("Nämnare hittades inte.");
+    }
+    if (denominator.business_area_id !== input.businessAreaId) {
+      throw new Error(
+        "Nämnaren måste tillhöra samma affärsområde som den beräknade KPI:n.",
+      );
+    }
   }
 
   const next = {
@@ -642,6 +719,7 @@ export async function updateKPI(input: UpdateKPIInput): Promise<KPI> {
     calc_operator: resolved.calc_operator,
     calc_numerator_kpi_id: resolved.calc_numerator_kpi_id,
     calc_denominator_kpi_id: resolved.calc_denominator_kpi_id,
+    reporting_frequency: resolved.reporting_frequency,
   };
 
   const changes = collectFieldChanges(
@@ -662,6 +740,9 @@ export async function updateKPI(input: UpdateKPIInput): Promise<KPI> {
       calc_operator: existing.calc_operator,
       calc_numerator_kpi_id: existing.calc_numerator_kpi_id,
       calc_denominator_kpi_id: existing.calc_denominator_kpi_id,
+      reporting_frequency: parseKpiReportingFrequency(
+        existing.reporting_frequency,
+      ),
     },
     next,
     KPI_TRACKED_FIELDS,

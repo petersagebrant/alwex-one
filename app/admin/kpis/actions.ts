@@ -103,6 +103,38 @@ function readKpiFields(formData: FormData): ReadKpiFieldsResult {
     if (!isKpiCalcOperator(calcOperatorRaw)) {
       return { ok: false, error: "Ogiltig beräkningsoperator." };
     }
+
+    // SUM_DIVIDE is seed/admin-preserved; numerators live in junction table.
+    if (calcOperatorRaw === "SUM_DIVIDE") {
+      const calcDenominatorKpiId = String(
+        formData.get("calcDenominatorKpiId") ?? "",
+      ).trim();
+      if (!calcDenominatorKpiId) {
+        return { ok: false, error: "Välj nämnare för beräknad KPI." };
+      }
+      return {
+        ok: true,
+        fields: {
+          businessAreaId: String(formData.get("businessAreaId") ?? ""),
+          name: String(formData.get("name") ?? ""),
+          category: String(formData.get("category") ?? ""),
+          targetValue: "",
+          currentValue: "",
+          unit: String(formData.get("unit") ?? ""),
+          statusValue: "Gul",
+          trendValue: String(formData.get("trend") ?? "Oförändrad"),
+          kind,
+          direction: null,
+          toleranceType: null,
+          greenTolerance: null,
+          yellowTolerance: null,
+          calcOperator: "SUM_DIVIDE",
+          calcNumeratorKpiId: null,
+          calcDenominatorKpiId,
+        },
+      };
+    }
+
     const calcNumeratorKpiId = String(
       formData.get("calcNumeratorKpiId") ?? "",
     ).trim();

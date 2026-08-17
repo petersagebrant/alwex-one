@@ -1,7 +1,8 @@
 import {
-  isManualReportableKpi,
+  isDailyManualReportableKpi,
   type KpiCalcOperator,
   type KpiKind,
+  type KpiReportingFrequency,
 } from "@/lib/kpi/kind";
 import {
   collectRatioGroupMemberIds,
@@ -15,17 +16,19 @@ export type ReportingProgressKpi = {
   calcOperator?: KpiCalcOperator | null;
   calcNumeratorKpiId?: string | null;
   calcDenominatorKpiId?: string | null;
+  reportingFrequency?: KpiReportingFrequency | null;
 };
 
 /**
  * Daily reporting progress for a KPI set (typically one business area).
- * Manual reportable points only; each RATIO_PERCENT group counts as one.
+ * Manual daily reportable points only; each RATIO_PERCENT group counts as one.
+ * MONTHLY KPIs (e.g. Resultat mot budget) are excluded.
  */
 export function countKpiSetReportingProgress(
   kpis: ReportingProgressKpi[],
   reportedIds: ReadonlySet<string>,
 ): { reportedCount: number; totalCount: number } {
-  const reportable = kpis.filter(isManualReportableKpi);
+  const reportable = kpis.filter(isDailyManualReportableKpi);
   const groups = findRatioPercentGroups(kpis);
   const groupedIds = collectRatioGroupMemberIds(groups);
 

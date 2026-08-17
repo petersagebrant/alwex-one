@@ -57,6 +57,14 @@ export function toStockholmReportDate(date: Date): string {
   }).format(date);
 }
 
+/** First calendar day of the Stockholm month containing `reportDate` (YYYY-MM-DD). */
+export function stockholmMonthStart(reportDate: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(reportDate)) {
+    throw new Error("reportDate måste vara YYYY-MM-DD.");
+  }
+  return `${reportDate.slice(0, 7)}-01`;
+}
+
 function isValidReportDate(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }

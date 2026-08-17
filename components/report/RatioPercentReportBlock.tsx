@@ -17,7 +17,7 @@ type RatioPercentReportBlockProps = {
 /**
  * One visual block for a RATIO_PERCENT TARGET + its two STATISTIC inputs.
  * AO edits only the inputs; the % result is read-only and refreshes after save.
- * When both inputs are reported for today, the block collapses to a compact card.
+ * Default view is a compact card (like DailyKpiReportCard); expand only to report/edit.
  */
 export function RatioPercentReportBlock({
   group,
@@ -29,6 +29,7 @@ export function RatioPercentReportBlock({
   const [denominatorValue, setDenominatorValue] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
 
   const { result, numerator, denominator } = group;
   const resultUnit = result.kpi.unit;
@@ -47,7 +48,7 @@ export function RatioPercentReportBlock({
         : null;
   // Same SoT as progress: both STATISTIC inputs reported today.
   const bothInputsReported = numerator.isReported && denominator.isReported;
-  const [editing, setEditing] = useState(!bothInputsReported);
+  const statusTone = isStatusTone(status) ? status : null;
 
   useEffect(() => {
     setNumeratorValue(numerator.todayReport?.value ?? "");
@@ -107,26 +108,50 @@ export function RatioPercentReportBlock({
     setEditing(true);
   }
 
-  if (bothInputsReported && !editing) {
-    const statusTone = isStatusTone(status) ? status : null;
+  function closeEditor() {
+    setEditing(false);
+    setError(null);
+    setSavedMessage(null);
+    setNumeratorValue(numerator.todayReport?.value ?? "");
+    setDenominatorValue(denominator.todayReport?.value ?? "");
+  }
+
+  if (!editing) {
     return (
       <article className="rounded-2xl border border-slate-200/80 bg-white shadow-[0_6px_18px_rgba(15,23,42,0.05)]">
-        <button
-          type="button"
-          onClick={openEditor}
-          className="flex w-full flex-wrap items-start justify-between gap-3 rounded-2xl p-4 text-left transition hover:bg-slate-50/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 sm:p-5"
+        <div
+          role={bothInputsReported ? "button" : undefined}
+          tabIndex={bothInputsReported ? 0 : undefined}
+          onClick={bothInputsReported ? openEditor : undefined}
+          onKeyDown={
+            bothInputsReported
+              ? (event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    openEditor();
+                  }
+                }
+              : undefined
+          }
+          className={`flex w-full flex-wrap items-start justify-between gap-3 rounded-2xl p-4 text-left sm:p-5 ${
+            bothInputsReported
+              ? "cursor-pointer transition hover:bg-slate-50/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+              : ""
+          }`}
         >
-          <div className="min-w-0 space-y-1.5">
+          <div className="min-w-0">
             <h3 className="text-base font-semibold tracking-tight text-slate-900">
               {result.kpi.name}
             </h3>
-            <dl className="space-y-1 text-sm text-slate-600">
-              <div>
-                <dt className="inline text-slate-500">Idag: </dt>
-                <dd className="inline font-medium text-slate-800">
-                  {formatKpiDisplayValue(todayResultValue, resultUnit)}
-                </dd>
-              </div>
+            <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600">
+              {bothInputsReported ? (
+                <div>
+                  <dt className="inline text-slate-500">Idag: </dt>
+                  <dd className="inline font-medium text-slate-800">
+                    {formatKpiDisplayValue(todayResultValue, resultUnit)}
+                  </dd>
+                </div>
+              ) : null}
               {result.kpi.targetValue ? (
                 <div>
                   <dt className="inline text-slate-500">Mål: </dt>
@@ -135,22 +160,39 @@ export function RatioPercentReportBlock({
                   </dd>
                 </div>
               ) : null}
-              <div className="flex flex-wrap items-center gap-2">
-                <dt className="text-slate-500">Status:</dt>
-                <dd>
-                  {statusTone ? (
-                    <StatusBadge status={statusTone} />
-                  ) : (
-                    <span className="font-medium text-slate-800">—</span>
-                  )}
+              <div>
+                <dt className="inline text-slate-500">Föregående: </dt>
+                <dd className="inline font-medium text-slate-800">
+                  {formatKpiDisplayValue(result.previousValue, resultUnit)}
                 </dd>
               </div>
             </dl>
+            {!bothInputsReported ? (
+              <button
+                type="button"
+                onClick={openEditor}
+                className="mt-3 inline-flex items-center justify-center rounded-xl bg-[#0b1220] px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+              >
+                Rapportera
+              </button>
+            ) : null}
           </div>
-          <span className="inline-flex items-center rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800 ring-1 ring-inset ring-emerald-200/80">
-            Rapporterad
-          </span>
-        </button>
+
+          <div className="flex flex-col items-end gap-1.5">
+            {bothInputsReported && statusTone ? (
+              <StatusBadge status={statusTone} />
+            ) : null}
+            <span
+              className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-semibold ring-1 ring-inset ${
+                bothInputsReported
+                  ? "bg-emerald-50 text-emerald-800 ring-emerald-200/80"
+                  : "bg-slate-50 text-slate-700 ring-slate-200/80"
+              }`}
+            >
+              {bothInputsReported ? "Rapporterad" : "Ej rapporterad"}
+            </span>
+          </div>
+        </div>
       </article>
     );
   }
@@ -255,8 +297,8 @@ export function RatioPercentReportBlock({
             <div className="flex flex-wrap items-center gap-2">
               <dt className="text-slate-500">Status:</dt>
               <dd>
-                {status && isStatusTone(status) ? (
-                  <StatusBadge status={status} />
+                {statusTone ? (
+                  <StatusBadge status={statusTone} />
                 ) : (
                   <span className="font-medium text-slate-800">—</span>
                 )}
@@ -306,20 +348,14 @@ export function RatioPercentReportBlock({
                 ? "Uppdatera rapport"
                 : "Rapportera"}
           </button>
-          {bothInputsReported ? (
-            <button
-              type="button"
-              disabled={isPending}
-              onClick={() => {
-                setEditing(false);
-                setError(null);
-                setSavedMessage(null);
-              }}
-              className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
-            >
-              Avbryt
-            </button>
-          ) : null}
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={closeEditor}
+            className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+          >
+            Avbryt
+          </button>
         </div>
       </form>
     </article>

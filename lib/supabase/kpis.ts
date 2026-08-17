@@ -18,6 +18,7 @@ export type KpiRow = {
   calc_operator: string | null;
   calc_numerator_kpi_id: string | null;
   calc_denominator_kpi_id: string | null;
+  reporting_frequency: string | null;
   archived_at: string | null;
   created_at: string;
   updated_at: string;
@@ -40,6 +41,7 @@ export type InsertKpiInput = {
   calc_operator: string | null;
   calc_numerator_kpi_id: string | null;
   calc_denominator_kpi_id: string | null;
+  reporting_frequency?: string;
 };
 
 export type UpdateKpiRowInput = {
@@ -59,6 +61,7 @@ export type UpdateKpiRowInput = {
   calc_operator: string | null;
   calc_numerator_kpi_id: string | null;
   calc_denominator_kpi_id: string | null;
+  reporting_frequency?: string;
   updated_at: string;
 };
 
@@ -68,7 +71,7 @@ export type FetchKpisOptions = {
 };
 
 const kpiSelect =
-  "id, business_area_id, name, category, target_value, current_value, unit, status, trend, kpi_kind, direction, tolerance_type, green_tolerance, yellow_tolerance, calc_operator, calc_numerator_kpi_id, calc_denominator_kpi_id, archived_at, created_at, updated_at";
+  "id, business_area_id, name, category, target_value, current_value, unit, status, trend, kpi_kind, direction, tolerance_type, green_tolerance, yellow_tolerance, calc_operator, calc_numerator_kpi_id, calc_denominator_kpi_id, reporting_frequency, archived_at, created_at, updated_at";
 export async function fetchKpisByBusinessAreaId(
   businessAreaId: string,
   options?: FetchKpisOptions,

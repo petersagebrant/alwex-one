@@ -5,12 +5,15 @@ import {
   effectiveTargetStatusTone,
   hasValidKpiCurrentValue,
   isCalculatedKpi,
+  isDailyManualReportableKpi,
   isManualReportableKpi,
+  isMonthlyReportingKpi,
   isNonTargetKpi,
   isStatisticKpi,
   isSystemComputedKpi,
   isWeightedRatioPercentKpi,
   parseKpiKind,
+  parseKpiReportingFrequency,
   parseKpiStoredStatus,
   STATISTIC_STATUS,
   targetKpisOnly,
@@ -103,5 +106,24 @@ describe("kpi kind helpers", () => {
     assert.equal(isWeightedRatioPercentKpi(weighted), true);
     assert.equal(isWeightedRatioPercentKpi(computedTarget), false);
     assert.equal(isWeightedRatioPercentKpi(manualTarget), false);
+  });
+
+  it("excludes MONTHLY KPIs from daily progress but keeps them reportable", () => {
+    assert.equal(parseKpiReportingFrequency(null), "DAILY");
+    assert.equal(parseKpiReportingFrequency("MONTHLY"), "MONTHLY");
+    const monthly = {
+      kind: "TARGET" as const,
+      calcOperator: null,
+      reportingFrequency: "MONTHLY" as const,
+    };
+    const daily = {
+      kind: "TARGET" as const,
+      calcOperator: null,
+      reportingFrequency: "DAILY" as const,
+    };
+    assert.equal(isMonthlyReportingKpi(monthly), true);
+    assert.equal(isManualReportableKpi(monthly), true);
+    assert.equal(isDailyManualReportableKpi(monthly), false);
+    assert.equal(isDailyManualReportableKpi(daily), true);
   });
 });

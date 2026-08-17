@@ -27,6 +27,7 @@ export type {
   KpiToleranceType,
   KpiKind,
   KpiCalcOperator,
+  KpiReportingFrequency,
   KpiStoredStatus,
   CreateKPIInput,
   UpdateKPIInput,

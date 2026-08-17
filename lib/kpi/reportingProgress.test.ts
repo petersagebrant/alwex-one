@@ -148,4 +148,103 @@ describe("countKpiSetReportingProgress", () => {
     );
     assert.deepEqual(allManual, { reportedCount: 6, totalCount: 6 });
   });
+
+  it("Lager & Logistik: 5 daily points; Resultat MONTHLY excluded; SUM_DIVIDE excluded", () => {
+    // Standalone daily: Beläggningsgrad, Kolli OOH, Kolli Byggmax, Arbetade timmar
+    // Ratio block: Sjuktimmar + Ordinarie = 1
+    // Not counted: Resultat (MONTHLY), Kolli per arbetad timme (SUM_DIVIDE)
+    const kpis = [
+      {
+        id: "belaggning",
+        kind: "TARGET" as const,
+        calcOperator: null,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+        reportingFrequency: "DAILY" as const,
+      },
+      {
+        id: "resultat",
+        kind: "TARGET" as const,
+        calcOperator: null,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+        reportingFrequency: "MONTHLY" as const,
+      },
+      {
+        id: "kolli-ooh",
+        kind: "STATISTIC" as const,
+        calcOperator: null,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+        reportingFrequency: "DAILY" as const,
+      },
+      {
+        id: "kolli-byggmax",
+        kind: "STATISTIC" as const,
+        calcOperator: null,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+        reportingFrequency: "DAILY" as const,
+      },
+      {
+        id: "arbetade",
+        kind: "STATISTIC" as const,
+        calcOperator: null,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+        reportingFrequency: "DAILY" as const,
+      },
+      {
+        id: "sjuktimmar",
+        kind: "STATISTIC" as const,
+        calcOperator: null,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+        reportingFrequency: "DAILY" as const,
+      },
+      {
+        id: "ordinarie",
+        kind: "STATISTIC" as const,
+        calcOperator: null,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+        reportingFrequency: "DAILY" as const,
+      },
+      {
+        id: "sjukfranvaro",
+        kind: "TARGET" as const,
+        calcOperator: "RATIO_PERCENT" as const,
+        calcNumeratorKpiId: "sjuktimmar",
+        calcDenominatorKpiId: "ordinarie",
+        reportingFrequency: "DAILY" as const,
+      },
+      {
+        id: "kolli-per-timme",
+        kind: "CALCULATED" as const,
+        calcOperator: "SUM_DIVIDE" as const,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: "arbetade",
+        reportingFrequency: "DAILY" as const,
+      },
+    ];
+
+    const none = countKpiSetReportingProgress(kpis, new Set());
+    assert.deepEqual(none, { reportedCount: 0, totalCount: 5 });
+
+    const allDaily = countKpiSetReportingProgress(
+      kpis,
+      new Set([
+        "belaggning",
+        "resultat", // monthly — must not add
+        "kolli-ooh",
+        "kolli-byggmax",
+        "arbetade",
+        "sjuktimmar",
+        "ordinarie",
+        "sjukfranvaro",
+        "kolli-per-timme",
+      ]),
+    );
+    assert.deepEqual(allDaily, { reportedCount: 5, totalCount: 5 });
+  });
 });

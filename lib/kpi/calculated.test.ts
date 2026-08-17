@@ -4,6 +4,7 @@ import {
   computeCalculatedValue,
   computeDivideValue,
   computeRatioPercentValue,
+  computeSumDivideValue,
   computeWeightedRatioPercent,
   formatCalculatedValueSv,
 } from "./calculated";
@@ -18,6 +19,29 @@ describe("calculated KPI helpers", () => {
   it("divides Körda mil / Antal RC", () => {
     assert.equal(computeDivideValue("2500", "20"), "125");
     assert.equal(computeDivideValue("1 250,5", "10"), "125,05");
+  });
+
+  it("computes SUM_DIVIDE as (A+B)/C", () => {
+    assert.equal(
+      computeSumDivideValue(["100", "50"], "10"),
+      "15",
+    );
+    assert.equal(
+      computeSumDivideValue(["1 000", "250,5"], "10"),
+      "125,05",
+    );
+    // Lager: Kolli OOH + Byggmax / Arbetade timmar
+    assert.equal(
+      computeSumDivideValue(["8000", "2000"], "500"),
+      "20",
+    );
+  });
+
+  it("does not compute SUM_DIVIDE when any input missing or denominator zero", () => {
+    assert.equal(computeSumDivideValue(["100", null], "10"), null);
+    assert.equal(computeSumDivideValue(["100", "50"], "0"), null);
+    assert.equal(computeSumDivideValue([], "10"), null);
+    assert.equal(computeSumDivideValue(["100"], null), null);
   });
 
   it("does not compute when denominator missing or zero", () => {
@@ -78,7 +102,7 @@ describe("calculated KPI helpers", () => {
     assert.equal(result.isComplete, false);
   });
 
-  it("supports DIVIDE and RATIO_PERCENT in computeCalculatedValue", () => {
+  it("supports DIVIDE, SUM_DIVIDE and RATIO_PERCENT in computeCalculatedValue", () => {
     assert.equal(
       computeCalculatedValue({
         operator: "DIVIDE",
@@ -86,6 +110,15 @@ describe("calculated KPI helpers", () => {
         denominatorValue: "4",
       }),
       "25",
+    );
+    assert.equal(
+      computeCalculatedValue({
+        operator: "SUM_DIVIDE",
+        numeratorValue: null,
+        denominatorValue: "10",
+        numeratorValues: ["100", "50"],
+      }),
+      "15",
     );
     assert.equal(
       computeCalculatedValue({

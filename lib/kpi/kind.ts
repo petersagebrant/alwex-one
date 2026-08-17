@@ -3,11 +3,15 @@ import type { StatusTone } from "@/types/status";
 
 export type KpiKind = "TARGET" | "STATISTIC" | "CALCULATED";
 
-/** DIVIDE = CALCULATED Statistik; RATIO_* = system-computed TARGET with G/Y/R. */
+/** DIVIDE / SUM_DIVIDE = CALCULATED Statistik; RATIO_* = system-computed TARGET with G/Y/R. */
 export type KpiCalcOperator =
   | "DIVIDE"
+  | "SUM_DIVIDE"
   | "RATIO_PERCENT"
   | "WEIGHTED_RATIO_PERCENT";
+
+/** DAILY = today's reporting progress; MONTHLY = reportable but excluded from daily X av Y. */
+export type KpiReportingFrequency = "DAILY" | "MONTHLY";
 
 /** Stored on kpis/kpi_history for statistics and calculated — never shown as "-" in UI. */
 export const STATISTIC_STATUS = "Statistik" as const;
@@ -57,6 +61,18 @@ export function isWeightedRatioPercentKpi(kpi: {
   return kpi.calcOperator === "WEIGHTED_RATIO_PERCENT";
 }
 
+export function parseKpiReportingFrequency(
+  value: string | null | undefined,
+): KpiReportingFrequency {
+  return value === "MONTHLY" ? "MONTHLY" : "DAILY";
+}
+
+export function isMonthlyReportingKpi(kpi: {
+  reportingFrequency?: KpiReportingFrequency | null;
+}): boolean {
+  return kpi.reportingFrequency === "MONTHLY";
+}
+
 /** AO chef / daily report: TARGET + STATISTIC only (not system-computed). */
 export function isManualReportableKpi(kpi: {
   kind: KpiKind;
@@ -64,6 +80,15 @@ export function isManualReportableKpi(kpi: {
 }): boolean {
   if (isSystemComputedKpi(kpi)) return false;
   return kpi.kind === "TARGET" || kpi.kind === "STATISTIC";
+}
+
+/** Manual KPIs that count toward today's daily reporting progress. */
+export function isDailyManualReportableKpi(kpi: {
+  kind: KpiKind;
+  calcOperator?: KpiCalcOperator | null;
+  reportingFrequency?: KpiReportingFrequency | null;
+}): boolean {
+  return isManualReportableKpi(kpi) && !isMonthlyReportingKpi(kpi);
 }
 
 export function isStatusTone(value: string | null | undefined): value is StatusTone {

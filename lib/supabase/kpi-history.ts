@@ -135,6 +135,39 @@ export async function fetchKpiHistoryByReportDateForKpis(
   return data ?? [];
 }
 
+/**
+ * Report rows for KPIs with report_date in [startDate, endDate] (inclusive).
+ * Newest report_date first per query order; callers may pick latest per kpi.
+ */
+export async function fetchKpiHistoryInReportDateRangeForKpis(
+  kpiIds: string[],
+  startDate: string,
+  endDate: string,
+): Promise<KpiHistoryRow[]> {
+  if (kpiIds.length === 0) {
+    return [];
+  }
+
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("kpi_history")
+    .select(kpiHistorySelect)
+    .in("kpi_id", kpiIds)
+    .gte("report_date", startDate)
+    .lte("report_date", endDate)
+    .order("report_date", { ascending: false })
+    .order("recorded_at", { ascending: false });
+
+  if (error) {
+    throw new Error(
+      `Kunde inte hämta KPI-rapporter för period: ${error.message}`,
+    );
+  }
+
+  return data ?? [];
+}
+
 export async function fetchRecentKpiHistory(
   limit = 20,
 ): Promise<KpiHistoryRow[]> {

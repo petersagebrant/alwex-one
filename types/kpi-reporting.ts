@@ -35,7 +35,7 @@ export type MyKpisForTodayReporting = {
   businessAreaId: string;
   businessAreaName: string;
   /**
-   * Manual reportable KPIs not shown in a ratio group.
+   * Manual daily reportable KPIs not shown in a ratio group.
    * Each item counts as one user-facing reporting point.
    */
   items: DailyKpiReportItem[];
@@ -45,8 +45,13 @@ export type MyKpisForTodayReporting = {
    */
   ratioGroups: RatioPercentReportGroup[];
   /**
+   * Manual MONTHLY KPIs (e.g. Resultat mot budget) — shown separately,
+   * excluded from daily progress counts.
+   */
+  monthlyItems: DailyKpiReportItem[];
+  /**
    * System-computed KPIs not already shown in a ratio group
-   * (e.g. DIVIDE like Körda mil per RC). Not included in progress counts.
+   * (e.g. DIVIDE / SUM_DIVIDE). Not included in progress counts.
    */
   calculatedItems: DailyKpiReportItem[];
   reportedCount: number;

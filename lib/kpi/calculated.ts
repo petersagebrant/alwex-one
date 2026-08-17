@@ -8,6 +8,7 @@ export function isKpiCalcOperator(
 ): value is KpiCalcOperator {
   return (
     value === "DIVIDE" ||
+    value === "SUM_DIVIDE" ||
     value === "RATIO_PERCENT" ||
     value === "WEIGHTED_RATIO_PERCENT"
   );
@@ -44,6 +45,32 @@ export function computeDivideValue(
     return null;
   }
   return formatCalculatedValueSv(num / den);
+}
+
+/**
+ * SUM_DIVIDE = SUM(numerators) / denominator for the same report_date.
+ * Returns null when any numerator is missing, or denominator missing/0.
+ */
+export function computeSumDivideValue(
+  numeratorValues: Array<string | number | null | undefined>,
+  denominator: string | number | null | undefined,
+): string | null {
+  if (numeratorValues.length === 0) {
+    return null;
+  }
+  const den = parseNumeric(denominator);
+  if (den === null || den === 0) {
+    return null;
+  }
+  let sum = 0;
+  for (const raw of numeratorValues) {
+    const num = parseNumeric(raw);
+    if (num === null) {
+      return null;
+    }
+    sum += num;
+  }
+  return formatCalculatedValueSv(sum / den);
 }
 
 /**
@@ -138,9 +165,17 @@ export function computeCalculatedValue(input: {
   operator: KpiCalcOperator | null | undefined;
   numeratorValue: string | number | null | undefined;
   denominatorValue: string | number | null | undefined;
+  /** Required for SUM_DIVIDE — list of numerator values for the period. */
+  numeratorValues?: Array<string | number | null | undefined>;
 }): string | null {
   if (input.operator === "DIVIDE") {
     return computeDivideValue(input.numeratorValue, input.denominatorValue);
+  }
+  if (input.operator === "SUM_DIVIDE") {
+    return computeSumDivideValue(
+      input.numeratorValues ?? [],
+      input.denominatorValue,
+    );
   }
   if (input.operator === "RATIO_PERCENT") {
     return computeRatioPercentValue(

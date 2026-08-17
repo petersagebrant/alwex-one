@@ -33,6 +33,7 @@ export function KpiAdminFormFields({
   const isStatistic = kind === "STATISTIC";
   const isCalculated = kind === "CALCULATED";
   const isNonTarget = isStatistic || isCalculated;
+  const isSumDivide = isCalculated && kpi?.calcOperator === "SUM_DIVIDE";
 
   const inputOptions = useMemo(() => {
     return kpis.filter(
@@ -139,7 +140,25 @@ export function KpiAdminFormFields({
         />
       </div>
 
-      {isCalculated ? (
+      {isCalculated && isSumDivide ? (
+        <div className="space-y-3 rounded-lg border border-neutral-200 bg-neutral-50/70 p-4">
+          <input type="hidden" name="calcOperator" value="SUM_DIVIDE" />
+          {kpi?.calcDenominatorKpiId ? (
+            <input
+              type="hidden"
+              name="calcDenominatorKpiId"
+              value={kpi.calcDenominatorKpiId}
+            />
+          ) : null}
+          <p className="text-xs font-medium text-neutral-700">
+            Beräkning: summa av flera täljare ÷ nämnare (SUM_DIVIDE)
+          </p>
+          <p className="text-[11px] text-neutral-600">
+            Formeln är systemstyrd (seedad). Ändra namn/enhet här; täljare
+            konfigureras i databasen via kpi_calc_sum_numerators.
+          </p>
+        </div>
+      ) : isCalculated ? (
         <div className="space-y-4 rounded-lg border border-neutral-200 bg-neutral-50/70 p-4">
           <input type="hidden" name="calcOperator" value="DIVIDE" />
           <p className="text-xs font-medium text-neutral-700">

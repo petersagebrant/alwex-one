@@ -65,7 +65,9 @@ describe("kpi kind helpers", () => {
     ];
     assert.equal(hasValidKpiCurrentValue(null), false);
     assert.equal(hasValidKpiCurrentValue("  "), false);
+    assert.equal(hasValidKpiCurrentValue("—"), false);
     assert.equal(hasValidKpiCurrentValue("3"), true);
+    assert.equal(hasValidKpiCurrentValue("3,2"), true);
     assert.equal(
       effectiveTargetStatusTone({
         kind: "TARGET",

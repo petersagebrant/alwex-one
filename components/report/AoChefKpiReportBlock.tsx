@@ -12,13 +12,18 @@ import type { DailyKpiReportItem, StatusTone } from "@/types";
 
 type AoChefKpiReportBlockProps = {
   item: DailyKpiReportItem;
+  /** Optional — AO page is RSC-refreshed; VD client panels use this to reload SoT. */
+  onReported?: () => void;
 };
 
 /**
  * Flat daily reporting block for AO-chef.
  * Definition fields (target/direction/tolerances) are display-only.
  */
-export function AoChefKpiReportBlock({ item }: AoChefKpiReportBlockProps) {
+export function AoChefKpiReportBlock({
+  item,
+  onReported,
+}: AoChefKpiReportBlockProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [value, setValue] = useState("");
@@ -106,6 +111,7 @@ export function AoChefKpiReportBlock({ item }: AoChefKpiReportBlockProps) {
           ? `Sparad: ${formatKpiDisplayValue(value, unit)}`
           : `Sparad: ${formatKpiDisplayValue(value, unit)} · ${effectiveStatus}`,
       );
+      onReported?.();
       router.refresh();
     });
   }
@@ -164,7 +170,7 @@ export function AoChefKpiReportBlock({ item }: AoChefKpiReportBlockProps) {
                 : "bg-slate-50 text-slate-700 ring-slate-200/80"
             }`}
           >
-            {item.isReported ? "Rapporterad idag" : "Ej rapporterad idag"}
+            {item.isReported ? "Rapporterad" : "Ej rapporterad"}
           </span>
           {!isStatistic && lastTone ? <StatusBadge status={lastTone} /> : null}
         </div>

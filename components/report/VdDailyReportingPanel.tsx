@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { InfoPanel } from "@/components/ui";
 import { CalculatedKpiReportSection } from "@/components/report/CalculatedKpiReportSection";
 import { DailyKpiReportList } from "@/components/report/DailyKpiReportList";
@@ -21,11 +22,16 @@ type VdDailyReportingPanelProps = {
 /**
  * Presentational panel driven solely by `businessAreaId` from the parent.
  * Choose-area message is gated only on `!businessAreaId`.
+ *
+ * Reporting SoT is loaded via server action into client state. After save,
+ * children call onReported so we re-fetch — router.refresh() alone does not
+ * update this client-held snapshot.
  */
 export function VdDailyReportingPanel({
   businessAreaId,
   areas,
 }: VdDailyReportingPanelProps) {
+  const router = useRouter();
   const [reporting, setReporting] = useState<MyKpisForTodayReporting | null>(
     null,
   );
@@ -34,6 +40,33 @@ export function VdDailyReportingPanel({
 
   const areaName =
     areas.find((a) => a.id === businessAreaId)?.name ?? businessAreaId;
+
+  const loadReporting = useCallback(
+    async (areaId: string, options?: { soft?: boolean }) => {
+      if (!options?.soft) {
+        setLoading(true);
+        setReporting(null);
+      }
+      setError(null);
+
+      try {
+        const result = await loadVdAreaReportingAction(areaId);
+        if (!result.ok) {
+          setReporting(null);
+          setError(result.error);
+          return;
+        }
+        setReporting(result.reporting);
+      } catch (err) {
+        console.error("[VdDailyReportingPanel] fetch failed", err);
+        setError("Kunde inte hämta KPI:er.");
+        setReporting(null);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!businessAreaId) {
@@ -44,11 +77,12 @@ export function VdDailyReportingPanel({
     }
 
     let cancelled = false;
-    setLoading(true);
-    setError(null);
-    setReporting(null);
 
     void (async () => {
+      setLoading(true);
+      setError(null);
+      setReporting(null);
+
       try {
         const result = await loadVdAreaReportingAction(businessAreaId);
         if (cancelled) return;
@@ -74,6 +108,12 @@ export function VdDailyReportingPanel({
       cancelled = true;
     };
   }, [businessAreaId]);
+
+  const handleReported = useCallback(() => {
+    if (!businessAreaId) return;
+    void loadReporting(businessAreaId, { soft: true });
+    router.refresh();
+  }, [businessAreaId, loadReporting, router]);
 
   return (
     <div className="space-y-5">
@@ -113,7 +153,10 @@ export function VdDailyReportingPanel({
               <p className="text-sm text-slate-600">Hämtar KPI:er…</p>
             </InfoPanel>
           ) : (
-            <ReportingBody reporting={reporting} />
+            <ReportingBody
+              reporting={reporting}
+              onReported={handleReported}
+            />
           )}
         </>
       )}
@@ -123,8 +166,10 @@ export function VdDailyReportingPanel({
 
 function ReportingBody({
   reporting,
+  onReported,
 }: {
   reporting: MyKpisForTodayReporting;
+  onReported: () => void;
 }) {
   const reported = reporting.reportedCount;
   const total = reporting.totalCount;
@@ -166,11 +211,17 @@ function ReportingBody({
       </InfoPanel>
 
       {reporting.ratioGroups.length > 0 ? (
-        <RatioPercentReportSection groups={reporting.ratioGroups} />
+        <RatioPercentReportSection
+          groups={reporting.ratioGroups}
+          onReported={onReported}
+        />
       ) : null}
 
       {reporting.items.length > 0 ? (
-        <DailyKpiReportList items={reporting.items} />
+        <DailyKpiReportList
+          items={reporting.items}
+          onReported={onReported}
+        />
       ) : null}
 
       {total === 0 &&

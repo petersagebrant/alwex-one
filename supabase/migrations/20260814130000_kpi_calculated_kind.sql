@@ -469,7 +469,7 @@ begin
       'Volym',
       null,
       null,
-      'st',
+      'RC',
       'Statistik',
       'Oförändrad',
       'STATISTIC',
@@ -484,6 +484,7 @@ begin
     set
       kpi_kind = 'STATISTIC',
       status = 'Statistik',
+      unit = 'RC',
       target_value = null,
       direction = null,
       tolerance_type = null,
@@ -497,6 +498,7 @@ begin
       and (
         kpi_kind is distinct from 'STATISTIC'
         or status is distinct from 'Statistik'
+        or unit is distinct from 'RC'
       );
   end if;
 

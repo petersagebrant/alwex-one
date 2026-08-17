@@ -1,3 +1,4 @@
+import { parseNumeric } from "@/lib/kpi/parseNumeric";
 import type { StatusTone } from "@/types/status";
 
 export type KpiKind = "TARGET" | "STATISTIC" | "CALCULATED";
@@ -100,13 +101,14 @@ export function targetKpisOnly<T extends { kind: KpiKind }>(kpis: T[]): T[] {
 }
 
 /**
- * True when the KPI has a non-empty current value (reported or computed).
- * Empty/null must not inherit a stale stored Grön/Gul/Röd for overview counts.
+ * True when the KPI has a parseable numeric current value (reported or computed).
+ * Empty/null/placeholders like "—" must not count as reported or inherit
+ * a stale stored Grön/Gul/Röd for overview counts / key KPI selection.
  */
 export function hasValidKpiCurrentValue(
   currentValue: string | null | undefined,
 ): boolean {
-  return Boolean(currentValue?.trim());
+  return parseNumeric(currentValue) !== null;
 }
 
 /**

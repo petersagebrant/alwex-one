@@ -6,8 +6,9 @@
  *    status → no history.
  * B) Explicit current_value (utfall) change → history.
  *
- * createKPI still writes one initial history row when value/status exist
- * (initial measurement at create). Daily report uses upsertDailyKpiReport.
+ * createKPI still writes one initial history row when a valid numeric utfall
+ * exists (initial measurement at create). Placeholders like "—" are never written.
+ * Daily report uses upsertDailyKpiReport.
  * Status-only admin edits via the KPI form skip history; use /admin/kpis/[id]
  * or daily report for intentional measurement points.
  */

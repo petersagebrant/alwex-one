@@ -8,6 +8,7 @@ import {
   type KpiToleranceType,
 } from "@/lib/kpi/computeStatus";
 import {
+  hasValidKpiCurrentValue,
   isCalculatedKpi,
   isNonTargetKpi,
   isStatisticKpi,
@@ -536,13 +537,13 @@ export async function createKPI(input: CreateKPIInput): Promise<KPI> {
       kind: resolved.kpi_kind,
       calcOperator: resolved.calc_operator,
     }) &&
-    (row.current_value || row.status)
+    hasValidKpiCurrentValue(row.current_value)
   ) {
     try {
       await addKPIHistoryEntry(
         {
           kpiId: row.id,
-          value: row.current_value?.trim() || "—",
+          value: row.current_value!.trim(),
           status: parseKpiStoredStatus(row.status),
           comment: "Initial historik vid skapande",
           recordedAt: new Date().toISOString(),
@@ -689,24 +690,23 @@ export async function updateKPI(input: UpdateKPIInput): Promise<KPI> {
     // Status-only admin edits also skip history; use /admin/kpis/[id] or daily
     // report for intentional measurement points.
     if (shouldWriteKpiMeasurementHistory(changes)) {
-      const historyValue =
-        next.current_value?.trim() ||
-        existing.current_value?.trim() ||
-        "—";
-      try {
-        await addKPIHistoryEntry(
-          {
-            kpiId: row.id,
-            value: historyValue,
-            status: parseKpiStoredStatus(next.status),
-            comment: "Automatisk historik vid KPI-uppdatering",
-            recordedAt: new Date().toISOString(),
-          },
-          // KPI row already updated above.
-          { skipAudit: true, syncCurrent: false },
-        );
-      } catch {
-        // Historik får inte blockera huvuduppdateringen.
+      const historyValue = next.current_value?.trim() ?? "";
+      if (hasValidKpiCurrentValue(historyValue)) {
+        try {
+          await addKPIHistoryEntry(
+            {
+              kpiId: row.id,
+              value: historyValue,
+              status: parseKpiStoredStatus(next.status),
+              comment: "Automatisk historik vid KPI-uppdatering",
+              recordedAt: new Date().toISOString(),
+            },
+            // KPI row already updated above.
+            { skipAudit: true, syncCurrent: false },
+          );
+        } catch {
+          // Historik får inte blockera huvuduppdateringen.
+        }
       }
     }
   }

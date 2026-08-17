@@ -10,14 +10,18 @@ import type { RatioPercentReportGroup } from "@/types";
 
 type RatioPercentReportBlockProps = {
   group: RatioPercentReportGroup;
+  /** Called after a successful save so parent clients can reload SoT. */
+  onReported?: () => void;
 };
 
 /**
  * One visual block for a RATIO_PERCENT TARGET + its two STATISTIC inputs.
  * AO edits only the inputs; the % result is read-only and refreshes after save.
+ * When both inputs are reported for today, the block collapses to a compact card.
  */
 export function RatioPercentReportBlock({
   group,
+  onReported,
 }: RatioPercentReportBlockProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -41,7 +45,9 @@ export function RatioPercentReportBlock({
       : isComplete && isStatusTone(result.kpi.status)
         ? result.kpi.status
         : null;
+  // Same SoT as progress: both STATISTIC inputs reported today.
   const bothInputsReported = numerator.isReported && denominator.isReported;
+  const [editing, setEditing] = useState(!bothInputsReported);
 
   useEffect(() => {
     setNumeratorValue(numerator.todayReport?.value ?? "");
@@ -87,8 +93,66 @@ export function RatioPercentReportBlock({
       }
 
       setSavedMessage("Sparad — beräknad procent uppdateras automatiskt.");
+      setEditing(false);
+      onReported?.();
       router.refresh();
     });
+  }
+
+  function openEditor() {
+    setError(null);
+    setSavedMessage(null);
+    setNumeratorValue(numerator.todayReport?.value ?? "");
+    setDenominatorValue(denominator.todayReport?.value ?? "");
+    setEditing(true);
+  }
+
+  if (bothInputsReported && !editing) {
+    const statusTone = isStatusTone(status) ? status : null;
+    return (
+      <article className="rounded-2xl border border-slate-200/80 bg-white shadow-[0_6px_18px_rgba(15,23,42,0.05)]">
+        <button
+          type="button"
+          onClick={openEditor}
+          className="flex w-full flex-wrap items-start justify-between gap-3 rounded-2xl p-4 text-left transition hover:bg-slate-50/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 sm:p-5"
+        >
+          <div className="min-w-0 space-y-1.5">
+            <h3 className="text-base font-semibold tracking-tight text-slate-900">
+              {result.kpi.name}
+            </h3>
+            <dl className="space-y-1 text-sm text-slate-600">
+              <div>
+                <dt className="inline text-slate-500">Idag: </dt>
+                <dd className="inline font-medium text-slate-800">
+                  {formatKpiDisplayValue(todayResultValue, resultUnit)}
+                </dd>
+              </div>
+              {result.kpi.targetValue ? (
+                <div>
+                  <dt className="inline text-slate-500">Mål: </dt>
+                  <dd className="inline font-medium text-slate-800">
+                    {formatKpiDisplayValue(result.kpi.targetValue, resultUnit)}
+                  </dd>
+                </div>
+              ) : null}
+              <div className="flex flex-wrap items-center gap-2">
+                <dt className="text-slate-500">Status:</dt>
+                <dd>
+                  {statusTone ? (
+                    <StatusBadge status={statusTone} />
+                  ) : (
+                    <span className="font-medium text-slate-800">—</span>
+                  )}
+                </dd>
+              </div>
+            </dl>
+          </div>
+          <span className="inline-flex items-center rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800 ring-1 ring-inset ring-emerald-200/80">
+            Rapporterad
+          </span>
+        </button>
+      </article>
+    );
   }
 
   return (
@@ -109,7 +173,7 @@ export function RatioPercentReportBlock({
               : "bg-slate-50 text-slate-700 ring-slate-200/80"
           }`}
         >
-          {bothInputsReported ? "Rapporterad idag" : "Ej rapporterad idag"}
+          {bothInputsReported ? "Rapporterad" : "Ej rapporterad"}
         </span>
       </div>
 
@@ -230,17 +294,33 @@ export function RatioPercentReportBlock({
           </p>
         ) : null}
 
-        <button
-          type="submit"
-          disabled={isPending}
-          className="inline-flex items-center justify-center rounded-xl bg-[#0b1220] px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {isPending
-            ? "Sparar…"
-            : bothInputsReported
-              ? "Uppdatera rapport"
-              : "Rapportera"}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="submit"
+            disabled={isPending}
+            className="inline-flex items-center justify-center rounded-xl bg-[#0b1220] px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isPending
+              ? "Sparar…"
+              : bothInputsReported
+                ? "Uppdatera rapport"
+                : "Rapportera"}
+          </button>
+          {bothInputsReported ? (
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() => {
+                setEditing(false);
+                setError(null);
+                setSavedMessage(null);
+              }}
+              className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+            >
+              Avbryt
+            </button>
+          ) : null}
+        </div>
       </form>
     </article>
   );

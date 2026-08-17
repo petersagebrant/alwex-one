@@ -96,6 +96,8 @@ describe("computeKpiStatus", () => {
     it("green when value >= 0", () => {
       assert.equal(computeKpiStatus({ ...base, value: 0 }), "Grön");
       assert.equal(computeKpiStatus({ ...base, value: 0.1 }), "Grön");
+      // Resultat mot budget: +0,6 Mkr is on the good side of target 0
+      assert.equal(computeKpiStatus({ ...base, value: "0,6" }), "Grön");
     });
 
     it("yellow when within absolute band below target", () => {
@@ -104,6 +106,29 @@ describe("computeKpiStatus", () => {
     });
 
     it("red when worse than yellow band", () => {
+      assert.equal(computeKpiStatus({ ...base, value: -0.3 }), "Röd");
+    });
+  });
+
+  describe("Resultat mot budget (HIGHER_IS_BETTER, target 0 Mkr)", () => {
+    const base = {
+      direction: "HIGHER_IS_BETTER" as const,
+      toleranceType: "ABSOLUTE" as const,
+      yellowTolerance: 0.2,
+      target: 0,
+    };
+
+    it("treats positive and zero as green", () => {
+      assert.equal(computeKpiStatus({ ...base, value: "0,6" }), "Grön");
+      assert.equal(computeKpiStatus({ ...base, value: 0 }), "Grön");
+    });
+
+    it("uses yellow band for small negative deviation", () => {
+      assert.equal(computeKpiStatus({ ...base, value: "-0,1" }), "Gul");
+      assert.equal(computeKpiStatus({ ...base, value: -0.2 }), "Gul");
+    });
+
+    it("marks larger negative deviation red", () => {
       assert.equal(computeKpiStatus({ ...base, value: -0.3 }), "Röd");
     });
   });

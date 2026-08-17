@@ -160,11 +160,9 @@ function AreaOverviewCard({
             )}
           </h3>
           <p className="mt-1 text-xs text-slate-400">
-            {section.reporting.unreportedCount > 0
-              ? `${section.reporting.unreportedCount} ej rapporterade idag (${section.reporting.reportedCount} av ${section.reporting.totalCount})`
-              : section.reporting.totalCount > 0
-                ? `Alla ${section.reporting.totalCount} rapporterade idag`
-                : "Inga manuella KPI:er att rapportera"}
+            {section.reporting.totalCount > 0
+              ? `${section.reporting.totalCount} KPI:er att rapportera idag – ${section.reporting.reportedCount} av ${section.reporting.totalCount} rapporterade`
+              : "Inga manuella KPI:er att rapportera"}
           </p>
         </div>
         <StatusCountPills counts={section.statusCounts} />

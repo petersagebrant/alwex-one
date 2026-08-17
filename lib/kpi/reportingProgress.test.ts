@@ -58,4 +58,94 @@ describe("countKpiSetReportingProgress", () => {
     );
     assert.deepEqual(result, { reportedCount: 1, totalCount: 1 });
   });
+
+  it("Kyl & Frys: 6 manual points; Sjukfrånvaro=1; DIVIDE excluded", () => {
+    // Standalone: Fyllnadsgrad, Leveransprecision, Resultat, Antal RC, Körda mil
+    // Ratio block: Sjuktimmar + Ordinarie (+ Sjukfrånvaro result) = 1
+    // Not counted: Körda mil per RC (CALCULATED DIVIDE)
+    const kpis = [
+      {
+        id: "fyllnadsgrad",
+        kind: "TARGET" as const,
+        calcOperator: null,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+      },
+      {
+        id: "leveransprecision",
+        kind: "TARGET" as const,
+        calcOperator: null,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+      },
+      {
+        id: "resultat",
+        kind: "TARGET" as const,
+        calcOperator: null,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+      },
+      {
+        id: "antal-rc",
+        kind: "STATISTIC" as const,
+        calcOperator: null,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+      },
+      {
+        id: "korda-mil",
+        kind: "STATISTIC" as const,
+        calcOperator: null,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+      },
+      {
+        id: "sjuktimmar",
+        kind: "STATISTIC" as const,
+        calcOperator: null,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+      },
+      {
+        id: "ordinarie",
+        kind: "STATISTIC" as const,
+        calcOperator: null,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+      },
+      {
+        id: "sjukfranvaro",
+        kind: "TARGET" as const,
+        calcOperator: "RATIO_PERCENT" as const,
+        calcNumeratorKpiId: "sjuktimmar",
+        calcDenominatorKpiId: "ordinarie",
+      },
+      {
+        id: "per-rc",
+        kind: "CALCULATED" as const,
+        calcOperator: "DIVIDE" as const,
+        calcNumeratorKpiId: "korda-mil",
+        calcDenominatorKpiId: "antal-rc",
+      },
+    ];
+
+    const none = countKpiSetReportingProgress(kpis, new Set());
+    assert.deepEqual(none, { reportedCount: 0, totalCount: 6 });
+
+    const allManual = countKpiSetReportingProgress(
+      kpis,
+      new Set([
+        "fyllnadsgrad",
+        "leveransprecision",
+        "resultat",
+        "antal-rc",
+        "korda-mil",
+        "sjuktimmar",
+        "ordinarie",
+        "sjukfranvaro", // system-computed — must not add an extra point
+        "per-rc", // calculated — must not add an extra point
+      ]),
+    );
+    assert.deepEqual(allManual, { reportedCount: 6, totalCount: 6 });
+  });
 });

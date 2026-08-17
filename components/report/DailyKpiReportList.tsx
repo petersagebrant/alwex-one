@@ -6,9 +6,13 @@ import type { DailyKpiReportItem } from "@/types";
 
 type DailyKpiReportListProps = {
   items: DailyKpiReportItem[];
+  onReported?: () => void;
 };
 
-export function DailyKpiReportList({ items }: DailyKpiReportListProps) {
+export function DailyKpiReportList({
+  items,
+  onReported,
+}: DailyKpiReportListProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   if (items.length === 0) {
@@ -23,6 +27,11 @@ export function DailyKpiReportList({ items }: DailyKpiReportListProps) {
     setExpandedId((current) => (current === kpiId ? null : kpiId));
   }
 
+  function handleReported() {
+    setExpandedId(null);
+    onReported?.();
+  }
+
   return (
     <ul className="space-y-3">
       {items.map((item) => (
@@ -31,6 +40,7 @@ export function DailyKpiReportList({ items }: DailyKpiReportListProps) {
             item={item}
             expanded={expandedId === item.kpi.id}
             onToggle={() => handleToggle(item.kpi.id)}
+            onReported={handleReported}
           />
         </li>
       ))}

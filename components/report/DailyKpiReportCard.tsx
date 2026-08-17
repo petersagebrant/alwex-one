@@ -15,6 +15,8 @@ type DailyKpiReportCardProps = {
   item: DailyKpiReportItem;
   expanded: boolean;
   onToggle: () => void;
+  /** Called after a successful save so parent clients can reload SoT. */
+  onReported?: () => void;
 };
 
 function seedStatus(item: DailyKpiReportItem): StatusTone {
@@ -27,6 +29,7 @@ export function DailyKpiReportCard({
   item,
   expanded,
   onToggle,
+  onReported,
 }: DailyKpiReportCardProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -88,6 +91,7 @@ export function DailyKpiReportCard({
       }
 
       setEditing(false);
+      onReported?.();
       router.refresh();
     });
   }

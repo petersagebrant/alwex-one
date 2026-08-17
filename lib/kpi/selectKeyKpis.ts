@@ -1,6 +1,11 @@
-import { isStatusTone, isTargetKpi, type KpiKind } from "@/lib/kpi/kind";
+import {
+  hasValidKpiCurrentValue,
+  isStatusTone,
+  isTargetKpi,
+  type KpiKind,
+  type KpiStoredStatus,
+} from "@/lib/kpi/kind";
 import { targetDeviationMagnitude } from "@/lib/kpi/targetDeviation";
-import type { KpiStoredStatus } from "@/lib/kpi/kind";
 
 const DEFAULT_KEY_KPI_LIMIT = 4;
 
@@ -23,10 +28,10 @@ export type KeyKpiCandidate = {
  *
  * Rules (v1):
  * - Max `limit` (default 4)
- * - TARGET before STATISTIC — STATISTIC is normally excluded from key set
+ * - TARGET only (incl. RATIO_PERCENT) — STATISTIC / CALCULATED excluded
+ * - Requires a valid numeric current value (no key slot for "Ej rapporterad")
  * - Status order: Röd → Gul → Grön
  * - Same status → largest deviation from target
- * - CALCULATED / STATISTIC are not key KPIs in overview
  */
 export function selectKeyKpis<T extends KeyKpiCandidate>(
   kpis: T[],
@@ -37,7 +42,10 @@ export function selectKeyKpis<T extends KeyKpiCandidate>(
   }
 
   const targets = kpis.filter(
-    (kpi) => isTargetKpi(kpi) && isStatusTone(kpi.status),
+    (kpi) =>
+      isTargetKpi(kpi) &&
+      isStatusTone(kpi.status) &&
+      hasValidKpiCurrentValue(kpi.currentValue),
   );
 
   const ranked = [...targets].sort((a, b) => {

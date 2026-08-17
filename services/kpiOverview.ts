@@ -1,6 +1,7 @@
 import {
   countTargetKpiStatuses,
   effectiveTargetStatusTone,
+  hasValidKpiCurrentValue,
 } from "@/lib/kpi/kind";
 import { countKpiSetReportingProgress } from "@/lib/kpi/reportingProgress";
 import { resolveKpiTrend } from "@/lib/kpi/resolveTrend";
@@ -138,7 +139,11 @@ export async function getKpiOverviewData(): Promise<KpiOverviewData> {
       fetchKpiHistoryByReportDate(reportDate).catch(() => []),
     ]);
 
-    const reportedIds = new Set(todayRows.map((row) => row.kpi_id));
+    const reportedIds = new Set(
+      todayRows
+        .filter((row) => hasValidKpiCurrentValue(row.value))
+        .map((row) => row.kpi_id),
+    );
     const history =
       kpis.length > 0
         ? await getRecentKpiHistoryForKpis(

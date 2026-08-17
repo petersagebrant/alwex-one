@@ -9,6 +9,7 @@ import { fetchBusinessAreas } from "@/lib/supabase/business-areas";
 import { fetchAllKpis } from "@/lib/supabase/kpis";
 import { parseKpiCalcOperator } from "@/lib/kpi/calculated";
 import {
+  hasValidKpiCurrentValue,
   isManualReportableKpi,
   isSystemComputedKpi,
   parseKpiKind,
@@ -74,13 +75,14 @@ function emptyReporting(
   };
 }
 
+/** Same SoT as item.isReported: today's history row has a parseable numeric value. */
 function historyHasValue(
   todayByKpi: Map<string, KPIHistory>,
   kpiId: string | null | undefined,
 ): boolean {
   if (!kpiId) return false;
   const row = todayByKpi.get(kpiId);
-  return Boolean(row?.value?.trim());
+  return hasValidKpiCurrentValue(row?.value);
 }
 
 function toReportItem(
@@ -100,7 +102,10 @@ function toReportItem(
     history.find((entry) => entry.reportDate !== reportDate) ??
     null;
 
-  if (todayReport) {
+  // Single SoT for badge + progress: valid numeric value on today's report_date row.
+  const isReported = hasValidKpiCurrentValue(todayReport?.value);
+
+  if (todayReport && isReported) {
     return {
       kpi,
       previousValue: previousEntry?.value ?? null,
@@ -115,7 +120,8 @@ function toReportItem(
     kpi,
     previousValue: kpi.currentValue ?? previousEntry?.value ?? null,
     previousStatus: kpi.status ?? previousEntry?.status ?? null,
-    todayReport: null,
+    // Placeholder / empty today's row must not count as reported.
+    todayReport: isReported ? todayReport : null,
     isReported: false,
     computation,
   };
@@ -347,7 +353,11 @@ export async function getTodayOrgReportingStats(): Promise<TodayOrgReportingStat
       fetchKpiHistoryByReportDate(reportDate),
     ]);
 
-    const reportedIds = new Set(todayRows.map((row) => row.kpi_id));
+    const reportedIds = new Set(
+      todayRows
+        .filter((row) => hasValidKpiCurrentValue(row.value))
+        .map((row) => row.kpi_id),
+    );
     const reportable = kpis.filter((kpi) =>
       isManualReportableKpi({
         kind: parseKpiKind(kpi.kpi_kind),

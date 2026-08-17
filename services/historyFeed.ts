@@ -361,7 +361,7 @@ export function buildDashboardHistoryEvents(input: {
       occurredAtLabel: formatSinceLoginTime(
         latest.recordedAt || latest.createdAt,
       ),
-      href: `/admin/kpis/${kpiId}`,
+      href: `/kpis/${kpiId}`,
     });
   }
 

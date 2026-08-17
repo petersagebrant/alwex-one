@@ -10,7 +10,7 @@ describe("formatSjukfranvaroVdCompletenessLabel", () => {
         totalAreas: 7,
         isComplete: false,
       }),
-      "Preliminärt – baserat på rapporterade affärsområden (5 av 7)",
+      "Preliminärt – baserat på 5 av 7 rapporterade affärsområden",
     );
   });
 

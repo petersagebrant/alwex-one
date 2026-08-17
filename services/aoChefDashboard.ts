@@ -468,7 +468,7 @@ export async function getAoChefDashboardData(
       currentValue: kpi.currentValue,
       targetValue: kpi.targetValue,
       unit: kpi.unit,
-      href: `/admin/kpis/${kpi.id}`,
+      href: `/kpis/${kpi.id}`,
     })),
     kpiCounts: countByStatus(kpiStatuses),
     goals: goals.map((goal) => ({

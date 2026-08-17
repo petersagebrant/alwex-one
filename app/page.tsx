@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { AoChefDashboard } from "@/components/dashboard/AoChefDashboard";
-import { SjukfranvaroComparisonPanel } from "@/components/dashboard/SjukfranvaroComparisonPanel";
+import { KpiOverviewSection } from "@/components/dashboard/KpiOverviewSection";
 import { VdAttentionList } from "@/components/dashboard/VdAttentionList";
 import { VdBriefingPanel } from "@/components/dashboard/VdBriefingPanel";
 import { VdDiaryTimeline } from "../components/dashboard/VdDiaryTimeline";
@@ -19,8 +19,9 @@ import {
 import { getAoChefDashboardData } from "@/services/aoChefDashboard";
 import { getDashboardData } from "@/services/dashboard";
 import { getKPIs } from "@/services/kpis";
+import { getKpiOverviewData } from "@/services/kpiOverview";
 import { getDashboardReportingContext } from "@/services/kpiReporting";
-import { getSjukfranvaroComparison } from "@/services/sjukfranvaro";
+import { countTargetKpiStatuses } from "@/lib/kpi/kind";
 import { getCurrentUser } from "@/lib/auth/require-user";
 import { fetchProfileByUserId } from "@/lib/supabase/profiles";
 import { formatDateTimeSv } from "@/lib/format/date";
@@ -81,7 +82,7 @@ export default async function Home() {
     return <AoChefDashboard data={aoData} />;
   }
 
-  const [data, kpiDetails, reportingContext, sjukfranvaro] = await Promise.all([
+  const [data, kpiDetails, reportingContext, kpiOverview] = await Promise.all([
     getDashboardData(),
     getKPIs().catch(() => []),
     profileRow
@@ -98,9 +99,10 @@ export default async function Home() {
           myReporting: null,
           orgStats: null,
         }),
-    getSjukfranvaroComparison().catch(() => ({
+    getKpiOverviewData().catch(() => ({
       reportDate: "",
-      company: null,
+      orgStatusCounts: { Grön: 0, Gul: 0, Röd: 0 },
+      alwexTotalt: null,
       areas: [],
     })),
   ]);
@@ -216,21 +218,12 @@ export default async function Home() {
   });
   const initialBriefing = cachedAiBriefing ?? localBriefing;
 
-  const kpiStatusCounts = (kpiDetails ?? []).reduce(
-    (acc, kpi) => {
-      if (kpi.status === "Grön") acc.green += 1;
-      else if (kpi.status === "Gul") acc.yellow += 1;
-      else if (kpi.status === "Röd") acc.red += 1;
-      return acc;
-    },
-    { green: 0, yellow: 0, red: 0 },
-  );
-
+  const targetStatusCounts = countTargetKpiStatuses(kpiDetails ?? []);
   const briefingStats = {
     areas: businessAreas?.length ?? 0,
-    greenKpis: kpiStatusCounts.green,
-    yellowKpis: kpiStatusCounts.yellow,
-    redKpis: kpiStatusCounts.red,
+    greenKpis: targetStatusCounts.Grön,
+    yellowKpis: targetStatusCounts.Gul,
+    redKpis: targetStatusCounts.Röd,
     delayedActivities: vdFocus.summary?.delayedActivityCount ?? 0,
   };
 
@@ -278,6 +271,8 @@ export default async function Home() {
           stats={briefingStats}
           linkHints={briefingLinkHints}
         />
+
+        <KpiOverviewSection data={kpiOverview} />
 
         {reportingContext.kind === "ao_chef" &&
         reportingContext.myReporting ? (
@@ -499,10 +494,6 @@ export default async function Home() {
 
           <VdAttentionList items={vdFocus.priorityItems ?? []} />
 
-          <div className="mt-4">
-            <SjukfranvaroComparisonPanel data={sjukfranvaro} />
-          </div>
-
           <div className="mt-4 flex flex-wrap gap-2">
             <Link
               href="/admin/activities?new=1"
@@ -571,7 +562,7 @@ export default async function Home() {
 
         <section aria-labelledby="kpi-heading">
           <h2 id="kpi-heading" className="sr-only">
-            Nyckeltal
+            Organisationsnyckeltal
           </h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {(kpis ?? []).map((kpi) => (

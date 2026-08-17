@@ -184,7 +184,7 @@ export function buildSinceLoginChanges(input: {
         detail: kpi.businessAreaName,
         occurredAt: kpi.updatedAt,
         occurredAtLabel: formatSinceLoginTime(kpi.updatedAt),
-        href: `/admin/kpis/${kpi.id}`,
+        href: `/kpis/${kpi.id}`,
         linkLabel: "Öppna KPI",
       },
       `kpi:${kpi.id}:updated`,

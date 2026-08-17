@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   countTargetKpiStatuses,
+  effectiveTargetStatusTone,
+  hasValidKpiCurrentValue,
   isCalculatedKpi,
   isManualReportableKpi,
   isNonTargetKpi,
   isStatisticKpi,
   isSystemComputedKpi,
+  isWeightedRatioPercentKpi,
   parseKpiKind,
   parseKpiStoredStatus,
   STATISTIC_STATUS,
@@ -28,11 +31,15 @@ describe("kpi kind helpers", () => {
 
   it("excludes statistics and calculated from G/Y/R counts", () => {
     const kpis = [
-      { kind: "TARGET" as const, status: "Grön" as const },
-      { kind: "TARGET" as const, status: "Gul" as const },
-      { kind: "STATISTIC" as const, status: STATISTIC_STATUS },
-      { kind: "CALCULATED" as const, status: STATISTIC_STATUS },
-      { kind: "TARGET" as const, status: "Röd" as const },
+      { kind: "TARGET" as const, status: "Grön" as const, currentValue: "10" },
+      { kind: "TARGET" as const, status: "Gul" as const, currentValue: "5" },
+      { kind: "STATISTIC" as const, status: STATISTIC_STATUS, currentValue: "1" },
+      {
+        kind: "CALCULATED" as const,
+        status: STATISTIC_STATUS,
+        currentValue: "2",
+      },
+      { kind: "TARGET" as const, status: "Röd" as const, currentValue: "1" },
     ];
     assert.deepEqual(countTargetKpiStatuses(kpis), {
       Grön: 1,
@@ -47,6 +54,31 @@ describe("kpi kind helpers", () => {
     assert.equal(isManualReportableKpi(kpis[0]), true);
     assert.equal(isManualReportableKpi(kpis[2]), true);
     assert.equal(isManualReportableKpi(kpis[3]), false);
+  });
+
+  it("does not count TARGET KPIs without a current value as G/Y/R", () => {
+    const kpis = [
+      { kind: "TARGET" as const, status: "Gul" as const, currentValue: null },
+      { kind: "TARGET" as const, status: "Gul" as const, currentValue: "  " },
+      { kind: "TARGET" as const, status: "Grön" as const, currentValue: "3" },
+      { kind: "TARGET" as const, status: "Röd" as const, currentValue: "9" },
+    ];
+    assert.equal(hasValidKpiCurrentValue(null), false);
+    assert.equal(hasValidKpiCurrentValue("  "), false);
+    assert.equal(hasValidKpiCurrentValue("3"), true);
+    assert.equal(
+      effectiveTargetStatusTone({
+        kind: "TARGET",
+        status: "Gul",
+        currentValue: null,
+      }),
+      null,
+    );
+    assert.deepEqual(countTargetKpiStatuses(kpis), {
+      Grön: 1,
+      Gul: 0,
+      Röd: 1,
+    });
   });
 
   it("treats TARGET with RATIO calc as system-computed, not manually reportable", () => {
@@ -66,5 +98,8 @@ describe("kpi kind helpers", () => {
     assert.equal(isManualReportableKpi(weighted), false);
     assert.equal(isManualReportableKpi(manualTarget), true);
     assert.equal(isNonTargetKpi(computedTarget), false);
+    assert.equal(isWeightedRatioPercentKpi(weighted), true);
+    assert.equal(isWeightedRatioPercentKpi(computedTarget), false);
+    assert.equal(isWeightedRatioPercentKpi(manualTarget), false);
   });
 });

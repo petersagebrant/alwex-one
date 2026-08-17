@@ -718,7 +718,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       status: kpi.status as StatusTone,
       trend: kpi.trend,
       owner: areaManagers.get(kpi.businessAreaId) ?? "Ej angiven",
-      href: `/admin/kpis/${kpi.id}`,
+      href: `/kpis/${kpi.id}`,
     })),
     delayedActivities: delayedActivities.map((activity) => ({
       id: activity.id,

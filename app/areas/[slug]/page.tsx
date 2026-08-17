@@ -23,6 +23,7 @@ import { getActivitiesByBusinessAreaId } from "@/services/activities";
 import { getDecisions } from "@/services/decisions";
 import { getGoalsByBusinessAreaId } from "@/services/goals";
 import { getKPIsByBusinessArea } from "@/services/kpis";
+import { enrichKpisForAreaDisplay } from "@/services/kpiOverview";
 import type { StatusTone } from "@/types";
 
 type AreaDetailPageProps = {
@@ -75,6 +76,7 @@ export default async function AreaDetailPage({ params }: AreaDetailPageProps) {
     ? await getActivitiesByBusinessAreaId(dbArea.id)
     : [];
   const areaKpis = dbArea ? await getKPIsByBusinessArea(dbArea.id) : [];
+  const areaKpiItems = await enrichKpisForAreaDisplay(areaKpis);
   const areaDecisions = dbArea
     ? (await getDecisions().catch(() => [])).filter(
         (decision) => decision.businessAreaId === dbArea.id,
@@ -180,7 +182,7 @@ export default async function AreaDetailPage({ params }: AreaDetailPageProps) {
             : "Ingen VD-kommentar registrerad ännu."}
         </InfoPanel>
 
-        <AreaKpiList kpis={areaKpis} />
+        <AreaKpiList items={areaKpiItems} />
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
           <div className="space-y-4 xl:col-span-2">

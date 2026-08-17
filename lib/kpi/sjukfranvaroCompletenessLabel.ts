@@ -14,5 +14,5 @@ export function formatSjukfranvaroVdCompletenessLabel(input: {
   if (input.isComplete) {
     return null;
   }
-  return `Preliminärt – baserat på rapporterade affärsområden (${input.reportedAreas} av ${input.totalAreas})`;
+  return `Preliminärt – baserat på ${input.reportedAreas} av ${input.totalAreas} rapporterade affärsområden`;
 }

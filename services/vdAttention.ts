@@ -173,7 +173,7 @@ export function buildVdAttentionItems(input: {
       trend: kpi.trend,
       owner: cleanOwner(input.areaManagers.get(kpi.businessAreaId)),
       reason: kpiReason(kpi),
-      href: `/admin/kpis/${kpi.id}`,
+      href: `/kpis/${kpi.id}`,
       linkLabel: "Öppna KPI",
       priority: 100,
     });
@@ -201,7 +201,7 @@ export function buildVdAttentionItems(input: {
       trend: kpi.trend,
       owner: cleanOwner(input.areaManagers.get(kpi.businessAreaId)),
       reason: kpiReason(kpi),
-      href: `/admin/kpis/${kpi.id}`,
+      href: `/kpis/${kpi.id}`,
       linkLabel: "Öppna KPI",
       priority: kpi.status === "Röd" ? 95 : 90,
     });
@@ -273,7 +273,7 @@ export function buildVdAttentionItems(input: {
       trend: kpi.trend,
       owner: cleanOwner(input.areaManagers.get(kpi.businessAreaId)),
       reason: kpiReason(kpi),
-      href: `/admin/kpis/${kpi.id}`,
+      href: `/kpis/${kpi.id}`,
       linkLabel: "Öppna KPI",
       priority: 60,
     });

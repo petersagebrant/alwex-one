@@ -202,7 +202,7 @@ export function buildYesterdayChangeReport(input: {
     const area = kpi.businessAreaName || null;
     const owner =
       cleanOwner(areaById.get(kpi.businessAreaId)?.manager) ?? null;
-    const href = `/admin/kpis/${kpi.id}`;
+    const href = `/kpis/${kpi.id}`;
     const occurredAt = latest.recordedAt;
     const occurredAtLabel = formatSinceLoginTime(occurredAt);
     const resultatBoost = isResultatKpi(kpi.name) ? 5 : 0;
@@ -318,7 +318,7 @@ export function buildYesterdayChangeReport(input: {
       const owner =
         cleanOwner(areaById.get(kpi?.businessAreaId ?? entry.businessAreaId ?? "")?.manager) ??
         null;
-      const href = entry.href ?? `/admin/kpis/${entry.entityId}`;
+      const href = entry.href ?? `/kpis/${entry.entityId}`;
 
       if (entry.action === "created") {
         const detail = `Ny KPI: ${name}.`;

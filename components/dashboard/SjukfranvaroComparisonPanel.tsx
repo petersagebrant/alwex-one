@@ -69,7 +69,7 @@ export function SjukfranvaroComparisonPanel({
               className="flex flex-wrap items-center justify-between gap-2 py-2.5"
             >
               <Link
-                href={`/admin/kpis/${row.kpiId}`}
+                href={`/kpis/${row.kpiId}`}
                 className="min-w-0 text-sm font-medium text-slate-800 hover:underline"
               >
                 {row.areaName}

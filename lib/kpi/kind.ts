@@ -49,6 +49,13 @@ export function isSystemComputedKpi(kpi: {
   return kpi.kind === "TARGET" && kpi.calcOperator != null;
 }
 
+/** Company aggregate e.g. Sjukfrånvaro Alwex totalt (SUM/SUM×100). */
+export function isWeightedRatioPercentKpi(kpi: {
+  calcOperator?: KpiCalcOperator | null;
+}): boolean {
+  return kpi.calcOperator === "WEIGHTED_RATIO_PERCENT";
+}
+
 /** AO chef / daily report: TARGET + STATISTIC only (not system-computed). */
 export function isManualReportableKpi(kpi: {
   kind: KpiKind;
@@ -92,12 +99,41 @@ export function targetKpisOnly<T extends { kind: KpiKind }>(kpis: T[]): T[] {
   return kpis.filter(isTargetKpi);
 }
 
+/**
+ * True when the KPI has a non-empty current value (reported or computed).
+ * Empty/null must not inherit a stale stored Grön/Gul/Röd for overview counts.
+ */
+export function hasValidKpiCurrentValue(
+  currentValue: string | null | undefined,
+): boolean {
+  return Boolean(currentValue?.trim());
+}
+
+/**
+ * Effective G/Y/R for a TARGET KPI in overview/dashboard counts.
+ * Missing current value → not counted (stale row status ignored).
+ */
+export function effectiveTargetStatusTone(kpi: {
+  kind: KpiKind;
+  status: KpiStoredStatus;
+  currentValue?: string | null;
+}): StatusTone | null {
+  if (!isTargetKpi(kpi) || !hasValidKpiCurrentValue(kpi.currentValue)) {
+    return null;
+  }
+  return isStatusTone(kpi.status) ? kpi.status : null;
+}
+
 export function countTargetKpiStatuses(
-  kpis: Array<{ kind: KpiKind; status: KpiStoredStatus }>,
+  kpis: Array<{
+    kind: KpiKind;
+    status: KpiStoredStatus;
+    currentValue?: string | null;
+  }>,
 ): Record<StatusTone, number> {
-  const statuses = targetKpisOnly(kpis)
-    .map((kpi) => kpi.status)
-    .filter(isStatusTone);
+  const statuses = kpis
+    .map(effectiveTargetStatusTone)
+    .filter((status): status is StatusTone => status != null);
   return {
     Grön: statuses.filter((status) => status === "Grön").length,
     Gul: statuses.filter((status) => status === "Gul").length,

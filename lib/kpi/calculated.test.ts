@@ -21,6 +21,11 @@ describe("calculated KPI helpers", () => {
     assert.equal(computeDivideValue("1 250,5", "10"), "125,05");
   });
 
+  it("divides Omsättning / Körda mil (Kr per mil)", () => {
+    assert.equal(computeDivideValue("500000", "20000"), "25");
+    assert.equal(computeDivideValue("500 000", "20 000"), "25");
+  });
+
   it("computes SUM_DIVIDE as (A+B)/C", () => {
     assert.equal(
       computeSumDivideValue(["100", "50"], "10"),

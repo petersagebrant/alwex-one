@@ -1,18 +1,15 @@
 import Link from "next/link";
 import { BeraknadTypeBadge } from "@/components/kpis/BeraknadTypeBadge";
-import { StatistikTypeBadge } from "@/components/kpis/StatistikTypeBadge";
+import { ReportingStatusBadge } from "@/components/kpis/ReportingStatusBadge";
 import { StatusBadge } from "@/components/ui";
 import { formatDateSv } from "@/lib/format/date";
 import { formatKpiDisplayValue } from "@/lib/format/kpi";
 import {
-  hasValidKpiCurrentValue,
   isCalculatedKpi,
   isNonTargetKpi,
-  isStatisticKpi,
-  isStatusTone,
   isSystemComputedKpi,
-  isTargetKpi,
 } from "@/lib/kpi/kind";
+import { resolveKpiStatusPresentation } from "@/lib/kpi/statusPresentation";
 import type { KpiOverviewDisplayItem } from "@/services/kpiOverview";
 import type { KPI, KpiTrend } from "@/types";
 
@@ -36,6 +33,22 @@ function toDisplayItems(
     lastReportedAt: null,
     href: `/kpis/${kpi.id}`,
   }));
+}
+
+function AreaKpiStatusCell({ kpi }: { kpi: KPI }) {
+  const presentation = resolveKpiStatusPresentation(kpi);
+  switch (presentation.kind) {
+    case "rapporterad":
+      return <ReportingStatusBadge reported />;
+    case "ej_rapporterad":
+      return <ReportingStatusBadge reported={false} />;
+    case "beraknad":
+      return <BeraknadTypeBadge />;
+    case "tone":
+      return <StatusBadge status={presentation.status} />;
+    default:
+      return null;
+  }
 }
 
 export function AreaKpiList({ items, kpis }: AreaKpiListProps) {
@@ -78,11 +91,6 @@ export function AreaKpiList({ items, kpis }: AreaKpiListProps) {
                     <td className="border-b border-slate-100 px-3 py-3 font-medium text-slate-900">
                       <Link href={row.href} className="hover:underline">
                         {kpi.name}
-                        {isStatisticKpi(kpi) ? (
-                          <span className="mt-0.5 block text-xs font-normal text-slate-500">
-                            Typ: Statistik
-                          </span>
-                        ) : null}
                         {isCalculatedKpi(kpi) ? (
                           <span className="mt-0.5 block text-xs font-normal text-slate-500">
                             Typ: Beräknad
@@ -131,18 +139,7 @@ export function AreaKpiList({ items, kpis }: AreaKpiListProps) {
                     </td>
                     <td className="border-b border-slate-100 px-3 py-3">
                       <Link href={row.href} className="inline-flex">
-                        {isStatisticKpi(kpi) ? (
-                          <StatistikTypeBadge />
-                        ) : isCalculatedKpi(kpi) ? (
-                          <BeraknadTypeBadge />
-                        ) : isTargetKpi(kpi) &&
-                          !hasValidKpiCurrentValue(kpi.currentValue) ? (
-                          <span className="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium text-slate-500 ring-1 ring-inset ring-slate-200/80">
-                            Ej rapporterad
-                          </span>
-                        ) : isStatusTone(kpi.status) ? (
-                          <StatusBadge status={kpi.status} />
-                        ) : null}
+                        <AreaKpiStatusCell kpi={kpi} />
                       </Link>
                     </td>
                     <td className="border-b border-slate-100 px-3 py-3 text-slate-600">

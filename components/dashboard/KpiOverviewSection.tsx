@@ -5,16 +5,10 @@ import {
   StatusBadge,
 } from "@/components/ui";
 import { BeraknadTypeBadge } from "@/components/kpis/BeraknadTypeBadge";
-import { StatistikTypeBadge } from "@/components/kpis/StatistikTypeBadge";
+import { ReportingStatusBadge } from "@/components/kpis/ReportingStatusBadge";
 import { formatKpiDisplayValue } from "@/lib/format/kpi";
 import { formatDateSv } from "@/lib/format/date";
-import {
-  hasValidKpiCurrentValue,
-  isCalculatedKpi,
-  isStatisticKpi,
-  isStatusTone,
-  isTargetKpi,
-} from "@/lib/kpi/kind";
+import { resolveKpiStatusPresentation } from "@/lib/kpi/statusPresentation";
 import type {
   KpiOverviewAreaSection,
   KpiOverviewData,
@@ -45,29 +39,20 @@ function StatusCountPills({
   );
 }
 
-function UnreportedStatusLabel() {
-  return (
-    <span className="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium text-slate-500 ring-1 ring-inset ring-slate-200/80">
-      Ej rapporterad
-    </span>
-  );
-}
-
 function KpiStatusCell({ item }: { item: KpiOverviewDisplayItem }) {
-  const { kpi } = item;
-  if (isStatisticKpi(kpi)) {
-    return <StatistikTypeBadge />;
+  const presentation = resolveKpiStatusPresentation(item.kpi);
+  switch (presentation.kind) {
+    case "rapporterad":
+      return <ReportingStatusBadge reported />;
+    case "ej_rapporterad":
+      return <ReportingStatusBadge reported={false} />;
+    case "beraknad":
+      return <BeraknadTypeBadge />;
+    case "tone":
+      return <StatusBadge status={presentation.status} />;
+    default:
+      return null;
   }
-  if (isCalculatedKpi(kpi)) {
-    return <BeraknadTypeBadge />;
-  }
-  if (isTargetKpi(kpi) && !hasValidKpiCurrentValue(kpi.currentValue)) {
-    return <UnreportedStatusLabel />;
-  }
-  if (isStatusTone(kpi.status)) {
-    return <StatusBadge status={kpi.status} />;
-  }
-  return null;
 }
 
 function KeyKpiRows({ items }: { items: KpiOverviewDisplayItem[] }) {

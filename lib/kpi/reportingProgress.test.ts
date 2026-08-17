@@ -247,4 +247,85 @@ describe("countKpiSetReportingProgress", () => {
     );
     assert.deepEqual(allDaily, { reportedCount: 5, totalCount: 5 });
   });
+
+  it("Fjärr & Miljö: 3 daily points; DIVIDE excluded; Resultat MONTHLY excluded", () => {
+    // Standalone daily: Omsättning, Körda mil
+    // Ratio block: Sjuktimmar + Ordinarie = 1
+    // Not counted: Resultat (MONTHLY), Kr per mil (CALCULATED DIVIDE)
+    const kpis = [
+      {
+        id: "omsattning",
+        kind: "STATISTIC" as const,
+        calcOperator: null,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+        reportingFrequency: "DAILY" as const,
+      },
+      {
+        id: "korda-mil",
+        kind: "STATISTIC" as const,
+        calcOperator: null,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+        reportingFrequency: "DAILY" as const,
+      },
+      {
+        id: "kr-per-mil",
+        kind: "CALCULATED" as const,
+        calcOperator: "DIVIDE" as const,
+        calcNumeratorKpiId: "omsattning",
+        calcDenominatorKpiId: "korda-mil",
+        reportingFrequency: "DAILY" as const,
+      },
+      {
+        id: "resultat",
+        kind: "TARGET" as const,
+        calcOperator: null,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+        reportingFrequency: "MONTHLY" as const,
+      },
+      {
+        id: "sjuktimmar",
+        kind: "STATISTIC" as const,
+        calcOperator: null,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+        reportingFrequency: "DAILY" as const,
+      },
+      {
+        id: "ordinarie",
+        kind: "STATISTIC" as const,
+        calcOperator: null,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+        reportingFrequency: "DAILY" as const,
+      },
+      {
+        id: "sjukfranvaro",
+        kind: "TARGET" as const,
+        calcOperator: "RATIO_PERCENT" as const,
+        calcNumeratorKpiId: "sjuktimmar",
+        calcDenominatorKpiId: "ordinarie",
+        reportingFrequency: "DAILY" as const,
+      },
+    ];
+
+    const none = countKpiSetReportingProgress(kpis, new Set());
+    assert.deepEqual(none, { reportedCount: 0, totalCount: 3 });
+
+    const allDaily = countKpiSetReportingProgress(
+      kpis,
+      new Set([
+        "omsattning",
+        "korda-mil",
+        "kr-per-mil", // calculated — must not add
+        "resultat", // monthly — must not add
+        "sjuktimmar",
+        "ordinarie",
+        "sjukfranvaro",
+      ]),
+    );
+    assert.deepEqual(allDaily, { reportedCount: 3, totalCount: 3 });
+  });
 });

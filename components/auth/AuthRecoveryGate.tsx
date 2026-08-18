@@ -59,9 +59,9 @@ export function AuthRecoveryGate() {
     let supabase: ReturnType<typeof createClient>;
     try {
       supabase = createClient();
-    } catch (error) {
+    } catch {
       console.log("[auth-recovery] createClient failed", {
-        message: error instanceof Error ? error.message : String(error),
+        hasError: true,
       });
       return;
     }
@@ -93,7 +93,7 @@ export function AuthRecoveryGate() {
 
       if (error) {
         console.log("[auth-recovery] setSession from hash failed", {
-          message: error.message,
+          hasError: true,
         });
         return false;
       }

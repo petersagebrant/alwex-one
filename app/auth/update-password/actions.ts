@@ -55,7 +55,7 @@ export async function updatePasswordAction(formData: FormData) {
   const { error } = await supabase.auth.updateUser({ password });
 
   if (error) {
-    console.log("[auth-recovery] updateUser failed", { message: error.message });
+    console.log("[auth-recovery] updateUser failed", { hasError: true });
     redirect(
       `/auth/update-password?error=${encodeURIComponent(error.message)}`,
     );

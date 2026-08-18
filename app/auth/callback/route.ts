@@ -62,13 +62,11 @@ export async function GET(request: NextRequest) {
   const next = safeNextPath(searchParams.get("next"));
 
   console.log("[auth-recovery] callback hit", {
-    href: requestUrl.href,
     pathname: requestUrl.pathname,
     hasCode: Boolean(code),
     hasTokenHash: Boolean(tokenHash),
     type,
-    nextParam: searchParams.get("next"),
-    resolvedNext: next,
+    resolvedPath: new URL(next, origin).pathname,
   });
 
   const oauthError =
@@ -77,7 +75,9 @@ export async function GET(request: NextRequest) {
     null;
 
   if (oauthError) {
-    console.log("[auth-recovery] callback oauth/error param", oauthError);
+    console.log("[auth-recovery] callback oauth/error param", {
+      hasError: true,
+    });
     return redirectWithError(request, origin);
   }
 
@@ -102,7 +102,7 @@ export async function GET(request: NextRequest) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (error) {
       console.log("[auth-recovery] exchangeCodeForSession failed", {
-        message: error.message,
+        hasError: true,
       });
       const pkceMissing = /code verifier/i.test(error.message);
       return redirectWithError(
@@ -116,7 +116,9 @@ export async function GET(request: NextRequest) {
 
     console.log("[auth-recovery] exchangeCodeForSession ok · recovery event path");
     setRecoveryCookie(response);
-    console.log("[auth-recovery] redirecting to", redirectTarget.toString());
+    console.log("[auth-recovery] redirecting to", {
+      pathname: redirectTarget.pathname,
+    });
     return response;
   }
 
@@ -127,13 +129,15 @@ export async function GET(request: NextRequest) {
     });
 
     if (error) {
-      console.log("[auth-recovery] verifyOtp failed", { message: error.message });
+      console.log("[auth-recovery] verifyOtp failed", { hasError: true });
       return redirectWithError(request, origin);
     }
 
     console.log("[auth-recovery] verifyOtp ok", { type });
     setRecoveryCookie(response);
-    console.log("[auth-recovery] redirecting to", redirectTarget.toString());
+    console.log("[auth-recovery] redirecting to", {
+      pathname: redirectTarget.pathname,
+    });
     return response;
   }
 
@@ -153,6 +157,8 @@ function redirectWithError(
         "Länken för lösenordsåterställning är ogiltig eller har gått ut. Begär en ny länk.",
     );
   const target = buildRedirectUrl(request, origin, path);
-  console.log("[auth-recovery] redirecting to error page", target.toString());
+  console.log("[auth-recovery] redirecting to error page", {
+    pathname: target.pathname,
+  });
   return NextResponse.redirect(target);
 }

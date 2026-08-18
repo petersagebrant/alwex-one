@@ -85,7 +85,7 @@ function redirectAuthParamsToCallback(request: NextRequest): NextResponse | null
     hasCode: Boolean(code),
     hasTokenHash: Boolean(tokenHash),
     type,
-    to: callbackUrl.toString(),
+    toPath: callbackUrl.pathname,
   });
 
   return NextResponse.redirect(callbackUrl);
@@ -188,7 +188,7 @@ export async function updateSession(request: NextRequest) {
     const target = new URL(nextPath, request.nextUrl.origin);
 
     console.log("[auth-recovery] proxy signed-in leave /login", {
-      to: `${target.pathname}${target.search}`,
+      toPath: target.pathname,
       recoveryPending,
     });
 

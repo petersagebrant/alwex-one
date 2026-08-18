@@ -328,4 +328,93 @@ describe("countKpiSetReportingProgress", () => {
     );
     assert.deepEqual(allDaily, { reportedCount: 3, totalCount: 3 });
   });
+
+  it("Mark & Anläggning: 5 daily points; ratio inputs count separately", () => {
+    // Standalone daily: Ton ut Snugge, Kubik ut Betongstationen, Antal enheter i drift
+    // Separate daily inputs: Sjuktimmar + Ordinarie arbetstid = 2
+    // Calculated Sjukfrånvaro remains excluded.
+    // Not counted: Resultat mot budget (MONTHLY)
+    const kpis = [
+      {
+        id: "resultat",
+        kind: "TARGET" as const,
+        calcOperator: null,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+        reportingFrequency: "MONTHLY" as const,
+      },
+      {
+        id: "ton-snugge",
+        kind: "STATISTIC" as const,
+        calcOperator: null,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+        reportingFrequency: "DAILY" as const,
+      },
+      {
+        id: "kubik-betong",
+        kind: "STATISTIC" as const,
+        calcOperator: null,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+        reportingFrequency: "DAILY" as const,
+      },
+      {
+        id: "enheter-drift",
+        kind: "STATISTIC" as const,
+        calcOperator: null,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+        reportingFrequency: "DAILY" as const,
+      },
+      {
+        id: "sjuktimmar",
+        kind: "STATISTIC" as const,
+        calcOperator: null,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+        reportingFrequency: "DAILY" as const,
+      },
+      {
+        id: "ordinarie",
+        kind: "STATISTIC" as const,
+        calcOperator: null,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+        reportingFrequency: "DAILY" as const,
+      },
+      {
+        id: "sjukfranvaro",
+        kind: "TARGET" as const,
+        calcOperator: "RATIO_PERCENT" as const,
+        calcNumeratorKpiId: "sjuktimmar",
+        calcDenominatorKpiId: "ordinarie",
+        ratioReportingMode: "SEPARATE_INPUTS" as const,
+        reportingFrequency: "DAILY" as const,
+      },
+    ];
+
+    const none = countKpiSetReportingProgress(kpis, new Set());
+    assert.deepEqual(none, { reportedCount: 0, totalCount: 5 });
+
+    const onlySickHours = countKpiSetReportingProgress(
+      kpis,
+      new Set(["sjuktimmar"]),
+    );
+    assert.deepEqual(onlySickHours, { reportedCount: 1, totalCount: 5 });
+
+    const allDaily = countKpiSetReportingProgress(
+      kpis,
+      new Set([
+        "resultat", // monthly — must not add
+        "ton-snugge",
+        "kubik-betong",
+        "enheter-drift",
+        "sjuktimmar",
+        "ordinarie",
+        "sjukfranvaro",
+      ]),
+    );
+    assert.deepEqual(allDaily, { reportedCount: 5, totalCount: 5 });
+  });
 });

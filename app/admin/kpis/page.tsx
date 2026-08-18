@@ -15,7 +15,7 @@ import type { KPIListItem } from "@/services/kpis";
 import { createKpiAction, updateKpiAction } from "./actions";
 
 export const metadata: Metadata = {
-  title: "Administrera KPI | Alwex One",
+  title: "Administrera KPI | LEIR",
   description: "Lista, skapa och uppdatera nyckeltal",
 };
 

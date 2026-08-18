@@ -12,7 +12,7 @@ import {
 } from "./actions";
 
 export const metadata: Metadata = {
-  title: "Administrera beslut | Alwex One",
+  title: "Administrera beslut | LEIR",
   description: "Lista, skapa och uppdatera beslut",
 };
 

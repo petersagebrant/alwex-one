@@ -3,8 +3,8 @@ import Link from "next/link";
 import { signInAction } from "./actions";
 
 export const metadata: Metadata = {
-  title: "Logga in | Alwex One",
-  description: "Logga in till Alwex One",
+  title: "Logga in | LEIR",
+  description: "Logga in till LEIR",
 };
 
 type LoginPageProps = {
@@ -22,7 +22,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       <div className="w-full max-w-md rounded-xl border border-neutral-200 bg-white p-6 shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-8">
         <div className="mb-6">
           <p className="text-[13px] font-semibold tracking-[0.08em] text-neutral-900 uppercase">
-            Alwex One
+            LEIR
           </p>
           <h1 className="mt-3 text-2xl font-semibold tracking-tight text-neutral-900">
             Logga in

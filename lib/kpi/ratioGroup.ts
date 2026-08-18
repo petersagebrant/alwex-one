@@ -1,4 +1,8 @@
-import type { KpiCalcOperator, KpiKind } from "@/lib/kpi/kind";
+import type {
+  KpiCalcOperator,
+  KpiKind,
+  KpiRatioReportingMode,
+} from "@/lib/kpi/kind";
 
 /** Calc-linked RATIO_PERCENT TARGET + its two STATISTIC inputs. */
 export type RatioPercentGroupIds = {
@@ -13,6 +17,7 @@ type GroupableKpi = {
   calcOperator?: KpiCalcOperator | null;
   calcNumeratorKpiId?: string | null;
   calcDenominatorKpiId?: string | null;
+  ratioReportingMode?: KpiRatioReportingMode | null;
 };
 
 /**
@@ -28,6 +33,9 @@ export function findRatioPercentGroups(
 
   for (const kpi of kpis) {
     if (kpi.kind !== "TARGET" || kpi.calcOperator !== "RATIO_PERCENT") {
+      continue;
+    }
+    if (kpi.ratioReportingMode === "SEPARATE_INPUTS") {
       continue;
     }
     const numeratorId = kpi.calcNumeratorKpiId;

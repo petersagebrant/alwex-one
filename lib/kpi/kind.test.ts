@@ -13,6 +13,7 @@ import {
   isSystemComputedKpi,
   isWeightedRatioPercentKpi,
   parseKpiKind,
+  parseKpiRatioReportingMode,
   parseKpiReportingFrequency,
   parseKpiStoredStatus,
   STATISTIC_STATUS,
@@ -125,5 +126,14 @@ describe("kpi kind helpers", () => {
     assert.equal(isManualReportableKpi(monthly), true);
     assert.equal(isDailyManualReportableKpi(monthly), false);
     assert.equal(isDailyManualReportableKpi(daily), true);
+  });
+
+  it("keeps ratio reporting grouped unless explicitly separated", () => {
+    assert.equal(parseKpiRatioReportingMode(null), "GROUPED");
+    assert.equal(parseKpiRatioReportingMode("unknown"), "GROUPED");
+    assert.equal(
+      parseKpiRatioReportingMode("SEPARATE_INPUTS"),
+      "SEPARATE_INPUTS",
+    );
   });
 });

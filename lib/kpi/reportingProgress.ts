@@ -2,6 +2,7 @@ import {
   isDailyManualReportableKpi,
   type KpiCalcOperator,
   type KpiKind,
+  type KpiRatioReportingMode,
   type KpiReportingFrequency,
 } from "@/lib/kpi/kind";
 import {
@@ -16,6 +17,7 @@ export type ReportingProgressKpi = {
   calcOperator?: KpiCalcOperator | null;
   calcNumeratorKpiId?: string | null;
   calcDenominatorKpiId?: string | null;
+  ratioReportingMode?: KpiRatioReportingMode | null;
   reportingFrequency?: KpiReportingFrequency | null;
 };
 

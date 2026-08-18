@@ -13,6 +13,9 @@ export type KpiCalcOperator =
 /** DAILY = today's reporting progress; MONTHLY = reportable but excluded from daily X av Y. */
 export type KpiReportingFrequency = "DAILY" | "MONTHLY";
 
+/** GROUPED = one composite report point; SEPARATE_INPUTS = each ratio input is its own point. */
+export type KpiRatioReportingMode = "GROUPED" | "SEPARATE_INPUTS";
+
 /** Stored on kpis/kpi_history for statistics and calculated — never shown as "-" in UI. */
 export const STATISTIC_STATUS = "Statistik" as const;
 
@@ -65,6 +68,12 @@ export function parseKpiReportingFrequency(
   value: string | null | undefined,
 ): KpiReportingFrequency {
   return value === "MONTHLY" ? "MONTHLY" : "DAILY";
+}
+
+export function parseKpiRatioReportingMode(
+  value: string | null | undefined,
+): KpiRatioReportingMode {
+  return value === "SEPARATE_INPUTS" ? "SEPARATE_INPUTS" : "GROUPED";
 }
 
 export function isMonthlyReportingKpi(kpi: {

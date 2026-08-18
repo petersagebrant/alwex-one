@@ -55,7 +55,7 @@ export async function generateMetadata({
     : mockArea;
 
   return {
-    title: area ? `${area.name} | Alwex One` : "Affärsområde | Alwex One",
+    title: area ? `${area.name} | LEIR` : "Affärsområde | LEIR",
     description: area?.description ?? undefined,
   };
 }

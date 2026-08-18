@@ -16,6 +16,7 @@ import {
   isMonthlyReportingKpi,
   isSystemComputedKpi,
   parseKpiKind,
+  parseKpiRatioReportingMode,
   parseKpiReportingFrequency,
   parseKpiStoredStatus,
 } from "@/lib/kpi/kind";
@@ -488,6 +489,7 @@ export async function getTodayOrgReportingStats(): Promise<TodayOrgReportingStat
       calcOperator: parseKpiCalcOperator(kpi.calc_operator),
       calcNumeratorKpiId: kpi.calc_numerator_kpi_id,
       calcDenominatorKpiId: kpi.calc_denominator_kpi_id,
+      ratioReportingMode: parseKpiRatioReportingMode(kpi.ratio_reporting_mode),
       reportingFrequency: parseKpiReportingFrequency(kpi.reporting_frequency),
     }));
     const { reportedCount, totalCount } = countKpiSetReportingProgress(

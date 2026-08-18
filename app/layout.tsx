@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Alwex One",
-    template: "%s | Alwex One",
+    default: "LEIR",
+    template: "%s | LEIR",
   },
   description: "Ledning, målstyrning och verksamhetsuppföljning",
 };

@@ -3,7 +3,7 @@ import { AppHeader } from "@/components/layout/AppHeader";
 import { AssistantChat } from "./AssistantChat";
 
 export const metadata: Metadata = {
-  title: "AI-assistent | Alwex One",
+  title: "AI-assistent | LEIR",
   description: "Ställ frågor om verksamheten utifrån aktuell data",
 };
 

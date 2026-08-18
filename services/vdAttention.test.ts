@@ -26,6 +26,7 @@ function kpi(partial: Partial<KPIListItem> & Pick<KPIListItem, "id" | "name">): 
     createdAt: "2026-08-01T00:00:00.000Z",
     updatedAt: "2026-08-14T00:00:00.000Z",
     ...partial,
+    ratioReportingMode: partial.ratioReportingMode ?? "GROUPED",
   };
 }
 

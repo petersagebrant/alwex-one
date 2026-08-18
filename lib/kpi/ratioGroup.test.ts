@@ -85,6 +85,20 @@ describe("ratioGroup helpers", () => {
     );
   });
 
+  it("does not group ratios configured for separate input reporting", () => {
+    assert.deepEqual(
+      findRatioPercentGroups([
+        sjuktimmar,
+        ordinarie,
+        {
+          ...sjukfranvaro,
+          ratioReportingMode: "SEPARATE_INPUTS" as const,
+        },
+      ]),
+      [],
+    );
+  });
+
   it("collects all member ids for filtering lists", () => {
     const ids = collectRatioGroupMemberIds([
       {

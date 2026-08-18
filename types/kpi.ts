@@ -2,6 +2,7 @@ import type { StatusTone } from "./status";
 import type {
   KpiCalcOperator,
   KpiKind,
+  KpiRatioReportingMode,
   KpiReportingFrequency,
   KpiStoredStatus,
 } from "@/lib/kpi/kind";
@@ -9,6 +10,7 @@ import type {
 export type {
   KpiCalcOperator,
   KpiKind,
+  KpiRatioReportingMode,
   KpiReportingFrequency,
   KpiStoredStatus,
 } from "@/lib/kpi/kind";
@@ -45,6 +47,8 @@ export type KPI = {
   calcOperator: KpiCalcOperator | null;
   calcNumeratorKpiId: string | null;
   calcDenominatorKpiId: string | null;
+  /** How RATIO_PERCENT inputs are presented and counted in daily reporting. */
+  ratioReportingMode: KpiRatioReportingMode;
   /** DAILY (default) or MONTHLY — MONTHLY excluded from daily progress. */
   reportingFrequency: KpiReportingFrequency;
   /** ISO timestamp when archived; null = active. */

@@ -17,7 +17,7 @@ import { formatDateSv } from "@/lib/format/date";
 import type { MyKpisForTodayReporting } from "@/types";
 
 export const metadata: Metadata = {
-  title: "Mina KPI:er idag | Alwex One",
+  title: "Mina KPI:er idag | LEIR",
   description: "Daglig KPI-rapportering för affärsområdeschef",
 };
 

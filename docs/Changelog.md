@@ -1,4 +1,4 @@
-# Changelog — Alwex One
+# Changelog — LEIR
 
 Alla betydande ändringar i projektet dokumenteras här.  
 Format inspirerat av [Keep a Changelog](https://keepachangelog.com/sv/1.1.0/).  
@@ -6,7 +6,7 @@ Versionsprincip: [Semantic Versioning](https://semver.org/lang/sv/) där det är
 
 | Fält | Värde |
 | --- | --- |
-| Produkt | Alwex One |
+| Produkt | LEIR |
 | Dokument | `docs/Changelog.md` |
 | Relaterat | `docs/SystemSpecification.md`, `docs/ProductBacklog.md` |
 | Kodbas | `alwex-malportal` |
@@ -35,7 +35,7 @@ Versionsprincip: [Semantic Versioning](https://semver.org/lang/sv/) där det är
   - sektioner för ledningens uppmärksamhet och kommande beslut
   - tabell för mål som kräver åtgärd
 - Grundläggande dokumentation:
-  - `docs/SystemSpecification.md` (Alwex One)
+  - `docs/SystemSpecification.md` (LEIR)
   - `docs/Ledningsportal-SystemSpecification.md` (MVP-detalj)
   - `docs/ProductBacklog.md`
   - `docs/Changelog.md`

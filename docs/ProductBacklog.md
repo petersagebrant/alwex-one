@@ -1,8 +1,8 @@
-# Produktbacklog — Alwex One
+# Produktbacklog — LEIR
 
 | Fält | Värde |
 | --- | --- |
-| Produkt | Alwex One |
+| Produkt | LEIR |
 | Dokument | `docs/ProductBacklog.md` |
 | Relaterat | `docs/SystemSpecification.md`, `docs/Changelog.md` |
 | Status | Levande backlog |
@@ -18,7 +18,7 @@ Prioritering: **Must** → måste med i närmaste leverans · **Should** → vik
 | --- | --- | --- |
 | PB-001 | Next.js-projekt uppsatt | `alwex-malportal`, TypeScript, Tailwind |
 | PB-002 | VD-dashboard (prototyp) | KPI, affärsområden, ledningslistor, åtgärdstabell |
-| PB-003 | Systemspecifikation | Grunddokument för Alwex One |
+| PB-003 | Systemspecifikation | Grunddokument för LEIR |
 | PB-004 | Git-repo initierat | Första commit av ledningsportal |
 
 ---

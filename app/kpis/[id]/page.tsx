@@ -41,8 +41,8 @@ export async function generateMetadata({
   const kpi = await getKPIById(id).catch(() => null);
   return {
     title: kpi
-      ? `${kpi.name} | KPI | Alwex One`
-      : "KPI | Alwex One",
+      ? `${kpi.name} | KPI | LEIR`
+      : "KPI | LEIR",
     description: "KPI-detalj med historik",
   };
 }

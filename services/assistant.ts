@@ -24,7 +24,7 @@ import type { AuditFieldChange, KPIHistory, StatusTone } from "@/types";
 const INSUFFICIENT_HISTORY =
   "Det finns inte tillräckligt historiskt underlag för att bedöma trenden.";
 
-const ASSISTANT_SYSTEM_PROMPT_BROAD = `Du är VD-assistent för ALWEX ONE.
+const ASSISTANT_SYSTEM_PROMPT_BROAD = `Du är VD-assistent för LEIR.
 
 Svara kort, skarpt och beslutsinriktat. Max 120–160 ord.
 Svara direkt på frågan först. Inga upprepningar. Samma KPI får nämnas högst en gång.
@@ -50,7 +50,7 @@ Max 3 konkreta rekommendationer.
 
 Avsluta med: Vill du att jag utvecklar någon punkt?`;
 
-const ASSISTANT_SYSTEM_PROMPT_AREA = `Du är VD-assistent för ALWEX ONE.
+const ASSISTANT_SYSTEM_PROMPT_AREA = `Du är VD-assistent för LEIR.
 
 Svara kort, skarpt och beslutsinriktat. Max 120–160 ord.
 Svara direkt på frågan först. Inga upprepningar. Samma KPI får nämnas högst en gång.
@@ -2331,7 +2331,7 @@ function buildVdBriefingOpenAiPayload(full: AssistantContext) {
   };
 }
 
-const BRIEFING_SYSTEM_PROMPT = `Du är COO-rådgivare för ALWEX ONE och förbereder VD inför dagen.
+const BRIEFING_SYSTEM_PROMPT = `Du är COO-rådgivare för LEIR och förbereder VD inför dagen.
 
 Skriv som en erfaren COO: kort, skarp, affärsmässig. Beslutsstöd framför datadump.
 Använd endast informationen i context. Hitta inte på något.

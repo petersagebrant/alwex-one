@@ -4,7 +4,7 @@ import { AreaCardGrid } from "@/components/areas/AreaCardGrid";
 import { getBusinessAreas } from "@/services/businessAreas";
 
 export const metadata: Metadata = {
-  title: "Affärsområden | Alwex One",
+  title: "Affärsområden | LEIR",
   description: "Översikt över Alwex affärsområden, mål och aktiviteter",
 };
 

@@ -33,6 +33,16 @@ describe("isExcludedFromVdAttention", () => {
     );
   });
 
+  it("keeps system-computed SUM_DIVIDE TARGET for VD attention", () => {
+    assert.equal(
+      isExcludedFromVdAttention({
+        kind: "TARGET",
+        calcOperator: "SUM_DIVIDE",
+      }),
+      false,
+    );
+  });
+
   it("keeps ordinary TARGET KPIs without calc operator", () => {
     assert.equal(
       isExcludedFromVdAttention({

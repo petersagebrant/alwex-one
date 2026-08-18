@@ -171,7 +171,7 @@ describe("countKpiSetReportingProgress", () => {
   it("Lager & Logistik: revenue increases daily progress from 5 to 6", () => {
     // Standalone daily: Beläggningsgrad, Kolli OOH, Kolli Byggmax, Arbetade timmar
     // Ratio block: Sjuktimmar + Ordinarie = 1
-    // Not counted: Resultat (MONTHLY), Kolli per arbetad timme (SUM_DIVIDE)
+    // Not counted: Resultat (MONTHLY), system TARGET Kolli per arbetad timme
     const kpis = [
       {
         id: "belaggning",
@@ -255,7 +255,7 @@ describe("countKpiSetReportingProgress", () => {
       },
       {
         id: "kolli-per-timme",
-        kind: "CALCULATED" as const,
+        kind: "TARGET" as const,
         calcOperator: "SUM_DIVIDE" as const,
         calcNumeratorKpiId: null,
         calcDenominatorKpiId: "arbetade",

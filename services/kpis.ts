@@ -422,13 +422,44 @@ function resolveKindPayload(input: {
     fallbackStatus: input.status,
   });
 
-  // Preserve / set system-computed TARGET ratio metadata (seeded Sjukfrånvaro).
+  // Preserve / set system-computed TARGET calculation metadata.
   const targetCalcOperator =
     input.calcOperator === "RATIO_PERCENT" ||
     input.calcOperator === "MONTH_TO_DATE_RATIO_PERCENT" ||
+    input.calcOperator === "SUM_DIVIDE" ||
     input.calcOperator === "WEIGHTED_RATIO_PERCENT"
       ? input.calcOperator
       : null;
+
+  if (targetCalcOperator === "SUM_DIVIDE") {
+    const denominatorId = input.calcDenominatorKpiId?.trim() || null;
+    if (!denominatorId) {
+      throw new Error("Välj nämnare för beräknad TARGET-KPI.");
+    }
+    if (input.selfId && denominatorId === input.selfId) {
+      throw new Error("En beräknad KPI kan inte referera till sig själv.");
+    }
+    if (!targetValue) {
+      throw new Error("Målvärde krävs för beräknad TARGET-KPI.");
+    }
+    if (!auto.direction) {
+      throw new Error("Riktning krävs för beräknad TARGET-KPI.");
+    }
+    return {
+      kpi_kind: "TARGET",
+      status,
+      target_value: targetValue,
+      current_value: currentValue,
+      direction: auto.direction,
+      tolerance_type: auto.tolerance_type,
+      green_tolerance: auto.green_tolerance,
+      yellow_tolerance: auto.yellow_tolerance,
+      calc_operator: "SUM_DIVIDE",
+      calc_numerator_kpi_id: null,
+      calc_denominator_kpi_id: denominatorId,
+      reporting_frequency: reportingFrequency,
+    };
+  }
 
   if (
     targetCalcOperator === "RATIO_PERCENT" ||
@@ -625,7 +656,8 @@ export async function createKPI(input: CreateKPIInput): Promise<KPI> {
       denominatorId: resolved.calc_denominator_kpi_id,
     });
   } else if (
-    resolved.kpi_kind === "CALCULATED" &&
+    (resolved.kpi_kind === "CALCULATED" ||
+      resolved.kpi_kind === "TARGET") &&
     resolved.calc_operator === "SUM_DIVIDE" &&
     resolved.calc_denominator_kpi_id
   ) {
@@ -783,7 +815,8 @@ export async function updateKPI(input: UpdateKPIInput): Promise<KPI> {
       denominatorId: resolved.calc_denominator_kpi_id,
     });
   } else if (
-    resolved.kpi_kind === "CALCULATED" &&
+    (resolved.kpi_kind === "CALCULATED" ||
+      resolved.kpi_kind === "TARGET") &&
     resolved.calc_operator === "SUM_DIVIDE" &&
     resolved.calc_denominator_kpi_id
   ) {

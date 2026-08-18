@@ -3,7 +3,7 @@ import type { StatusTone } from "@/types/status";
 
 export type KpiKind = "TARGET" | "STATISTIC" | "CALCULATED";
 
-/** DIVIDE / SUM_DIVIDE = CALCULATED Statistik; RATIO_* = system-computed TARGET with G/Y/R. */
+/** Calculation operators for derived statistics and system-computed TARGETs. */
 export type KpiCalcOperator =
   | "DIVIDE"
   | "SUM_DIVIDE"

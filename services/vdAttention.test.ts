@@ -121,4 +121,31 @@ describe("buildVdAttentionItems sjukfrånvaro filter", () => {
     );
     assert.doesNotMatch(items[0]?.metrics ?? "", /mål 0/i);
   });
+
+  it("includes a red system-computed Lager productivity TARGET", () => {
+    const items = buildVdAttentionItems({
+      kpis: [
+        kpi({
+          id: "lager-productivity",
+          name: "Kolli per arbetad timme",
+          businessAreaName: "Lager & Logistik",
+          calcOperator: "SUM_DIVIDE",
+          direction: "HIGHER_IS_BETTER",
+          status: "Röd",
+          currentValue: "20",
+          targetValue: "100",
+          unit: "kolli/timme",
+        }),
+      ],
+      delayedActivities: [],
+      openDecisions: [],
+      areas: [],
+      areaManagers: new Map(),
+      limit: 10,
+    });
+
+    assert.equal(items.length, 1);
+    assert.equal(items[0]?.title, "Kolli per arbetad timme");
+    assert.match(items[0]?.metrics ?? "", /20 kolli\/timme mot mål 100/);
+  });
 });

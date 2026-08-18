@@ -43,7 +43,7 @@ export type KPI = {
   /** Optional green band for TARGET_IS_BEST. NULL = tiny heuristic. */
   greenTolerance: number | null;
   yellowTolerance: number | null;
-  /** CALCULATED DIVIDE/SUM_DIVIDE, or TARGET RATIO_PERCENT / WEIGHTED_RATIO_PERCENT. */
+  /** Operator for CALCULATED or system-computed TARGET KPIs. */
   calcOperator: KpiCalcOperator | null;
   calcNumeratorKpiId: string | null;
   calcDenominatorKpiId: string | null;

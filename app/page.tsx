@@ -171,6 +171,7 @@ export default async function Home() {
       area: kpi?.area ?? "",
       status: kpi?.status,
       owner: kpi?.owner ?? "",
+      monthlyEconomicSummary: kpi?.monthlyEconomicSummary ?? null,
     })),
     greenAreaNames: (businessAreas ?? [])
       .filter((area) => area?.status === "Grön")

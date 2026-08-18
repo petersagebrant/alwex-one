@@ -6,18 +6,36 @@ import {
   requireProfile,
 } from "@/lib/auth/require-user";
 import { computeKpiStatus } from "@/lib/kpi/computeStatus";
+import { computeEconomicDeviation } from "@/lib/kpi/economics";
 import {
   fetchBusinessAreaById,
   fetchBusinessAreaBySlug,
   fetchBusinessAreas,
 } from "@/lib/supabase/business-areas";
 import { fetchKpiById } from "@/lib/supabase/kpis";
+import { fetchKpiHistoryByPeriodMonthsForKpis } from "@/lib/supabase/kpi-history";
 import { getKpisForTodayReporting } from "@/services/kpiReporting";
-import { upsertDailyKpiReport, toStockholmReportDate } from "@/services/kpiHistory";
+import {
+  upsertDailyKpiReport,
+  upsertMonthlyKpiReport,
+  toStockholmReportDate,
+} from "@/services/kpiHistory";
 import type { MyKpisForTodayReporting, StatusTone } from "@/types";
 
 export type ReportDailyKpiResult =
   | { ok: true }
+  | { ok: false; error: string };
+
+export type ReportMonthlyKpiResult = ReportDailyKpiResult;
+export type LoadMonthlyKpiResult =
+  | {
+      ok: true;
+      actualValue: string | null;
+      budgetValue: string | null;
+      deviationValue: string | null;
+      comment: string | null;
+      isLegacyDeviation: boolean;
+    }
   | { ok: false; error: string };
 
 export type LoadVdAreaReportingResult =
@@ -195,4 +213,121 @@ export async function reportDailyKpiAction(input: {
   revalidatePath("/report/kpis");
   revalidatePath("/");
   return { ok: true };
+}
+
+export async function reportMonthlyKpiAction(input: {
+  kpiId: string;
+  periodMonth: string;
+  actualValue: string;
+  budgetValue: string;
+  comment?: string;
+}): Promise<ReportMonthlyKpiResult> {
+  const profile = await requireOperationalWriter();
+  const kpi = await fetchKpiById(input.kpiId.trim()).catch(() => null);
+  if (!kpi || kpi.archived_at) {
+    return { ok: false, error: "KPI:n hittades inte eller är arkiverad." };
+  }
+  if (
+    kpi.kpi_kind !== "TARGET" ||
+    kpi.reporting_frequency !== "MONTHLY" ||
+    kpi.calc_operator
+  ) {
+    return { ok: false, error: "KPI:n är inte ett manuellt månadsresultat." };
+  }
+  if (
+    profile.role === "ao_chef" &&
+    (!profile.businessAreaId || kpi.business_area_id !== profile.businessAreaId)
+  ) {
+    return { ok: false, error: "Du kan bara rapportera för ditt eget affärsområde." };
+  }
+  if (
+    profile.role !== "ao_chef" &&
+    profile.role !== "vd" &&
+    profile.role !== "administrator"
+  ) {
+    return { ok: false, error: "Du saknar behörighet." };
+  }
+  if (!/^\d{4}-\d{2}-01$/.test(input.periodMonth)) {
+    return { ok: false, error: "Välj en giltig resultatmånad." };
+  }
+
+  const deviation = computeEconomicDeviation(input.actualValue, input.budgetValue);
+  if (deviation === null) {
+    return { ok: false, error: "Ange giltigt faktiskt resultat och budgeterat resultat." };
+  }
+  const status = computeKpiStatus({
+    direction: kpi.direction,
+    toleranceType: kpi.tolerance_type,
+    greenTolerance: kpi.green_tolerance,
+    yellowTolerance: kpi.yellow_tolerance,
+    value: deviation,
+    target: kpi.target_value,
+  });
+  if (!status) return { ok: false, error: "Ange ett giltigt värde." };
+  const comment = input.comment?.trim() ?? "";
+  if ((status === "Gul" || status === "Röd") && !comment) {
+    return { ok: false, error: "Beskriv kort varför resultatet avviker." };
+  }
+
+  try {
+    await upsertMonthlyKpiReport({
+      kpiId: kpi.id,
+      periodMonth: input.periodMonth,
+      actualValue: input.actualValue.trim(),
+      budgetValue: input.budgetValue.trim(),
+      status,
+      comment: comment || undefined,
+      recordedBy: profile.id,
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Kunde inte spara månadsresultatet.",
+    };
+  }
+  revalidatePath("/report/kpis");
+  revalidatePath("/");
+  return { ok: true };
+}
+
+export async function loadMonthlyKpiValueAction(input: {
+  kpiId: string;
+  periodMonth: string;
+}): Promise<LoadMonthlyKpiResult> {
+  const profile = await requireProfile();
+  const kpi = await fetchKpiById(input.kpiId.trim()).catch(() => null);
+  if (!kpi || kpi.archived_at) {
+    return { ok: false, error: "KPI:n hittades inte." };
+  }
+  const mayRead =
+    profile.role === "vd" ||
+    profile.role === "administrator" ||
+    (profile.role === "ao_chef" &&
+      profile.businessAreaId === kpi.business_area_id);
+  if (!mayRead) return { ok: false, error: "Du saknar behörighet." };
+  if (!/^\d{4}-\d{2}-01$/.test(input.periodMonth)) {
+    return { ok: false, error: "Ogiltig resultatmånad." };
+  }
+  const rows = await fetchKpiHistoryByPeriodMonthsForKpis(
+    [kpi.id],
+    [input.periodMonth],
+  ).catch(() => []);
+  const row = rows[0];
+  return row
+    ? {
+        ok: true,
+        actualValue: row.actual_value,
+        budgetValue: row.budget_value,
+        deviationValue: row.value,
+        comment: row.comment,
+        isLegacyDeviation: row.actual_value == null && row.budget_value == null,
+      }
+    : {
+        ok: true,
+        actualValue: null,
+        budgetValue: null,
+        deviationValue: null,
+        comment: null,
+        isLegacyDeviation: false,
+      };
 }

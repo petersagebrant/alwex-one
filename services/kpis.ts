@@ -24,7 +24,12 @@ import {
 } from "@/lib/kpi/kind";
 import { parseNumeric } from "@/lib/kpi/parseNumeric";
 import { shouldWriteKpiMeasurementHistory } from "@/lib/kpi/shouldWriteMeasurementHistory";
+import {
+  expectedResultPeriodMonth,
+  isMonthlyEconomicResultKpi,
+} from "@/lib/kpi/economics";
 import { fetchBusinessAreas } from "@/lib/supabase/business-areas";
+import { fetchKpiHistoryByPeriodMonthsForKpis } from "@/lib/supabase/kpi-history";
 import {
   fetchAllKpis,
   fetchKpiById,
@@ -141,6 +146,53 @@ function mapKpiRow(row: KpiRow): KPI {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+async function enrichMonthlyResultPeriods<T extends KPI>(kpis: T[]): Promise<T[]> {
+  const resultIds = new Set(
+    kpis
+      .filter(isMonthlyEconomicResultKpi)
+      .map((kpi) => kpi.id),
+  );
+  if (resultIds.size === 0) return kpis;
+
+  const expected = expectedResultPeriodMonth();
+  const rows = await fetchKpiHistoryByPeriodMonthsForKpis([...resultIds]).catch(
+    () => [],
+  );
+  const latestByKpi = new Map<string, (typeof rows)[number]>();
+  const latestCompleteByKpi = new Map<string, string>();
+  for (const row of rows) {
+    if (row.period_month && !latestByKpi.has(row.kpi_id)) {
+      latestByKpi.set(row.kpi_id, row);
+    }
+    if (
+      row.period_month &&
+      row.actual_value != null &&
+      row.budget_value != null &&
+      !latestCompleteByKpi.has(row.kpi_id)
+    ) {
+      latestCompleteByKpi.set(row.kpi_id, row.period_month);
+    }
+  }
+  return kpis.map((kpi) => {
+    if (!resultIds.has(kpi.id)) return kpi;
+    const latestRow = latestByKpi.get(kpi.id);
+    const latestPeriodMonth = latestRow?.period_month ?? null;
+    const latestCompletePeriodMonth = latestCompleteByKpi.get(kpi.id) ?? null;
+    return {
+      ...kpi,
+      latestPeriodMonth,
+      expectedPeriodMonth: expected,
+      isPeriodPending: latestCompletePeriodMonth !== expected,
+      latestActualValue: latestRow?.actual_value ?? null,
+      latestBudgetValue: latestRow?.budget_value ?? null,
+      latestIsLegacyDeviation:
+        latestRow != null &&
+        latestRow.actual_value == null &&
+        latestRow.budget_value == null,
+    };
+  });
 }
 
 function normalizeAutoStatusFields(input: {
@@ -267,17 +319,41 @@ function resolveKindPayload(input: {
 
   if (kind === "CALCULATED") {
     const operator =
-      input.calcOperator === "DIVIDE" || input.calcOperator === "SUM_DIVIDE"
+      input.calcOperator === "DIVIDE" ||
+      input.calcOperator === "SUM_DIVIDE" ||
+      input.calcOperator === "MONTH_TO_DATE_SUM"
         ? input.calcOperator
         : null;
     const numeratorId = input.calcNumeratorKpiId?.trim() || null;
     const denominatorId = input.calcDenominatorKpiId?.trim() || null;
 
     if (!operator) {
-      throw new Error("Välj beräkningsoperator (DIVIDE eller SUM_DIVIDE).");
+      throw new Error("Välj beräkningsoperator.");
     }
-    if (!denominatorId) {
+    if (operator !== "MONTH_TO_DATE_SUM" && !denominatorId) {
       throw new Error("Välj nämnare för beräknad KPI.");
+    }
+    if (operator === "MONTH_TO_DATE_SUM") {
+      if (!numeratorId) {
+        throw new Error("Välj käll-KPI för månadssummering.");
+      }
+      if (input.selfId && numeratorId === input.selfId) {
+        throw new Error("En beräknad KPI kan inte referera till sig själv.");
+      }
+      return {
+        kpi_kind: "CALCULATED",
+        status: STATISTIC_STATUS,
+        target_value: null,
+        current_value: currentValue,
+        direction: null,
+        tolerance_type: null,
+        green_tolerance: null,
+        yellow_tolerance: null,
+        calc_operator: "MONTH_TO_DATE_SUM",
+        calc_numerator_kpi_id: numeratorId,
+        calc_denominator_kpi_id: null,
+        reporting_frequency: reportingFrequency,
+      };
     }
     if (operator === "DIVIDE") {
       if (!numeratorId) {
@@ -464,7 +540,7 @@ export async function getKPIsByBusinessArea(
     const rows = await fetchKpisByBusinessAreaId(businessAreaId, {
       includeArchived: false,
     });
-    return rows.map(mapKpiRow);
+    return await enrichMonthlyResultPeriods(rows.map(mapKpiRow));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (message.includes("kpis") || message.includes("schema cache")) {
@@ -484,10 +560,11 @@ export async function getKPIs(options?: {
 
   const areaNames = new Map(areas.map((area) => [area.id, area.name]));
 
-  return rows.map((row) => ({
+  const mapped = rows.map((row) => ({
     ...mapKpiRow(row),
     businessAreaName: areaNames.get(row.business_area_id) ?? "Okänt område",
   }));
+  return enrichMonthlyResultPeriods(mapped);
 }
 
 export async function getKPIById(id: string): Promise<KPIListItem | null> {
@@ -499,10 +576,11 @@ export async function getKPIById(id: string): Promise<KPIListItem | null> {
   const areas = await fetchBusinessAreas();
   const areaNames = new Map(areas.map((area) => [area.id, area.name]));
 
-  return {
+  const mapped = {
     ...mapKpiRow(row),
     businessAreaName: areaNames.get(row.business_area_id) ?? "Okänt område",
   };
+  return (await enrichMonthlyResultPeriods([mapped]))[0] ?? null;
 }
 
 export async function createKPI(input: CreateKPIInput): Promise<KPI> {
@@ -554,6 +632,15 @@ export async function createKPI(input: CreateKPIInput): Promise<KPI> {
       throw new Error(
         "Nämnaren måste tillhöra samma affärsområde som den beräknade KPI:n.",
       );
+    }
+  } else if (
+    resolved.kpi_kind === "CALCULATED" &&
+    resolved.calc_operator === "MONTH_TO_DATE_SUM" &&
+    resolved.calc_numerator_kpi_id
+  ) {
+    const source = await fetchKpiById(resolved.calc_numerator_kpi_id);
+    if (!source || source.business_area_id !== input.businessAreaId) {
+      throw new Error("Käll-KPI:n måste tillhöra samma affärsområde.");
     }
   }
 
@@ -646,9 +733,10 @@ export async function updateKPI(input: UpdateKPIInput): Promise<KPI> {
     existingCalc != null &&
     input.calcOperator == null;
   // Admin DIVIDE form must not rewrite seeded SUM_DIVIDE (junction numerators).
-  const preserveSumDivide =
-    nextKind === "CALCULATED" && existingCalc === "SUM_DIVIDE";
-  const preserveCalc = preserveTargetCalc || preserveSumDivide;
+  const preserveSpecialCalculated =
+    nextKind === "CALCULATED" &&
+    (existingCalc === "SUM_DIVIDE" || existingCalc === "MONTH_TO_DATE_SUM");
+  const preserveCalc = preserveTargetCalc || preserveSpecialCalculated;
 
   const resolved = resolveKindPayload({
     kind: nextKind,
@@ -701,6 +789,15 @@ export async function updateKPI(input: UpdateKPIInput): Promise<KPI> {
       throw new Error(
         "Nämnaren måste tillhöra samma affärsområde som den beräknade KPI:n.",
       );
+    }
+  } else if (
+    resolved.kpi_kind === "CALCULATED" &&
+    resolved.calc_operator === "MONTH_TO_DATE_SUM" &&
+    resolved.calc_numerator_kpi_id
+  ) {
+    const source = await fetchKpiById(resolved.calc_numerator_kpi_id);
+    if (!source || source.business_area_id !== input.businessAreaId) {
+      throw new Error("Käll-KPI:n måste tillhöra samma affärsområde.");
     }
   }
 

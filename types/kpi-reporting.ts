@@ -18,6 +18,16 @@ export type DailyKpiReportItem = {
   isReported: boolean;
   /** Set for system-computed KPIs (RATIO / WEIGHTED / DIVIDE). */
   computation?: DailyKpiComputationMeta;
+  /** Explicit accounting period for monthly reporting. */
+  periodMonth?: string;
+  periodLabel?: string;
+  pendingLabel?: string | null;
+  expectedFinalizationLabel?: string | null;
+  /** Explicit operands for shared monthly economic reporting. */
+  actualValue?: string | null;
+  budgetValue?: string | null;
+  deviationValue?: string | null;
+  isLegacyDeviation?: boolean;
 };
 
 /**

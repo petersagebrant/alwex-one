@@ -76,4 +76,49 @@ describe("buildVdAttentionItems sjukfrånvaro filter", () => {
     assert.ok(titles.includes("Beläggning"));
     assert.ok(!titles.includes("Sjukfrånvaro"));
   });
+
+  it("never alerts on a pending monthly result and period-labels finalized results", () => {
+    const pending = kpi({
+      id: "pending-result",
+      name: "Resultat mot budget",
+      reportingFrequency: "MONTHLY",
+      isPeriodPending: true,
+      expectedPeriodMonth: "2026-07-01",
+      latestPeriodMonth: "2026-06-01",
+      status: "Röd",
+      currentValue: "-1",
+      latestActualValue: "0",
+      latestBudgetValue: "1",
+      targetValue: "0",
+      unit: "Mkr",
+    });
+    const finalized = kpi({
+      id: "final-result",
+      name: "Resultat mot budget",
+      reportingFrequency: "MONTHLY",
+      isPeriodPending: false,
+      latestPeriodMonth: "2026-07-01",
+      status: "Röd",
+      currentValue: "-1",
+      latestActualValue: "0",
+      latestBudgetValue: "1",
+      targetValue: "0",
+      unit: "Mkr",
+    });
+    const items = buildVdAttentionItems({
+      kpis: [pending, finalized],
+      delayedActivities: [],
+      openDecisions: [],
+      areas: [],
+      areaManagers: new Map(),
+      limit: 10,
+    });
+    assert.equal(items.length, 1);
+    assert.equal(items[0]?.title, "Resultat mot budget – Juli");
+    assert.match(
+      items[0]?.metrics ?? "",
+      /Resultatmånad: Juli 2026\. Faktiskt resultat: 0 Mkr\. Budgeterat resultat: 1 Mkr\. Avvikelse: -1 Mkr\. Status: Röd/,
+    );
+    assert.doesNotMatch(items[0]?.metrics ?? "", /mål 0/i);
+  });
 });

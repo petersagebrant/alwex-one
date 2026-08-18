@@ -8,6 +8,12 @@ import { BeraknadTypeBadge } from "@/components/kpis/BeraknadTypeBadge";
 import { ReportingStatusBadge } from "@/components/kpis/ReportingStatusBadge";
 import { formatKpiDisplayValue } from "@/lib/format/kpi";
 import { formatDateSv } from "@/lib/format/date";
+import {
+  formatExpectedFinalizationSv,
+  formatPeriodMonthSv,
+  isMonthlyEconomicResultKpi,
+} from "@/lib/kpi/economics";
+import { buildMonthlyResultPresentation } from "@/lib/kpi/monthlyResultPresentation";
 import { resolveKpiStatusPresentation } from "@/lib/kpi/statusPresentation";
 import type {
   KpiOverviewAreaSection,
@@ -40,6 +46,13 @@ function StatusCountPills({
 }
 
 function KpiStatusCell({ item }: { item: KpiOverviewDisplayItem }) {
+  if (item.kpi.isPeriodPending) {
+    return (
+      <span className="rounded-md bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+        Inväntar bokslut
+      </span>
+    );
+  }
   const presentation = resolveKpiStatusPresentation(item.kpi);
   switch (presentation.kind) {
     case "rapporterad":
@@ -53,6 +66,17 @@ function KpiStatusCell({ item }: { item: KpiOverviewDisplayItem }) {
     default:
       return null;
   }
+}
+
+function monthlyResultPeriod(item: KpiOverviewDisplayItem): string | null {
+  return (
+    (item.kpi.isPeriodPending
+      ? item.kpi.expectedPeriodMonth
+      : item.kpi.latestPeriodMonth) ??
+    item.kpi.latestPeriodMonth ??
+    item.kpi.expectedPeriodMonth ??
+    null
+  );
 }
 
 function KeyKpiRows({ items }: { items: KpiOverviewDisplayItem[] }) {
@@ -72,21 +96,31 @@ function KeyKpiRows({ items }: { items: KpiOverviewDisplayItem[] }) {
           >
             <div className="min-w-0 flex-1">
               <p className="font-medium text-slate-900 group-hover:underline">
-                {item.kpi.name}
+                {isMonthlyEconomicResultKpi(item.kpi)
+                  ? `${item.kpi.name}${
+                      monthlyResultPeriod(item)
+                        ? ` – ${formatPeriodMonthSv(monthlyResultPeriod(item)!)}`
+                        : ""
+                    }`
+                  : item.kpi.name}
               </p>
-              <p className="mt-0.5 text-base font-semibold tabular-nums text-slate-900">
-                {formatKpiDisplayValue(item.kpi.currentValue, item.kpi.unit)}
-                {item.kpi.targetValue ? (
-                  <span className="text-sm font-normal text-slate-400">
-                    {" "}
-                    / mål{" "}
-                    {formatKpiDisplayValue(
-                      item.kpi.targetValue,
-                      item.kpi.unit,
-                    )}
-                  </span>
-                ) : null}
-              </p>
+              {isMonthlyEconomicResultKpi(item.kpi) ? (
+                <MonthlyResultValues item={item} />
+              ) : (
+                <p className="mt-0.5 text-base font-semibold tabular-nums text-slate-900">
+                  {formatKpiDisplayValue(item.kpi.currentValue, item.kpi.unit)}
+                  {item.kpi.targetValue ? (
+                    <span className="text-sm font-normal text-slate-400">
+                      {" "}
+                      / mål{" "}
+                      {formatKpiDisplayValue(
+                        item.kpi.targetValue,
+                        item.kpi.unit,
+                      )}
+                    </span>
+                  ) : null}
+                </p>
+              )}
               <p className="mt-0.5 text-xs text-slate-500">
                 Trend: {item.displayTrend}
                 {item.lastReportedAt
@@ -107,6 +141,46 @@ function KeyKpiRows({ items }: { items: KpiOverviewDisplayItem[] }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+function MonthlyResultValues({ item }: { item: KpiOverviewDisplayItem }) {
+  const { kpi } = item;
+  const periodMonth = monthlyResultPeriod(item);
+  if (!periodMonth) {
+    return <p className="mt-1 text-sm text-slate-500">Inväntar bokslut</p>;
+  }
+  const presentation = buildMonthlyResultPresentation({
+    kpiName: kpi.name,
+    unit: kpi.unit,
+    periodLabel: formatPeriodMonthSv(periodMonth),
+    isReported: !kpi.isPeriodPending,
+    expectedFinalizationLabel: kpi.isPeriodPending
+      ? `Förväntas omkring ${formatExpectedFinalizationSv(periodMonth)}`
+      : null,
+    actualValue: kpi.latestActualValue,
+    budgetValue: kpi.latestBudgetValue,
+    status: kpi.status,
+  });
+  if (presentation.pendingLabel) {
+    return (
+      <dl className="mt-1 space-y-0.5 text-sm text-slate-600">
+        <div><dt className="inline">Resultatmånad: </dt><dd className="inline font-medium">{presentation.resultMonth}</dd></div>
+        <div><dt className="sr-only">Status</dt><dd>{presentation.pendingLabel}</dd></div>
+        {presentation.expectedFinalizationLabel ? (
+          <div><dt className="sr-only">Förväntat bokslut</dt><dd>{presentation.expectedFinalizationLabel}</dd></div>
+        ) : null}
+      </dl>
+    );
+  }
+  return (
+    <dl className="mt-1 space-y-0.5 text-sm tabular-nums text-slate-600">
+      <div><dt className="inline">Resultatmånad: </dt><dd className="inline font-medium text-slate-800">{presentation.resultMonth}</dd></div>
+      <div><dt className="inline">Faktiskt resultat: </dt><dd className="inline font-medium text-slate-800">{presentation.actualValue}</dd></div>
+      <div><dt className="inline">Budgeterat resultat: </dt><dd className="inline font-medium text-slate-800">{presentation.budgetValue}</dd></div>
+      <div><dt className="inline">Avvikelse: </dt><dd className="inline font-medium text-slate-800">{presentation.deviationValue}</dd></div>
+      <div><dt className="inline">Status: </dt><dd className="inline font-medium text-slate-800">{presentation.statusValue}</dd></div>
+    </dl>
   );
 }
 

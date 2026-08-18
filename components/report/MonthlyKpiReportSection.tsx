@@ -1,4 +1,4 @@
-import { DailyKpiReportList } from "@/components/report/DailyKpiReportList";
+import { MonthlyKpiReportBlock } from "@/components/report/MonthlyKpiReportBlock";
 import type { DailyKpiReportItem } from "@/types";
 
 type MonthlyKpiReportSectionProps = {
@@ -21,10 +21,18 @@ export function MonthlyKpiReportSection({
         Månadsvisa KPI:er
       </h2>
       <p className="text-xs text-slate-500">
-        Räknas inte in i dagens rapporteringsprogress. Status gäller
-        innevarande månad.
+        Räknas inte in i dagens rapporteringsprogress. Status och historik
+        kopplas till vald resultatmånad, oberoende av rapporteringsdatum.
       </p>
-      <DailyKpiReportList items={items} onReported={onReported} />
+      <div className="space-y-3">
+        {items.map((item) => (
+          <MonthlyKpiReportBlock
+            key={`${item.kpi.id}-${item.periodMonth}-${item.todayReport?.updatedAt ?? "pending"}`}
+            item={item}
+            onReported={onReported}
+          />
+        ))}
+      </div>
     </section>
   );
 }

@@ -9,6 +9,7 @@ export function isKpiCalcOperator(
   return (
     value === "DIVIDE" ||
     value === "SUM_DIVIDE" ||
+    value === "MONTH_TO_DATE_SUM" ||
     value === "RATIO_PERCENT" ||
     value === "WEIGHTED_RATIO_PERCENT"
   );
@@ -168,6 +169,17 @@ export function computeCalculatedValue(input: {
   /** Required for SUM_DIVIDE — list of numerator values for the period. */
   numeratorValues?: Array<string | number | null | undefined>;
 }): string | null {
+  if (input.operator === "MONTH_TO_DATE_SUM") {
+    const values = input.numeratorValues ?? [];
+    if (values.length === 0) return null;
+    let sum = 0;
+    for (const value of values) {
+      const parsed = parseNumeric(value);
+      if (parsed === null) continue;
+      sum += parsed;
+    }
+    return formatCalculatedValueSv(sum);
+  }
   if (input.operator === "DIVIDE") {
     return computeDivideValue(input.numeratorValue, input.denominatorValue);
   }

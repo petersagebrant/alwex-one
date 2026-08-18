@@ -10,6 +10,9 @@ export type KpiHistoryRow = {
   created_at: string;
   updated_at: string;
   report_date: string | null;
+  period_month: string | null;
+  actual_value: string | null;
+  budget_value: string | null;
   recorded_by: string | null;
 };
 
@@ -20,6 +23,7 @@ export type InsertKpiHistoryInput = {
   comment: string | null;
   recorded_at: string;
   report_date?: string | null;
+  period_month?: string | null;
   recorded_by?: string | null;
 };
 
@@ -32,8 +36,17 @@ export type UpsertDailyKpiReportRpcInput = {
   p_recorded_by: string | null;
 };
 
+export type UpsertMonthlyKpiReportRpcInput = {
+  p_kpi_id: string;
+  p_period_month: string;
+  p_actual_value: string;
+  p_budget_value: string;
+  p_comment: string | null;
+  p_recorded_by: string | null;
+};
+
 const kpiHistorySelect =
-  "id, kpi_id, value, status, comment, recorded_at, created_at, updated_at, report_date, recorded_by";
+  "id, kpi_id, value, status, comment, recorded_at, created_at, updated_at, report_date, period_month, actual_value, budget_value, recorded_by";
 
 export async function fetchKpiHistoryByKpiId(
   kpiId: string,
@@ -87,6 +100,43 @@ export async function upsertDailyKpiReportRow(
   }
 
   return data as KpiHistoryRow;
+}
+
+export async function upsertMonthlyKpiReportRow(
+  input: UpsertMonthlyKpiReportRpcInput,
+): Promise<KpiHistoryRow> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("upsert_monthly_kpi_report", input);
+  if (error) {
+    throw new Error(`Kunde inte spara månadsresultat: ${error.message}`);
+  }
+  if (!data) {
+    throw new Error("Kunde inte spara månadsresultat: tomt svar.");
+  }
+  return data as KpiHistoryRow;
+}
+
+export async function fetchKpiHistoryByPeriodMonthsForKpis(
+  kpiIds: string[],
+  periodMonths?: string[],
+): Promise<KpiHistoryRow[]> {
+  if (kpiIds.length === 0) return [];
+  const supabase = await createClient();
+  let query = supabase
+    .from("kpi_history")
+    .select(kpiHistorySelect)
+    .in("kpi_id", kpiIds)
+    .not("period_month", "is", null);
+  if (periodMonths && periodMonths.length > 0) {
+    query = query.in("period_month", periodMonths);
+  }
+  const { data, error } = await query
+    .order("period_month", { ascending: false })
+    .order("recorded_at", { ascending: false });
+  if (error) {
+    throw new Error(`Kunde inte hämta månadsresultat: ${error.message}`);
+  }
+  return data ?? [];
 }
 
 /** All daily report rows for a calendar date (report_date = YYYY-MM-DD). */

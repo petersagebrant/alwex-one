@@ -53,6 +53,16 @@ export type KPI = {
   reportingFrequency: KpiReportingFrequency;
   /** ISO timestamp when archived; null = active. */
   archivedAt: string | null;
+  /** Latest finalized accounting period for monthly result KPIs. */
+  latestPeriodMonth?: string | null;
+  /** Normally previous calendar month for delayed economic results. */
+  expectedPeriodMonth?: string | null;
+  /** True when expected month has no finalized result; neutral, never G/Y/R. */
+  isPeriodPending?: boolean;
+  /** Latest finalized monthly economic operands; currentValue is deviation. */
+  latestActualValue?: string | null;
+  latestBudgetValue?: string | null;
+  latestIsLegacyDeviation?: boolean;
   createdAt: string;
   updatedAt: string;
 };

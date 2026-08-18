@@ -2,7 +2,7 @@ import type { AuthProfile } from "@/lib/auth/require-user";
 import {
   fetchKpiHistoryByReportDate,
   fetchKpiHistoryByReportDateForKpis,
-  fetchKpiHistoryInReportDateRangeForKpis,
+  fetchKpiHistoryByPeriodMonthsForKpis,
   type KpiHistoryRow,
 } from "@/lib/supabase/kpi-history";
 import { fetchWeightedInputsForParents } from "@/lib/supabase/kpi-calc-weighted-inputs";
@@ -10,6 +10,11 @@ import { fetchSumNumeratorsForParents } from "@/lib/supabase/kpi-calc-sum-numera
 import { fetchBusinessAreas } from "@/lib/supabase/business-areas";
 import { fetchAllKpis } from "@/lib/supabase/kpis";
 import { parseKpiCalcOperator } from "@/lib/kpi/calculated";
+import {
+  buildMonthlyResultState,
+  expectedResultPeriodMonth,
+  formatPeriodMonthSv,
+} from "@/lib/kpi/economics";
 import {
   hasValidKpiCurrentValue,
   isManualReportableKpi,
@@ -29,7 +34,6 @@ import { countKpiSetReportingProgress } from "@/lib/kpi/reportingProgress";
 import { getKPIsByBusinessArea } from "@/services/kpis";
 import {
   getRecentKpiHistoryForKpis,
-  stockholmMonthStart,
   toStockholmReportDate,
 } from "@/services/kpiHistory";
 import type {
@@ -59,6 +63,13 @@ function mapHistoryRow(row: KpiHistoryRow): KPIHistory {
     createdAt: row.created_at,
     updatedAt: row.updated_at ?? row.created_at,
     reportDate: row.report_date ?? null,
+    periodMonth: row.period_month ?? null,
+    actualValue: row.actual_value ?? null,
+    budgetValue: row.budget_value ?? null,
+    isLegacyDeviation:
+      row.period_month != null &&
+      row.actual_value == null &&
+      row.budget_value == null,
     recordedBy: row.recorded_by ?? null,
   };
 }
@@ -145,32 +156,29 @@ function sortReportItems(items: DailyKpiReportItem[]): DailyKpiReportItem[] {
 }
 
 /**
- * MONTHLY KPIs: "Rapporterad" for the current Stockholm calendar month
- * (any dated row in the month), not only today's report_date.
+ * MONTHLY KPIs are keyed by accounting period, not submission date.
  */
 function toMonthlyReportItem(
   kpi: KPI,
-  reportDate: string,
+  periodMonth: string,
   monthByKpi: Map<string, KPIHistory>,
   historyByKpi: Map<string, KPIHistory[]>,
 ): DailyKpiReportItem {
-  const monthPrefix = reportDate.slice(0, 7);
   const monthReport = monthByKpi.get(kpi.id) ?? null;
   const history = historyByKpi.get(kpi.id) ?? [];
   const previousEntry =
     history.find(
-      (entry) =>
-        entry.reportDate != null &&
-        !entry.reportDate.startsWith(monthPrefix),
+      (entry) => entry.periodMonth != null && entry.periodMonth !== periodMonth,
     ) ??
     history.find(
-      (entry) =>
-        entry.reportDate == null ||
-        !entry.reportDate.startsWith(monthPrefix),
+      (entry) => entry.periodMonth == null,
     ) ??
     null;
 
-  const isReported = hasValidKpiCurrentValue(monthReport?.value);
+  const isReported =
+    hasValidKpiCurrentValue(monthReport?.value) &&
+    hasValidKpiCurrentValue(monthReport?.actualValue) &&
+    hasValidKpiCurrentValue(monthReport?.budgetValue);
 
   if (monthReport && isReported) {
     return {
@@ -179,15 +187,34 @@ function toMonthlyReportItem(
       previousStatus: previousEntry?.status ?? null,
       todayReport: monthReport,
       isReported: true,
+      periodMonth,
+      periodLabel: formatPeriodMonthSv(periodMonth),
+      pendingLabel: null,
+      expectedFinalizationLabel: null,
+      actualValue: monthReport.actualValue,
+      budgetValue: monthReport.budgetValue,
+      deviationValue: monthReport.value,
+      isLegacyDeviation: monthReport.isLegacyDeviation,
     };
   }
 
+  const state = buildMonthlyResultState({
+    latestFinalizedPeriodMonth: previousEntry?.periodMonth,
+  });
   return {
     kpi,
     previousValue: kpi.currentValue ?? previousEntry?.value ?? null,
     previousStatus: kpi.status ?? previousEntry?.status ?? null,
     todayReport: null,
     isReported: false,
+    periodMonth,
+    periodLabel: formatPeriodMonthSv(periodMonth),
+    pendingLabel: "Inväntar bokslut",
+    expectedFinalizationLabel: `Förväntas omkring ${state.expectedFinalizationLabel}`,
+    actualValue: monthReport?.actualValue ?? null,
+    budgetValue: monthReport?.budgetValue ?? null,
+    deviationValue: monthReport?.value ?? null,
+    isLegacyDeviation: monthReport?.isLegacyDeviation ?? false,
   };
 }
 
@@ -276,16 +303,15 @@ export async function getKpisForTodayReporting(
     ];
 
     const monthlyKpiIds = monthlyReportableKpis.map((kpi) => kpi.id);
-    const monthStart = stockholmMonthStart(reportDate);
+    const resultPeriodMonth = expectedResultPeriodMonth();
 
     const [todayRows, recentHistory, monthRows] = await Promise.all([
       fetchKpiHistoryByReportDateForKpis(kpiIds, reportDate).catch(() => []),
       getRecentKpiHistoryForKpis(kpiIds, 8).catch(() => []),
       monthlyKpiIds.length > 0
-        ? fetchKpiHistoryInReportDateRangeForKpis(
+        ? fetchKpiHistoryByPeriodMonthsForKpis(
             monthlyKpiIds,
-            monthStart,
-            reportDate,
+            [resultPeriodMonth],
           ).catch(() => [])
         : Promise.resolve([]),
     ]);
@@ -328,7 +354,7 @@ export async function getKpisForTodayReporting(
 
     const monthlyItems = sortReportItems(
       monthlyReportableKpis.map((kpi) =>
-        toMonthlyReportItem(kpi, reportDate, monthByKpi, historyByKpi),
+        toMonthlyReportItem(kpi, resultPeriodMonth, monthByKpi, historyByKpi),
       ),
     );
 

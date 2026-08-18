@@ -7,6 +7,7 @@ export type KpiKind = "TARGET" | "STATISTIC" | "CALCULATED";
 export type KpiCalcOperator =
   | "DIVIDE"
   | "SUM_DIVIDE"
+  | "MONTH_TO_DATE_SUM"
   | "RATIO_PERCENT"
   | "WEIGHTED_RATIO_PERCENT";
 

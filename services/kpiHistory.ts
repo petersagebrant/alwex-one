@@ -6,6 +6,7 @@ import {
   fetchRecentKpiHistoryForKpis,
   insertKpiHistory,
   upsertDailyKpiReportRow,
+  upsertMonthlyKpiReportRow,
   type KpiHistoryRow,
 } from "@/lib/supabase/kpi-history";
 import { fetchKpiById, updateKpiCurrentSnapshot } from "@/lib/supabase/kpis";
@@ -21,6 +22,7 @@ import type {
   KPIHistory,
   KpiStoredStatus,
   UpsertDailyKpiReportInput,
+  UpsertMonthlyKpiReportInput,
 } from "@/types";
 
 function mapKpiHistoryRow(row: KpiHistoryRow): KPIHistory {
@@ -34,6 +36,13 @@ function mapKpiHistoryRow(row: KpiHistoryRow): KPIHistory {
     createdAt: row.created_at,
     updatedAt: row.updated_at ?? row.created_at,
     reportDate: row.report_date ?? null,
+    periodMonth: row.period_month ?? null,
+    actualValue: row.actual_value ?? null,
+    budgetValue: row.budget_value ?? null,
+    isLegacyDeviation:
+      row.period_month != null &&
+      row.actual_value == null &&
+      row.budget_value == null,
     recordedBy: row.recorded_by ?? null,
   };
 }
@@ -171,6 +180,7 @@ export async function addKPIHistoryEntry(
     comment: input.comment?.trim() || null,
     recorded_at: recordedAt.toISOString(),
     report_date: null,
+    period_month: null,
     recorded_by: recordedBy,
   });
 
@@ -300,6 +310,55 @@ export async function upsertDailyKpiReport(
     }
   }
 
+  return mapKpiHistoryRow(row);
+}
+
+/** Upsert a finalized monthly result by accounting period; recorded_at is now. */
+export async function upsertMonthlyKpiReport(
+  input: UpsertMonthlyKpiReportInput,
+  options?: { skipAudit?: boolean },
+): Promise<KPIHistory> {
+  const kpiId = input.kpiId.trim();
+  const periodMonth = input.periodMonth.trim();
+  const actualValue = input.actualValue.trim();
+  const budgetValue = input.budgetValue.trim();
+  if (!kpiId) throw new Error("kpiId är obligatoriskt.");
+  if (!/^\d{4}-\d{2}-01$/.test(periodMonth)) {
+    throw new Error("periodMonth måste vara YYYY-MM-01.");
+  }
+  if (!actualValue || !budgetValue) {
+    throw new Error("Faktiskt resultat och budgeterat resultat är obligatoriska.");
+  }
+
+  const kpi = await fetchKpiById(kpiId).catch(() => null);
+  const currentUser = await getCurrentUser().catch(() => null);
+  const recordedBy =
+    input.recordedBy !== undefined ? input.recordedBy : (currentUser?.id ?? null);
+  const row = await upsertMonthlyKpiReportRow({
+    p_kpi_id: kpiId,
+    p_period_month: periodMonth,
+    p_actual_value: actualValue,
+    p_budget_value: budgetValue,
+    p_comment: input.comment?.trim() || null,
+    p_recorded_by: recordedBy,
+  });
+
+  if (!options?.skipAudit) {
+    try {
+      const actorName = await resolveActorName("System");
+      await recordAuditLog({
+        entityType: "kpi",
+        entityId: kpiId,
+        action: "history_recorded",
+        description: `${kpi?.name ?? "KPI"} rapporterades för ${periodMonth.slice(0, 7)}.`,
+        actorName,
+        businessAreaId: kpi?.business_area_id ?? null,
+        changes: null,
+      });
+    } catch {
+      // Audit får inte blockera månadsrapporteringen.
+    }
+  }
   return mapKpiHistoryRow(row);
 }
 

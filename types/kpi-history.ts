@@ -11,6 +11,13 @@ export type KPIHistory = {
   updatedAt: string;
   /** YYYY-MM-DD calendar date for daily reports; null for ordinary/history rows. */
   reportDate: string | null;
+  /** Accounting month (YYYY-MM-01), independent of actual submission time. */
+  periodMonth: string | null;
+  /** Generic monthly economic operands; value remains the computed deviation. */
+  actualValue: string | null;
+  budgetValue: string | null;
+  /** True for preserved deviation-only rows whose operands are unknown. */
+  isLegacyDeviation: boolean;
   /** auth.users id; null for automated/system writes. */
   recordedBy: string | null;
 };
@@ -33,5 +40,16 @@ export type UpsertDailyKpiReportInput = {
   status: KpiStoredStatus;
   comment?: string;
   /** Optional; defaults to signed-in user inside the RPC when omitted. */
+  recordedBy?: string | null;
+};
+
+export type UpsertMonthlyKpiReportInput = {
+  kpiId: string;
+  /** Accounting/result month, normalized to YYYY-MM-01. */
+  periodMonth: string;
+  actualValue: string;
+  budgetValue: string;
+  status: KpiStoredStatus;
+  comment?: string;
   recordedBy?: string | null;
 };

@@ -36,6 +36,7 @@ export type {
   KPIHistory,
   CreateKPIHistoryInput,
   UpsertDailyKpiReportInput,
+  UpsertMonthlyKpiReportInput,
 } from "./kpi-history";
 export type {
   DailyKpiComputationMeta,

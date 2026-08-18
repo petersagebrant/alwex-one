@@ -176,12 +176,18 @@ export function AoChefDashboard({ data }: AoChefDashboardProps) {
                           ? `${formatKpiDisplayValue(kpi.currentValue, kpi.unit)} · Typ: Statistik`
                           : kpi.kind === "CALCULATED"
                             ? `${formatKpiDisplayValue(kpi.currentValue, kpi.unit)} · Typ: Beräknad`
+                            : kpi.isMonthlyEconomicResult
+                              ? kpi.currentValue
                             : kpi.calcOperator
                               ? `${formatKpiDisplayValue(kpi.currentValue, kpi.unit)} mot mål ${formatKpiDisplayValue(kpi.targetValue, kpi.unit)} · Beräknas automatiskt`
                               : `${formatKpiDisplayValue(kpi.currentValue, kpi.unit)} mot mål ${formatKpiDisplayValue(kpi.targetValue, kpi.unit)}`}
                       </p>
                     </div>
-                    {kpi.kind === "STATISTIC" ? (
+                    {kpi.isPeriodPending ? (
+                      <span className="rounded-md bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+                        Inväntar bokslut
+                      </span>
+                    ) : kpi.kind === "STATISTIC" ? (
                       <StatistikTypeBadge />
                     ) : kpi.kind === "CALCULATED" ? (
                       <BeraknadTypeBadge />

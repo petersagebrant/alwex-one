@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { BeraknadTypeBadge } from "@/components/kpis/BeraknadTypeBadge";
 import { StatistikTypeBadge } from "@/components/kpis/StatistikTypeBadge";
+import { isMonthlyEconomicResultKpi } from "@/lib/kpi/economics";
 import type { KPIListItem } from "@/services/kpis";
 import type { KpiKind } from "@/types";
 
@@ -33,6 +34,7 @@ export function KpiAdminFormFields({
   const isStatistic = kind === "STATISTIC";
   const isCalculated = kind === "CALCULATED";
   const isNonTarget = isStatistic || isCalculated;
+  const isMonthlyEconomic = Boolean(kpi && isMonthlyEconomicResultKpi(kpi));
   const isSumDivide = isCalculated && kpi?.calcOperator === "SUM_DIVIDE";
 
   const inputOptions = useMemo(() => {
@@ -230,13 +232,13 @@ export function KpiAdminFormFields({
       <div
         className={`grid grid-cols-1 gap-4 ${isNonTarget ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}
       >
-        {!isCalculated ? (
+        {!isCalculated && !isMonthlyEconomic ? (
           <div>
             <label
               htmlFor="currentValue"
               className="block text-xs font-medium text-neutral-500"
             >
-              Nuvarande värde
+              {isMonthlyEconomic ? "Avvikelse (beräknad)" : "Nuvarande värde"}
             </label>
             <input
               id="currentValue"
@@ -246,9 +248,21 @@ export function KpiAdminFormFields({
               className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
             />
           </div>
+        ) : isMonthlyEconomic ? (
+          <input
+            type="hidden"
+            name="currentValue"
+            value={kpi?.currentValue ?? ""}
+          />
         ) : null}
 
-        {!isNonTarget ? (
+        {isMonthlyEconomic ? (
+          <input
+            type="hidden"
+            name="targetValue"
+            value={kpi?.targetValue ?? ""}
+          />
+        ) : !isNonTarget ? (
           <div>
             <label
               htmlFor="targetValue"

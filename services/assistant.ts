@@ -3,11 +3,17 @@ import { getCurrentUser } from "@/lib/auth/require-user";
 import { formatDateTimeSv } from "@/lib/format/date";
 import {
   countTargetKpiStatuses,
-  isStatusTone,
   isTargetKpi,
   type KpiStoredStatus,
 } from "@/lib/kpi/kind";
 import { isExcludedFromVdAttention } from "@/lib/kpi/vdAttentionFilter";
+import {
+  buildMonthlyResultState,
+  formatMonthlyEconomicSummary,
+  isMonthlyEconomicResultKpi,
+  monthlyResultDisplayName,
+} from "@/lib/kpi/economics";
+import { buildMonthlyResultAiContext } from "@/lib/kpi/monthlyResultPresentation";
 import { fetchBusinessAreas } from "@/lib/supabase/business-areas";
 import type { BusinessAreaRow } from "@/lib/supabase/business-areas";
 import { getActivities, type ActivityListItem } from "@/services/activities";
@@ -33,6 +39,10 @@ Om samband syns men orsaken inte är säker, skriv t.ex.:
 "Tillgänglig data visar ett samband mellan X och Y, men fastställer inte den bakomliggande orsaken."
 Om orsaken saknas helt: "Orsaken framgår inte av tillgänglig data."
 Namnge ansvarig när namn finns i context.
+Skilj alltid aktuell omsättningsutveckling från senaste fastställda resultat.
+Om pendingClosing är true: skriv att perioden inväntar bokslut, inferera inte aktuell lönsamhet och gör den inte till en avvikelse.
+För monthlyEconomic: ange alltid resultMonth, actualResult, budgetResult, deviation och status med tydliga svenska etiketter.
+Deviation är avvikelsen, aldrig det faktiska resultatet. targetValue null betyder att KPI:n inte ska beskrivas som "mot mål 0".
 
 Struktur (markdown):
 
@@ -60,6 +70,8 @@ Om samband syns men orsaken inte är säker, skriv t.ex.:
 Om orsaken saknas helt: "Orsaken framgår inte av tillgänglig data."
 Namnge ansvarig när namn finns i context.
 Använd analysisInsights om de finns — lägg inte till nya orsaker.
+Skilj aktuell omsättningsutveckling från senaste fastställda resultat. PendingClosing är neutralt och får aldrig användas som negativ signal eller som belägg för aktuell lönsamhet.
+För monthlyEconomic: ange alltid resultatmånad, faktiskt resultat, budgeterat resultat, avvikelse och status. Avvikelsen är aldrig det faktiska resultatet och mål 0 får inte nämnas.
 
 Struktur (markdown) — använd exakt dessa rubriker:
 
@@ -312,7 +324,9 @@ export async function buildAssistantContext(): Promise<AssistantContext> {
   const date = todayDateKey();
   const dateLabel = formatDateLabel(date);
 
-  const kpiCounts = countTargetKpiStatuses(allKpis);
+  const kpiCounts = countTargetKpiStatuses(
+    allKpis.filter((kpi) => !kpi.isPeriodPending),
+  );
   const goalCounts = countStatuses(allGoals.map((goal) => goal.status));
 
   const dashboardSituation =
@@ -952,6 +966,7 @@ function answerYellowKpis(context: AssistantContext): string {
     (kpi) =>
       isTargetKpi(kpi) &&
       !isExcludedFromVdAttention(kpi) &&
+      !kpi.isPeriodPending &&
       kpi.status === "Gul",
   );
   if (yellow.length === 0) {
@@ -960,7 +975,7 @@ function answerYellowKpis(context: AssistantContext): string {
 
   const lines = yellow.map((kpi) => {
     const area = kpi.businessAreaName || "Okänt område";
-    return `• ${kpi.name} (${area}): ${[kpi.currentValue, kpi.unit].filter(Boolean).join(" ") || "—"}`;
+    return `• ${kpi.name} (${area}): ${formatKpiFact(kpi)}`;
   });
 
   return `Gula KPI:er (${yellow.length}):\n${lines.join("\n")}`;
@@ -971,6 +986,7 @@ function answerFollowUpKpis(context: AssistantContext): string {
     (kpi) =>
       isTargetKpi(kpi) &&
       !isExcludedFromVdAttention(kpi) &&
+      !kpi.isPeriodPending &&
       (kpi.status === "Gul" || kpi.status === "Röd"),
   );
   if (follow.length === 0) {
@@ -979,7 +995,7 @@ function answerFollowUpKpis(context: AssistantContext): string {
 
   const lines = follow.map((kpi) => {
     const area = kpi.businessAreaName || "Okänt område";
-    return `• ${kpi.name} (${area}): ${kpi.status} — ${[kpi.currentValue, kpi.unit].filter(Boolean).join(" ") || "—"}`;
+    return `• ${kpi.name} (${area}): ${formatKpiFact(kpi)}`;
   });
 
   return `KPI som kräver uppföljning (${follow.length}):\n${lines.join("\n")}`;
@@ -1328,7 +1344,6 @@ function daysAgoCutoff(days: number): Date {
 }
 
 function mondayCutoffStockholm(): Date {
-  const now = new Date();
   const key = todayDateKey();
   const [year, month, day] = key.split("-").map(Number);
   const todayNoon = new Date(Date.UTC(year!, month! - 1, day!, 12));
@@ -1884,6 +1899,11 @@ function buildKpiLastChanges(input: {
       lastChangedAt: null,
       previousValue: null,
       currentValue: kpi.currentValue,
+      actualResult: kpi.latestActualValue ?? undefined,
+      budgetResult: kpi.latestBudgetValue ?? undefined,
+      deviation: kpi.reportingFrequency === "MONTHLY"
+        ? kpi.currentValue
+        : undefined,
       previousStatus: null,
       currentStatus: kpi.status,
       unit: kpi.unit,
@@ -2093,6 +2113,13 @@ function slimBroadContext(full: AssistantContext): AssistantContext {
         (kpi.status === "Röd" || kpi.status === "Gul"),
     ),
   ).slice(0, 12);
+  const monthlyResults = (full.kpis ?? []).filter(
+    (kpi) => isMonthlyEconomicResultKpi(kpi) && !kpi.isPeriodPending,
+  );
+  const broadKpis = [...followKpis];
+  for (const kpi of monthlyResults) {
+    if (!broadKpis.some((item) => item.id === kpi.id)) broadKpis.push(kpi);
+  }
 
   const followGoals = sortFollowUpFirst(
     (full.goals ?? []).filter(
@@ -2110,7 +2137,7 @@ function slimBroadContext(full: AssistantContext): AssistantContext {
 
   return {
     ...full,
-    kpis: followKpis,
+    kpis: broadKpis,
     goals: followGoals,
     activities: delayedActivities,
     decisions: openDecisions,
@@ -2165,16 +2192,28 @@ function toCompactOpenAiContext(
       status: area.status,
       manager: area.manager,
     })),
-    kpis: (context.kpis ?? []).map((kpi) => ({
-      name: kpi.name,
-      area: kpi.businessAreaName,
-      kind: kpi.kind,
-      status: kpi.status,
-      currentValue: kpi.currentValue,
-      targetValue: kpi.kind === "TARGET" ? kpi.targetValue : null,
-      unit: kpi.unit,
-      trend: kpi.trend,
-    })),
+    kpis: (context.kpis ?? []).map((kpi) => {
+      const monthlyEconomic = buildMonthlyResultAiContext(kpi);
+      return {
+        name: kpi.name,
+        area: kpi.businessAreaName,
+        kind: kpi.kind,
+        status: kpi.status,
+        currentValue: monthlyEconomic ? null : kpi.currentValue,
+        targetValue: monthlyEconomic
+          ? null
+          : kpi.kind === "TARGET"
+            ? kpi.targetValue
+            : null,
+        unit: kpi.unit,
+        trend: kpi.trend,
+        semanticRole:
+          kpi.name === "Omsättning månad hittills"
+            ? "current_month_to_date_revenue"
+            : monthlyEconomic?.semanticRole,
+        monthlyEconomic: monthlyEconomic ?? undefined,
+      };
+    }),
     goals: (context.goals ?? []).map((goal) => ({
       title: goal.title,
       area: goal.businessAreaName,
@@ -2345,6 +2384,8 @@ Regler:
 5. Inga upprepningar.
 6. Använd exakt rubrikerna nedan (inklusive emoji).
 7. Håll maxgränserna strikt.
+8. Skilj aktuell dags-/MTD-omsättning från senaste fastställda månadsresultat.
+9. För monthlyEconomic, skriv uttryckligen resultatmånad, faktiskt resultat, budgeterat resultat, avvikelse och status. Avvikelse är aldrig faktiskt resultat. Skriv aldrig mål 0 för denna KPI.
 
 Använd exakt denna struktur (markdown):
 
@@ -2414,6 +2455,7 @@ export type LocalVdBriefingInput = {
     area?: string | null;
     status?: StatusTone | null;
     owner?: string | null;
+    monthlyEconomicSummary?: string | null;
   }> | null;
   greenAreaNames?: Array<string | null> | null;
   delayedActivities?: Array<{
@@ -2513,7 +2555,9 @@ export function buildLocalVdBriefing(
 
   if (redKpis[0]) {
     important.push({
-      text: `${redKpis[0].area ?? "Område"}: negativ avvikelse i ${redKpis[0].name ?? "KPI"}.`,
+      text: redKpis[0].monthlyEconomicSummary
+        ? `${redKpis[0].area ?? "Område"}: ${redKpis[0].monthlyEconomicSummary}.`
+        : `${redKpis[0].area ?? "Område"}: negativ avvikelse i ${redKpis[0].name ?? "KPI"}.`,
       owner: redKpis[0].owner,
     });
   }
@@ -2542,7 +2586,12 @@ export function buildLocalVdBriefing(
         owner,
       });
     } else if (hasResultat) {
-      important.push({ text: `${area} ligger under budget.`, owner });
+      important.push({
+        text: areaKpis[0]?.monthlyEconomicSummary
+          ? `${area}: ${areaKpis[0].monthlyEconomicSummary}.`
+          : `${area} ligger under budget.`,
+        owner,
+      });
     } else {
       important.push({
         text: `${area}: ${areaKpis[0]?.name ?? "KPI"} behöver följas upp.`,
@@ -2937,6 +2986,9 @@ function buildOpenDeviations(input: {
   const deviations: AssistantDeviation[] = [];
 
   for (const kpi of input.kpis) {
+    if (kpi.isPeriodPending) {
+      continue;
+    }
     if (kpi.status !== "Gul" && kpi.status !== "Röd") {
       continue;
     }
@@ -3030,11 +3082,38 @@ function normalizeSignalName(value: string | null | undefined): string {
 }
 
 function formatKpiFact(kpi: KPIListItem): string {
+  if (kpi.isPeriodPending && kpi.expectedPeriodMonth) {
+    const state = buildMonthlyResultState({
+      latestFinalizedPeriodMonth: kpi.latestPeriodMonth,
+    });
+    const latest = kpi.latestPeriodMonth
+      ? ` Senaste registrerade månadsdata: ${formatMonthlyEconomicSummary({
+          actualValue: kpi.latestActualValue,
+          budgetValue: kpi.latestBudgetValue,
+          deviationValue: kpi.currentValue,
+          unit: kpi.unit,
+          periodMonth: kpi.latestPeriodMonth,
+          status: kpi.status,
+        })}.`
+      : "";
+    return `${monthlyResultDisplayName(kpi.name, kpi.expectedPeriodMonth)} inväntar bokslut och förväntas omkring ${state.expectedFinalizationLabel}.${latest} Detta säger inget om aktuell lönsamhet`;
+  }
+  if (isMonthlyEconomicResultKpi(kpi) && kpi.latestPeriodMonth) {
+    return `${formatMonthlyEconomicSummary({
+      actualValue: kpi.latestActualValue,
+      budgetValue: kpi.latestBudgetValue,
+      deviationValue: kpi.currentValue,
+      unit: kpi.unit,
+      periodMonth: kpi.latestPeriodMonth,
+      status: kpi.status,
+    })}`;
+  }
   const current = [kpi.currentValue, kpi.unit].filter(Boolean).join(" ");
   const target = kpi.targetValue
     ? ` mot mål ${kpi.targetValue}${kpi.unit ? ` ${kpi.unit}` : ""}`
     : "";
-  return `${kpi.name} ${current || "—"}${target} (${kpi.status})`;
+  const name = monthlyResultDisplayName(kpi.name, kpi.latestPeriodMonth);
+  return `${name} ${current || "—"}${target} (${kpi.status})`;
 }
 
 function findKpiByKeywords(
@@ -3085,7 +3164,9 @@ function buildAnalysisInsights(input: {
     const areaKpis = (input.kpis ?? []).filter(
       (kpi) => kpi.businessAreaId === areaId,
     );
-    const followKpis = areaKpis.filter((kpi) => isFollowUpStatus(kpi.status));
+    const followKpis = areaKpis.filter(
+      (kpi) => !kpi.isPeriodPending && isFollowUpStatus(kpi.status),
+    );
     if (followKpis.length === 0 && area.status !== "Gul" && area.status !== "Röd") {
       continue;
     }
@@ -3140,7 +3221,9 @@ function buildAnalysisInsights(input: {
     const occupancyOff =
       occupancy && isFollowUpStatus(occupancy.status) ? occupancy : null;
     const resultOff =
-      resultKpi && isFollowUpStatus(resultKpi.status) ? resultKpi : null;
+      resultKpi && !resultKpi.isPeriodPending && isFollowUpStatus(resultKpi.status)
+        ? resultKpi
+        : null;
     const volumeOff =
       volume && isFollowUpStatus(volume.status) ? volume : null;
     const revenueOff =
@@ -3258,8 +3341,8 @@ function buildPriorities(input: {
   const priorities: AssistantPriority[] = [];
 
   const topKpi =
-    input.kpis.find((kpi) => kpi.status === "Röd") ??
-    input.kpis.find((kpi) => kpi.status === "Gul") ??
+    input.kpis.find((kpi) => !kpi.isPeriodPending && kpi.status === "Röd") ??
+    input.kpis.find((kpi) => !kpi.isPeriodPending && kpi.status === "Gul") ??
     null;
 
   if (topKpi) {
@@ -3389,6 +3472,7 @@ function answerRedKpis(context: AssistantContext): string {
   const red = (context.kpis ?? []).filter(
     (kpi) =>
       isTargetKpi(kpi) &&
+      !kpi.isPeriodPending &&
       !isExcludedFromVdAttention(kpi) &&
       kpi.status === "Röd",
   );
@@ -3443,6 +3527,9 @@ function answerOpenDecisions(context: AssistantContext): string {
 }
 
 function formatKpiValueAgainstTarget(kpi: KPIListItem): string {
+  if (isMonthlyEconomicResultKpi(kpi)) {
+    return formatKpiFact(kpi);
+  }
   const current = [kpi.currentValue, kpi.unit].filter(Boolean).join(" ");
   if (kpi.targetValue) {
     const targetUnit = kpi.unit ? ` ${kpi.unit}` : "";
@@ -3465,6 +3552,7 @@ function answerAreaStatus(
     .filter(
       (kpi) =>
         isTargetKpi(kpi) &&
+        !kpi.isPeriodPending &&
         (kpi.status === "Röd" || kpi.status === "Gul"),
     )
     .sort((a, b) => {

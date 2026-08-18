@@ -14,6 +14,13 @@ import {
 } from "@/components/ui";
 import { formatDateSv, formatDateTimeSv } from "@/lib/format/date";
 import {
+  formatExpectedFinalizationSv,
+  formatMonthlyEconomicSummary,
+  formatPeriodMonthSv,
+  isMonthlyEconomicResultKpi,
+} from "@/lib/kpi/economics";
+import { buildMonthlyResultPresentation } from "@/lib/kpi/monthlyResultPresentation";
+import {
   isCalculatedKpi,
   isNonTargetKpi,
   isStatisticKpi,
@@ -75,6 +82,26 @@ export default async function KpiVdDetailPage({
       : Promise.resolve(null),
   ]);
   const historyNewestFirst = [...history].reverse();
+  const isMonthlyEconomic = isMonthlyEconomicResultKpi(kpi);
+  const monthlyPeriodMonth =
+    (kpi.isPeriodPending ? kpi.expectedPeriodMonth : kpi.latestPeriodMonth) ??
+    kpi.latestPeriodMonth ??
+    kpi.expectedPeriodMonth;
+  const monthlyPresentation =
+    isMonthlyEconomic && monthlyPeriodMonth
+      ? buildMonthlyResultPresentation({
+          kpiName: kpi.name,
+          unit: kpi.unit,
+          periodLabel: formatPeriodMonthSv(monthlyPeriodMonth),
+          isReported: !kpi.isPeriodPending,
+          expectedFinalizationLabel: kpi.isPeriodPending
+            ? `Förväntas omkring ${formatExpectedFinalizationSv(monthlyPeriodMonth)}`
+            : null,
+          actualValue: kpi.latestActualValue,
+          budgetValue: kpi.latestBudgetValue,
+          status: kpi.status,
+        })
+      : null;
   const displayTrend = resolveKpiTrend(kpi.trend, historyNewestFirst);
   const company = sjukfranvaroComparison?.company ?? null;
   const isPreliminary = Boolean(
@@ -93,7 +120,9 @@ export default async function KpiVdDetailPage({
     value: entry.value,
     status: entry.status,
     recordedAt: entry.recordedAt,
-    label: formatDateSv(entry.recordedAt.slice(0, 10)),
+    label: entry.periodMonth
+      ? formatPeriodMonthSv(entry.periodMonth, { includeYear: true })
+      : formatDateSv(entry.recordedAt.slice(0, 10)),
   }));
 
   const areaHref = area ? `/areas/${area.slug}` : "/areas";
@@ -132,7 +161,11 @@ export default async function KpiVdDetailPage({
                   Arkiverad
                 </span>
               ) : null}
-              {isStatisticKpi(kpi) ? (
+              {kpi.isPeriodPending ? (
+                <span className="rounded-md bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+                  Inväntar bokslut
+                </span>
+              ) : isStatisticKpi(kpi) ? (
                 <StatistikTypeBadge />
               ) : isCalculatedKpi(kpi) ? (
                 <BeraknadTypeBadge />
@@ -144,30 +177,66 @@ export default async function KpiVdDetailPage({
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <MetricCard
-            name="Aktuellt värde"
-            currentValue={
-              isPreliminary ? (
+          {monthlyPresentation ? (
+            <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_6px_18px_rgba(15,23,42,0.05)]">
+              <h2 className="text-base font-semibold text-slate-900">
+                {monthlyPresentation.title}
+              </h2>
+              {monthlyPresentation.pendingLabel ? (
+                <dl className="mt-4 space-y-2 text-sm">
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-slate-500">Resultatmånad</dt>
+                    <dd className="font-medium text-slate-800">{monthlyPresentation.resultMonth}</dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-slate-500">Status</dt>
+                    <dd className="font-medium text-slate-800">{monthlyPresentation.pendingLabel}</dd>
+                  </div>
+                  {monthlyPresentation.expectedFinalizationLabel ? (
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-slate-500">Förväntat bokslut</dt>
+                      <dd className="font-medium text-slate-800">{monthlyPresentation.expectedFinalizationLabel}</dd>
+                    </div>
+                  ) : null}
+                </dl>
+              ) : (
+                <dl className="mt-4 space-y-2 text-sm tabular-nums">
+                  <div className="flex justify-between gap-3"><dt className="text-slate-500">Resultatmånad</dt><dd className="font-medium text-slate-800">{monthlyPresentation.resultMonth}</dd></div>
+                  <div className="flex justify-between gap-3"><dt className="text-slate-500">Faktiskt resultat</dt><dd className="font-medium text-slate-800">{monthlyPresentation.actualValue}</dd></div>
+                  <div className="flex justify-between gap-3"><dt className="text-slate-500">Budgeterat resultat</dt><dd className="font-medium text-slate-800">{monthlyPresentation.budgetValue}</dd></div>
+                  <div className="flex justify-between gap-3"><dt className="text-slate-500">Avvikelse</dt><dd className="font-medium text-slate-800">{monthlyPresentation.deviationValue}</dd></div>
+                  <div className="flex justify-between gap-3"><dt className="text-slate-500">Status</dt><dd className="font-medium text-slate-800">{monthlyPresentation.statusValue}</dd></div>
+                </dl>
+              )}
+            </section>
+          ) : (
+            <MetricCard
+              name="Aktuellt värde"
+              currentValue={isPreliminary ? (
                 <span className="inline-flex items-baseline gap-2">
                   <span>{formatValue(kpi.currentValue, kpi.unit)}</span>
                   <span className="text-xs font-medium text-amber-700">
                     Preliminärt
                   </span>
                 </span>
-              ) : (
-                formatValue(kpi.currentValue, kpi.unit)
-              )
-            }
-            targetValue={
-              isStatisticKpi(kpi)
-                ? "Inget mål (statistik)"
-                : isCalculatedKpi(kpi)
-                  ? "Inget mål (beräknad)"
-                  : formatValue(kpi.targetValue, kpi.unit)
-            }
-            trend={displayTrend}
-            status={isStatusTone(kpi.status) ? kpi.status : undefined}
-          />
+                ) : (
+                  formatValue(kpi.currentValue, kpi.unit)
+                )}
+              targetValue={
+                isStatisticKpi(kpi)
+                  ? "Inget mål (statistik)"
+                  : isCalculatedKpi(kpi)
+                    ? "Inget mål (beräknad)"
+                    : formatValue(kpi.targetValue, kpi.unit)
+              }
+              trend={displayTrend}
+              status={
+                !kpi.isPeriodPending && isStatusTone(kpi.status)
+                  ? kpi.status
+                  : undefined
+              }
+            />
+          )}
           <InfoPanel
             title="Översikt"
             variant="info"
@@ -196,11 +265,15 @@ export default async function KpiVdDetailPage({
                     ? "Statistik"
                     : isCalculatedKpi(kpi)
                       ? "Beräknad"
-                      : "KPI med mål"}
+                      : isMonthlyEconomic
+                        ? "Månadsresultat mot budget"
+                        : "KPI med mål"}
                 </dd>
               </div>
               <div className="flex items-baseline justify-between gap-3">
-                <dt className="text-slate-500">Föregående värde</dt>
+                <dt className="text-slate-500">
+                  {isMonthlyEconomic ? "Föregående avvikelse" : "Föregående värde"}
+                </dt>
                 <dd className="font-medium text-slate-800">
                   {formatValue(previousEntry?.value ?? null, kpi.unit)}
                 </dd>
@@ -239,6 +312,8 @@ export default async function KpiVdDetailPage({
             description={
               isNonTargetKpi(kpi)
                 ? "Historik baserat på kpi_history"
+                : isMonthlyEconomic
+                  ? "Månadsvis avvikelse mellan faktiskt och budgeterat resultat"
                 : "Utfall och målvärde baserat på kpi_history"
             }
           />
@@ -250,9 +325,13 @@ export default async function KpiVdDetailPage({
             ) : (
               <KpiHistoryChart
                 points={chartPoints}
-                targetValue={isNonTargetKpi(kpi) ? null : kpi.targetValue}
+                targetValue={
+                  isNonTargetKpi(kpi) || isMonthlyEconomic
+                    ? null
+                    : kpi.targetValue
+                }
                 unit={kpi.unit}
-                isStatistic={isNonTargetKpi(kpi)}
+                isStatistic={isNonTargetKpi(kpi) || isMonthlyEconomic}
               />
             )}
           </div>
@@ -276,9 +355,14 @@ export default async function KpiVdDetailPage({
                 <thead>
                   <tr className="bg-slate-50 text-slate-600">
                     <th className="rounded-l-lg px-3 py-2.5 font-semibold">
-                      Datum
+                      {isMonthlyEconomic ? "Resultatmånad" : "Datum"}
                     </th>
-                    <th className="px-3 py-2.5 font-semibold">Värde</th>
+                    <th className="px-3 py-2.5 font-semibold">
+                      {isMonthlyEconomic ? "Resultat / Budget / Avvikelse" : "Värde"}
+                    </th>
+                    {isMonthlyEconomic ? (
+                      <th className="px-3 py-2.5 font-semibold">Registrerad</th>
+                    ) : null}
                     <th className="px-3 py-2.5 font-semibold">
                       {isNonTargetKpi(kpi) ? "Typ" : "Status"}
                     </th>
@@ -291,11 +375,26 @@ export default async function KpiVdDetailPage({
                   {historyNewestFirst.map((entry) => (
                     <tr key={entry.id}>
                       <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
-                        {formatDateTimeSv(entry.recordedAt)}
+                        {entry.periodMonth
+                          ? formatPeriodMonthSv(entry.periodMonth, { includeYear: true })
+                          : formatDateTimeSv(entry.recordedAt)}
                       </td>
                       <td className="border-b border-slate-100 px-3 py-3 font-medium text-slate-900">
-                        {formatValue(entry.value, kpi.unit)}
+                        {isMonthlyEconomic
+                          ? formatMonthlyEconomicSummary({
+                              actualValue: entry.actualValue,
+                              budgetValue: entry.budgetValue,
+                              deviationValue: entry.value,
+                              unit: kpi.unit,
+                              status: entry.status,
+                            })
+                          : formatValue(entry.value, kpi.unit)}
                       </td>
+                      {isMonthlyEconomic ? (
+                        <td className="border-b border-slate-100 px-3 py-3 text-slate-600">
+                          {formatDateTimeSv(entry.recordedAt)}
+                        </td>
+                      ) : null}
                       <td className="border-b border-slate-100 px-3 py-3">
                         {isCalculatedKpi(kpi) ? (
                           <BeraknadTypeBadge />

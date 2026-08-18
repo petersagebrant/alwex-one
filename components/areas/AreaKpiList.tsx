@@ -5,6 +5,12 @@ import { StatusBadge } from "@/components/ui";
 import { formatDateSv } from "@/lib/format/date";
 import { formatKpiDisplayValue } from "@/lib/format/kpi";
 import {
+  formatExpectedFinalizationSv,
+  formatPeriodMonthSv,
+  isMonthlyEconomicResultKpi,
+} from "@/lib/kpi/economics";
+import { buildMonthlyResultPresentation } from "@/lib/kpi/monthlyResultPresentation";
+import {
   isCalculatedKpi,
   isNonTargetKpi,
   isSystemComputedKpi,
@@ -36,6 +42,13 @@ function toDisplayItems(
 }
 
 function AreaKpiStatusCell({ kpi }: { kpi: KPI }) {
+  if (kpi.isPeriodPending) {
+    return (
+      <span className="rounded-md bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+        Inväntar bokslut
+      </span>
+    );
+  }
   const presentation = resolveKpiStatusPresentation(kpi);
   switch (presentation.kind) {
     case "rapporterad":
@@ -49,6 +62,44 @@ function AreaKpiStatusCell({ kpi }: { kpi: KPI }) {
     default:
       return null;
   }
+}
+
+function MonthlyResultCell({ kpi }: { kpi: KPI }) {
+  const periodMonth =
+    (kpi.isPeriodPending ? kpi.expectedPeriodMonth : kpi.latestPeriodMonth) ??
+    kpi.latestPeriodMonth ??
+    kpi.expectedPeriodMonth;
+  if (!periodMonth) return <span>Inväntar bokslut</span>;
+  const presentation = buildMonthlyResultPresentation({
+    kpiName: kpi.name,
+    unit: kpi.unit,
+    periodLabel: formatPeriodMonthSv(periodMonth),
+    isReported: !kpi.isPeriodPending,
+    expectedFinalizationLabel: kpi.isPeriodPending
+      ? `Förväntas omkring ${formatExpectedFinalizationSv(periodMonth)}`
+      : null,
+    actualValue: kpi.latestActualValue,
+    budgetValue: kpi.latestBudgetValue,
+    status: kpi.status,
+  });
+  if (presentation.pendingLabel) {
+    return (
+      <span>
+        Resultatmånad: {presentation.resultMonth} · {presentation.pendingLabel}
+        {presentation.expectedFinalizationLabel
+          ? ` · ${presentation.expectedFinalizationLabel}`
+          : null}
+      </span>
+    );
+  }
+  return (
+    <span className="space-y-0.5">
+      <span className="block">Resultatmånad: {presentation.resultMonth}</span>
+      <span className="block">Faktiskt resultat: {presentation.actualValue}</span>
+      <span className="block">Budgeterat resultat: {presentation.budgetValue}</span>
+      <span className="block">Avvikelse: {presentation.deviationValue}</span>
+    </span>
+  );
 }
 
 export function AreaKpiList({ items, kpis }: AreaKpiListProps) {
@@ -90,7 +141,16 @@ export function AreaKpiList({ items, kpis }: AreaKpiListProps) {
                   <tr key={kpi.id} className="group">
                     <td className="border-b border-slate-100 px-3 py-3 font-medium text-slate-900">
                       <Link href={row.href} className="hover:underline">
-                        {kpi.name}
+                        {isMonthlyEconomicResultKpi(kpi) &&
+                        (kpi.isPeriodPending
+                          ? kpi.expectedPeriodMonth
+                          : kpi.latestPeriodMonth)
+                          ? `${kpi.name} – ${formatPeriodMonthSv(
+                              (kpi.isPeriodPending
+                                ? kpi.expectedPeriodMonth
+                                : kpi.latestPeriodMonth)!,
+                            )}`
+                          : kpi.name}
                         {isCalculatedKpi(kpi) ? (
                           <span className="mt-0.5 block text-xs font-normal text-slate-500">
                             Typ: Beräknad
@@ -108,7 +168,9 @@ export function AreaKpiList({ items, kpis }: AreaKpiListProps) {
                         href={row.href}
                         className="block tabular-nums hover:text-slate-900"
                       >
-                        {formatKpiDisplayValue(kpi.currentValue, kpi.unit)}
+                        {isMonthlyEconomicResultKpi(kpi)
+                          ? <MonthlyResultCell kpi={kpi} />
+                          : formatKpiDisplayValue(kpi.currentValue, kpi.unit)}
                       </Link>
                     </td>
                     <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
@@ -116,7 +178,8 @@ export function AreaKpiList({ items, kpis }: AreaKpiListProps) {
                         href={row.href}
                         className="block tabular-nums hover:text-slate-900"
                       >
-                        {isNonTargetKpi(kpi)
+                        {isNonTargetKpi(kpi) ||
+                        isMonthlyEconomicResultKpi(kpi)
                           ? "—"
                           : formatKpiDisplayValue(kpi.targetValue, kpi.unit)}
                       </Link>

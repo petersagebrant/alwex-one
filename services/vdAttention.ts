@@ -1,6 +1,10 @@
 import { parseNumeric } from "@/lib/kpi/parseNumeric";
 import { isExcludedFromVdAttention } from "@/lib/kpi/vdAttentionFilter";
-import type { StatusTone } from "@/types";
+import {
+  formatMonthlyEconomicSummary,
+  isMonthlyEconomicResultKpi,
+  monthlyResultDisplayName,
+} from "@/lib/kpi/economics";
 import type { KPIListItem } from "@/services/kpis";
 import type { ActivityListItem } from "@/services/activities";
 import type { DecisionListItem } from "@/services/decisions";
@@ -80,11 +84,22 @@ function statusToneFrom(status: string): VdAttentionTone {
 }
 
 function kpiMetrics(kpi: KPIListItem): string | null {
+  if (isMonthlyEconomicResultKpi(kpi) && kpi.latestPeriodMonth) {
+    return formatMonthlyEconomicSummary({
+      actualValue: kpi.latestActualValue,
+      budgetValue: kpi.latestBudgetValue,
+      deviationValue: kpi.currentValue,
+      unit: kpi.unit,
+      periodMonth: kpi.latestPeriodMonth,
+      status: kpi.status,
+    });
+  }
   if (!kpi.currentValue && !kpi.targetValue) {
     return null;
   }
   if (kpi.currentValue && kpi.targetValue) {
-    return `${formatValue(kpi.currentValue, kpi.unit)} mot mål ${formatValue(kpi.targetValue, kpi.unit)}`;
+    const period = kpi.latestPeriodMonth ? `Senaste fastställda (${kpi.latestPeriodMonth.slice(0, 7)}): ` : "";
+    return `${period}${formatValue(kpi.currentValue, kpi.unit)} mot mål ${formatValue(kpi.targetValue, kpi.unit)}`;
   }
   if (kpi.currentValue) {
     return `Utfall ${formatValue(kpi.currentValue, kpi.unit)}`;
@@ -93,6 +108,13 @@ function kpiMetrics(kpi: KPIListItem): string | null {
 }
 
 function kpiReason(kpi: KPIListItem): string {
+  if (isMonthlyEconomicResultKpi(kpi)) {
+    const deviation = parseNumeric(kpi.currentValue);
+    if (deviation !== null && deviation < 0) {
+      return `Negativ budgetavvikelse för ${kpi.latestPeriodMonth?.slice(0, 7) ?? "senaste resultatmånad"}.`;
+    }
+    return `Månadsresultatet har ${kpi.status.toLowerCase()} status.`;
+  }
   const parts: string[] = [];
   const current = parseNumeric(kpi.currentValue);
   const target = parseNumeric(kpi.targetValue);
@@ -160,12 +182,13 @@ export function buildVdAttentionItems(input: {
   // 1) Red KPIs
   for (const kpi of input.kpis) {
     if (kpi.kind !== "TARGET") continue;
+    if (kpi.isPeriodPending) continue;
     if (isExcludedFromVdAttention(kpi)) continue;
     if (kpi.status !== "Röd") continue;
     push({
       id: `kpi-red-${kpi.id}`,
       type: "KPI",
-      title: kpi.name,
+      title: monthlyResultDisplayName(kpi.name, kpi.latestPeriodMonth),
       area: kpi.businessAreaName,
       statusLabel: kpi.status,
       statusTone: "red",
@@ -182,6 +205,7 @@ export function buildVdAttentionItems(input: {
   // 2) Significant negative KPI deviations (not already covered as red-only)
   for (const kpi of input.kpis) {
     if (kpi.kind !== "TARGET") continue;
+    if (kpi.isPeriodPending) continue;
     if (isExcludedFromVdAttention(kpi)) continue;
     if (kpi.status === "Grön") continue;
     if (!isSignificantDeviation(kpi)) continue;
@@ -193,7 +217,7 @@ export function buildVdAttentionItems(input: {
     push({
       id: `kpi-gap-${kpi.id}`,
       type: "KPI",
-      title: kpi.name,
+      title: monthlyResultDisplayName(kpi.name, kpi.latestPeriodMonth),
       area: kpi.businessAreaName,
       statusLabel: kpi.status,
       statusTone: statusToneFrom(kpi.status),
@@ -257,6 +281,7 @@ export function buildVdAttentionItems(input: {
   // 5) Yellow KPIs with clear negative trend
   for (const kpi of input.kpis) {
     if (kpi.kind !== "TARGET") continue;
+    if (kpi.isPeriodPending) continue;
     if (isExcludedFromVdAttention(kpi)) continue;
     if (kpi.status !== "Gul" || kpi.trend !== "Ner") continue;
     if (seen.has(`kpi-red-${kpi.id}`) || seen.has(`kpi-gap-${kpi.id}`)) {
@@ -265,7 +290,7 @@ export function buildVdAttentionItems(input: {
     push({
       id: `kpi-yellow-trend-${kpi.id}`,
       type: "KPI",
-      title: kpi.name,
+      title: monthlyResultDisplayName(kpi.name, kpi.latestPeriodMonth),
       area: kpi.businessAreaName,
       statusLabel: kpi.status,
       statusTone: "yellow",

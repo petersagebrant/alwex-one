@@ -2,13 +2,13 @@ import { getCurrentUser } from "@/lib/auth/require-user";
 import { fetchBusinessAreas } from "@/lib/supabase/business-areas";
 import { formatDateSv, formatDateTimeSv } from "@/lib/format/date";
 import { isExcludedFromVdAttention } from "@/lib/kpi/vdAttentionFilter";
+import {
+  formatMonthlyEconomicSummary,
+  isMonthlyEconomicResultKpi,
+} from "@/lib/kpi/economics";
 import { getActivities, type ActivityListItem } from "@/services/activities";
 import { getAllActivityComments } from "@/services/activityComments";
-import {
-  getAuditLogSince,
-  getRecentAuditLog,
-  type AuditLogListItem,
-} from "@/services/auditLog";
+import { getAuditLogSince, getRecentAuditLog } from "@/services/auditLog";
 import { getDecisions } from "@/services/decisions";
 import { getGoals } from "@/services/goals";
 import { getKPIs, type KPIListItem } from "@/services/kpis";
@@ -92,6 +92,7 @@ export type DashboardVdFocusKpi = {
   trend: string;
   owner: string;
   href: string;
+  monthlyEconomicSummary: string | null;
 };
 
 export type DashboardVdFocusActivity = {
@@ -267,8 +268,16 @@ function kpiObservation(kpi: KPIListItem): string {
   const current = (kpi.currentValue ?? "").replace(/\s/g, "");
   const isNegativeValue = current.startsWith("-") || current.startsWith("−");
 
-  if (name.includes("resultat") && isNegativeValue) {
-    return `${area} ligger under budget.`;
+  if (isMonthlyEconomicResultKpi(kpi) && isNegativeValue) {
+    const summary = formatMonthlyEconomicSummary({
+      actualValue: kpi.latestActualValue,
+      budgetValue: kpi.latestBudgetValue,
+      deviationValue: kpi.currentValue,
+      unit: kpi.unit,
+      periodMonth: kpi.latestPeriodMonth,
+      status: kpi.status,
+    });
+    return `${area} låg under budget. ${summary}.`;
   }
   if (name.includes("belägg") && kpi.status !== "Grön") {
     return `${area} har lägre beläggning än målet.`;
@@ -631,21 +640,25 @@ export async function getDashboardData(): Promise<DashboardData> {
   const followUpKpis = (allKpis ?? []).filter(
     (kpi) =>
       kpi.kind === "TARGET" &&
+      !kpi.isPeriodPending &&
       !isExcludedFromVdAttention(kpi) &&
       (kpi.status === "Gul" || kpi.status === "Röd"),
   );
   const greenKpis = (allKpis ?? []).filter(
-    (kpi) => kpi.kind === "TARGET" && kpi.status === "Grön",
+    (kpi) =>
+      kpi.kind === "TARGET" && !kpi.isPeriodPending && kpi.status === "Grön",
   );
   const yellowKpis = (allKpis ?? []).filter(
     (kpi) =>
       kpi.kind === "TARGET" &&
+      !kpi.isPeriodPending &&
       !isExcludedFromVdAttention(kpi) &&
       kpi.status === "Gul",
   );
   const redKpis = (allKpis ?? []).filter(
     (kpi) =>
       kpi.kind === "TARGET" &&
+      !kpi.isPeriodPending &&
       !isExcludedFromVdAttention(kpi) &&
       kpi.status === "Röd",
   );
@@ -719,6 +732,16 @@ export async function getDashboardData(): Promise<DashboardData> {
       trend: kpi.trend,
       owner: areaManagers.get(kpi.businessAreaId) ?? "Ej angiven",
       href: `/kpis/${kpi.id}`,
+      monthlyEconomicSummary: isMonthlyEconomicResultKpi(kpi)
+        ? formatMonthlyEconomicSummary({
+            actualValue: kpi.latestActualValue,
+            budgetValue: kpi.latestBudgetValue,
+            deviationValue: kpi.currentValue,
+            unit: kpi.unit,
+            periodMonth: kpi.latestPeriodMonth,
+            status: kpi.status,
+          })
+        : null,
     })),
     delayedActivities: delayedActivities.map((activity) => ({
       id: activity.id,

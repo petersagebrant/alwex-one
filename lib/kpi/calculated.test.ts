@@ -107,7 +107,16 @@ describe("calculated KPI helpers", () => {
     assert.equal(result.isComplete, false);
   });
 
-  it("supports DIVIDE, SUM_DIVIDE and RATIO_PERCENT in computeCalculatedValue", () => {
+  it("supports DIVIDE, SUM_DIVIDE, MTD sum and RATIO_PERCENT", () => {
+    assert.equal(
+      computeCalculatedValue({
+        operator: "MONTH_TO_DATE_SUM",
+        numeratorValue: null,
+        denominatorValue: null,
+        numeratorValues: ["100", "250,5"],
+      }),
+      "350,5",
+    );
     assert.equal(
       computeCalculatedValue({
         operator: "DIVIDE",

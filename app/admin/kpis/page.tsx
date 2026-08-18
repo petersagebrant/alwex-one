@@ -9,6 +9,11 @@ import { StatusBadge } from "@/components/ui";
 import { requireProfile } from "@/lib/auth/require-user";
 import { canManageBusinessAreas } from "@/lib/auth/roles";
 import { isCalculatedKpi, isNonTargetKpi, isStatisticKpi } from "@/lib/kpi/kind";
+import {
+  formatMonthlyEconomicSummary,
+  isMonthlyEconomicResultKpi,
+  monthlyResultDisplayName,
+} from "@/lib/kpi/economics";
 import { getBusinessAreaOptions } from "@/services/businessAreas";
 import { getKPIById, getKPIs, isKpiArchived } from "@/services/kpis";
 import type { KPIListItem } from "@/services/kpis";
@@ -250,7 +255,9 @@ function KpiAdminListSection({
                     className="min-w-0 flex-1 transition hover:opacity-90"
                   >
                     <p className="font-medium text-neutral-900">
-                      {kpi.name}
+                      {isMonthlyEconomicResultKpi(kpi)
+                        ? monthlyResultDisplayName(kpi.name, kpi.latestPeriodMonth)
+                        : kpi.name}
                       {archived ? (
                         <span className="ml-2 text-xs font-semibold text-neutral-500">
                           Arkiverad
@@ -265,17 +272,32 @@ function KpiAdminListSection({
                         : isCalculatedKpi(kpi)
                           ? " · Typ: Beräknad"
                           : null}
-                      {kpi.currentValue
+                      {isMonthlyEconomicResultKpi(kpi)
+                        ? ` · ${formatMonthlyEconomicSummary({
+                            actualValue: kpi.latestActualValue,
+                            budgetValue: kpi.latestBudgetValue,
+                            deviationValue: kpi.currentValue,
+                            unit: kpi.unit,
+                            periodMonth: kpi.latestPeriodMonth,
+                            status: kpi.isPeriodPending ? null : kpi.status,
+                          })}`
+                        : kpi.currentValue
                         ? ` · ${kpi.currentValue}${kpi.unit ? ` ${kpi.unit}` : ""}`
                         : null}
-                      {!isNonTargetKpi(kpi) && kpi.targetValue
+                      {!isNonTargetKpi(kpi) &&
+                      !isMonthlyEconomicResultKpi(kpi) &&
+                      kpi.targetValue
                         ? ` · Mål ${kpi.targetValue}${kpi.unit ? ` ${kpi.unit}` : ""}`
                         : null}
                     </p>
                   </Link>
                   <div className="flex flex-col items-end gap-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      {isStatisticKpi(kpi) ? (
+                      {kpi.isPeriodPending ? (
+                        <span className="rounded-md bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+                          Inväntar bokslut
+                        </span>
+                      ) : isStatisticKpi(kpi) ? (
                         <StatistikTypeBadge />
                       ) : isCalculatedKpi(kpi) ? (
                         <BeraknadTypeBadge />

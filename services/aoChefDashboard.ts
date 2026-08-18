@@ -6,6 +6,11 @@ import {
   parseKpiStoredStatus,
   parseStatusTone,
 } from "@/lib/kpi/kind";
+import {
+  formatMonthlyEconomicSummary,
+  isMonthlyEconomicResultKpi,
+  monthlyResultDisplayName,
+} from "@/lib/kpi/economics";
 import { fetchBusinessAreaById } from "@/lib/supabase/business-areas";
 import { getActivitiesByBusinessAreaId } from "@/services/activities";
 import {
@@ -49,6 +54,8 @@ export type AoChefDashboardKpi = {
   currentValue: string | null;
   targetValue: string | null;
   unit: string | null;
+  isMonthlyEconomicResult: boolean;
+  isPeriodPending: boolean;
   href: string;
 };
 
@@ -431,7 +438,7 @@ export async function getAoChefDashboardData(
   });
 
   const kpiStatuses = kpis
-    .filter(isTargetKpi)
+    .filter((kpi) => isTargetKpi(kpi) && !kpi.isPeriodPending)
     .map((kpi) => kpi.status)
     .filter(isStatusTone);
   const goalStatuses = goals.map((goal) => toStatusTone(goal.status));
@@ -461,13 +468,34 @@ export async function getAoChefDashboardData(
     reporting,
     kpis: kpis.map((kpi) => ({
       id: kpi.id,
-      name: kpi.name,
+      name: isMonthlyEconomicResultKpi(kpi)
+        ? monthlyResultDisplayName(
+            kpi.name,
+            kpi.isPeriodPending
+              ? kpi.expectedPeriodMonth
+              : kpi.latestPeriodMonth,
+          )
+        : kpi.name,
       kind: kpi.kind,
       calcOperator: kpi.calcOperator,
       status: parseKpiStoredStatus(kpi.status),
-      currentValue: kpi.currentValue,
-      targetValue: kpi.targetValue,
-      unit: kpi.unit,
+      currentValue:
+        isMonthlyEconomicResultKpi(kpi)
+          ? formatMonthlyEconomicSummary({
+              actualValue: kpi.isPeriodPending ? null : kpi.latestActualValue,
+              budgetValue: kpi.isPeriodPending ? null : kpi.latestBudgetValue,
+              deviationValue: kpi.currentValue,
+              unit: kpi.unit,
+              periodMonth: kpi.isPeriodPending
+                ? kpi.expectedPeriodMonth
+                : kpi.latestPeriodMonth,
+              status: kpi.isPeriodPending ? null : kpi.status,
+            })
+          : kpi.currentValue,
+      targetValue: isMonthlyEconomicResultKpi(kpi) ? null : kpi.targetValue,
+      unit: isMonthlyEconomicResultKpi(kpi) ? null : kpi.unit,
+      isMonthlyEconomicResult: isMonthlyEconomicResultKpi(kpi),
+      isPeriodPending: kpi.isPeriodPending ?? false,
       href: `/kpis/${kpi.id}`,
     })),
     kpiCounts: countByStatus(kpiStatuses),

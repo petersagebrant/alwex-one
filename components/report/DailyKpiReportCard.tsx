@@ -6,6 +6,7 @@ import { StatistikTypeBadge } from "@/components/kpis/StatistikTypeBadge";
 import { StatusBadge } from "@/components/ui";
 import { computeKpiStatus } from "@/lib/kpi/computeStatus";
 import { isStatisticKpi, isStatusTone } from "@/lib/kpi/kind";
+import { dailyReportActionLabel } from "@/lib/kpi/reportActionLabel";
 import { formatDateTimeSv } from "@/lib/format/date";
 import { formatKpiDisplayValue } from "@/lib/format/kpi";
 import { reportDailyKpiAction } from "@/app/report/kpis/actions";
@@ -104,20 +105,28 @@ export function DailyKpiReportCard({
     setEditing(true);
   }
 
+  function openReporter() {
+    if (item.isReported) {
+      startEdit();
+    } else {
+      setError(null);
+      setEditing(true);
+    }
+    if (!expanded) {
+      onToggle();
+    }
+  }
+
+  function closeReporter() {
+    setEditing(false);
+    setError(null);
+    onToggle();
+  }
+
   return (
     <article className="rounded-2xl border border-slate-200/80 bg-white shadow-[0_6px_18px_rgba(15,23,42,0.05)]">
       <div
-        role="button"
-        tabIndex={0}
-        onClick={onToggle}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            onToggle();
-          }
-        }}
-        aria-expanded={expanded}
-        className="flex w-full cursor-pointer flex-wrap items-start justify-between gap-3 rounded-2xl p-4 text-left transition hover:bg-slate-50/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 sm:p-5"
+        className="flex w-full flex-wrap items-start justify-between gap-3 rounded-2xl p-4 text-left sm:p-5"
       >
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -194,6 +203,19 @@ export function DailyKpiReportCard({
               {formatDateTimeSv(item.todayReport.updatedAt)}
             </p>
           ) : null}
+          {!expanded ? (
+            <button
+              type="button"
+              onClick={openReporter}
+              className={`mt-1 inline-flex items-center justify-center rounded-xl px-3.5 py-2 text-sm font-semibold transition ${
+                item.isReported
+                  ? "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  : "bg-[#0b1220] text-white hover:bg-slate-800"
+              }`}
+            >
+              {dailyReportActionLabel(item.isReported)}
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -210,7 +232,7 @@ export function DailyKpiReportCard({
             onClick={startEdit}
             className="text-sm font-medium text-slate-700 underline-offset-4 hover:underline"
           >
-            Ändra dagens rapport
+            {dailyReportActionLabel(true)}
           </button>
         </div>
       ) : null}
@@ -341,22 +363,17 @@ export function DailyKpiReportCard({
               {isPending
                 ? "Sparar…"
                 : item.isReported
-                  ? "Uppdatera rapport"
+                  ? "Spara ändring"
                   : "Rapportera"}
             </button>
-            {item.isReported ? (
-              <button
-                type="button"
-                disabled={isPending}
-                onClick={() => {
-                  setEditing(false);
-                  setError(null);
-                }}
-                className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
-              >
-                Avbryt
-              </button>
-            ) : null}
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={closeReporter}
+              className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+            >
+              Avbryt
+            </button>
           </div>
         </form>
       ) : null}

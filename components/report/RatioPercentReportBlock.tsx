@@ -1,10 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useTransition, type FormEvent } from "react";
+import { useState, useTransition, type FormEvent } from "react";
 import { StatusBadge } from "@/components/ui";
 import { formatKpiDisplayValue } from "@/lib/format/kpi";
 import { isStatusTone } from "@/lib/kpi/kind";
+import { dailyReportActionLabel } from "@/lib/kpi/reportActionLabel";
 import { reportDailyKpiAction } from "@/app/report/kpis/actions";
 import type { RatioPercentReportGroup } from "@/types";
 
@@ -25,8 +26,12 @@ export function RatioPercentReportBlock({
 }: RatioPercentReportBlockProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [numeratorValue, setNumeratorValue] = useState("");
-  const [denominatorValue, setDenominatorValue] = useState("");
+  const [numeratorValue, setNumeratorValue] = useState(
+    group.numerator.todayReport?.value ?? "",
+  );
+  const [denominatorValue, setDenominatorValue] = useState(
+    group.denominator.todayReport?.value ?? "",
+  );
   const [error, setError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -49,18 +54,6 @@ export function RatioPercentReportBlock({
   // Same SoT as progress: both STATISTIC inputs reported today.
   const bothInputsReported = numerator.isReported && denominator.isReported;
   const statusTone = isStatusTone(status) ? status : null;
-
-  useEffect(() => {
-    setNumeratorValue(numerator.todayReport?.value ?? "");
-    setDenominatorValue(denominator.todayReport?.value ?? "");
-  }, [
-    numerator.kpi.id,
-    numerator.todayReport?.value,
-    numerator.todayReport?.updatedAt,
-    denominator.kpi.id,
-    denominator.todayReport?.value,
-    denominator.todayReport?.updatedAt,
-  ]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -120,24 +113,7 @@ export function RatioPercentReportBlock({
     return (
       <article className="rounded-2xl border border-slate-200/80 bg-white shadow-[0_6px_18px_rgba(15,23,42,0.05)]">
         <div
-          role={bothInputsReported ? "button" : undefined}
-          tabIndex={bothInputsReported ? 0 : undefined}
-          onClick={bothInputsReported ? openEditor : undefined}
-          onKeyDown={
-            bothInputsReported
-              ? (event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    openEditor();
-                  }
-                }
-              : undefined
-          }
-          className={`flex w-full flex-wrap items-start justify-between gap-3 rounded-2xl p-4 text-left sm:p-5 ${
-            bothInputsReported
-              ? "cursor-pointer transition hover:bg-slate-50/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
-              : ""
-          }`}
+          className="flex w-full flex-wrap items-start justify-between gap-3 rounded-2xl p-4 text-left sm:p-5"
         >
           <div className="min-w-0">
             <h3 className="text-base font-semibold tracking-tight text-slate-900">
@@ -167,15 +143,6 @@ export function RatioPercentReportBlock({
                 </dd>
               </div>
             </dl>
-            {!bothInputsReported ? (
-              <button
-                type="button"
-                onClick={openEditor}
-                className="mt-3 inline-flex items-center justify-center rounded-xl bg-[#0b1220] px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-              >
-                Rapportera
-              </button>
-            ) : null}
           </div>
 
           <div className="flex flex-col items-end gap-1.5">
@@ -191,6 +158,17 @@ export function RatioPercentReportBlock({
             >
               {bothInputsReported ? "Rapporterad" : "Ej rapporterad"}
             </span>
+            <button
+              type="button"
+              onClick={openEditor}
+              className={`mt-1 inline-flex items-center justify-center rounded-xl px-3.5 py-2 text-sm font-semibold transition ${
+                bothInputsReported
+                  ? "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  : "bg-[#0b1220] text-white hover:bg-slate-800"
+              }`}
+            >
+              {dailyReportActionLabel(bothInputsReported)}
+            </button>
           </div>
         </div>
       </article>
@@ -345,7 +323,7 @@ export function RatioPercentReportBlock({
             {isPending
               ? "Sparar…"
               : bothInputsReported
-                ? "Uppdatera rapport"
+                ? "Spara ändring"
                 : "Rapportera"}
           </button>
           <button

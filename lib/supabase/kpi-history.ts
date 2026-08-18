@@ -57,6 +57,7 @@ export async function fetchKpiHistoryByKpiId(
     .from("kpi_history")
     .select(kpiHistorySelect)
     .eq("kpi_id", kpiId)
+    .is("archived_at", null)
     .order("recorded_at", { ascending: true });
 
   if (error) {
@@ -126,6 +127,7 @@ export async function fetchKpiHistoryByPeriodMonthsForKpis(
     .from("kpi_history")
     .select(kpiHistorySelect)
     .in("kpi_id", kpiIds)
+    .is("archived_at", null)
     .not("period_month", "is", null);
   if (periodMonths && periodMonths.length > 0) {
     query = query.in("period_month", periodMonths);
@@ -148,7 +150,8 @@ export async function fetchKpiHistoryByReportDate(
   const { data, error } = await supabase
     .from("kpi_history")
     .select(kpiHistorySelect)
-    .eq("report_date", reportDate);
+    .eq("report_date", reportDate)
+    .is("archived_at", null);
 
   if (error) {
     throw new Error(
@@ -174,7 +177,8 @@ export async function fetchKpiHistoryByReportDateForKpis(
     .from("kpi_history")
     .select(kpiHistorySelect)
     .in("kpi_id", kpiIds)
-    .eq("report_date", reportDate);
+    .eq("report_date", reportDate)
+    .is("archived_at", null);
 
   if (error) {
     throw new Error(
@@ -204,6 +208,7 @@ export async function fetchKpiHistoryInReportDateRangeForKpis(
     .from("kpi_history")
     .select(kpiHistorySelect)
     .in("kpi_id", kpiIds)
+    .is("archived_at", null)
     .gte("report_date", startDate)
     .lte("report_date", endDate)
     .order("report_date", { ascending: false })
@@ -226,6 +231,7 @@ export async function fetchRecentKpiHistory(
   const { data, error } = await supabase
     .from("kpi_history")
     .select(kpiHistorySelect)
+    .is("archived_at", null)
     .order("recorded_at", { ascending: false })
     .limit(limit);
 
@@ -244,6 +250,7 @@ export async function fetchKpiHistorySince(
   const { data, error } = await supabase
     .from("kpi_history")
     .select(kpiHistorySelect)
+    .is("archived_at", null)
     .gte("recorded_at", cutoffIso)
     .order("recorded_at", { ascending: true });
 
@@ -268,6 +275,7 @@ export async function fetchRecentKpiHistoryForKpis(
     .from("kpi_history")
     .select(kpiHistorySelect)
     .in("kpi_id", kpiIds)
+    .is("archived_at", null)
     // Daily trends first (report_date desc, nulls last), then recorded_at.
     .order("report_date", { ascending: false, nullsFirst: false })
     .order("recorded_at", { ascending: false });

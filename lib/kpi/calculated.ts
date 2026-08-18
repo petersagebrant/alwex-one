@@ -10,6 +10,7 @@ export function isKpiCalcOperator(
     value === "DIVIDE" ||
     value === "SUM_DIVIDE" ||
     value === "MONTH_TO_DATE_SUM" ||
+    value === "MONTH_TO_DATE_RATIO_PERCENT" ||
     value === "RATIO_PERCENT" ||
     value === "WEIGHTED_RATIO_PERCENT"
   );
@@ -90,6 +91,33 @@ export function computeRatioPercentValue(
   return formatCalculatedValueSv((num / den) * 100);
 }
 
+/**
+ * MONTH_TO_DATE_RATIO_PERCENT = SUM(numerators) / SUM(denominators) × 100.
+ * Values are expected to have been filtered to active rows for one calendar
+ * month. At least one numeric row is required on each side.
+ */
+export function computeMonthToDateRatioPercentValue(
+  numeratorValues: Array<string | number | null | undefined>,
+  denominatorValues: Array<string | number | null | undefined>,
+): string | null {
+  const numerators = numeratorValues
+    .map(parseNumeric)
+    .filter((value): value is number => value !== null);
+  const denominators = denominatorValues
+    .map(parseNumeric)
+    .filter((value): value is number => value !== null);
+  if (numerators.length === 0 || denominators.length === 0) {
+    return null;
+  }
+
+  const denominatorSum = denominators.reduce((sum, value) => sum + value, 0);
+  if (denominatorSum === 0) {
+    return null;
+  }
+  const numeratorSum = numerators.reduce((sum, value) => sum + value, 0);
+  return formatCalculatedValueSv((numeratorSum / denominatorSum) * 100);
+}
+
 export type WeightedRatioPart = {
   numeratorValue: string | number | null | undefined;
   denominatorValue: string | number | null | undefined;
@@ -168,6 +196,8 @@ export function computeCalculatedValue(input: {
   denominatorValue: string | number | null | undefined;
   /** Required for SUM_DIVIDE — list of numerator values for the period. */
   numeratorValues?: Array<string | number | null | undefined>;
+  /** Required for MONTH_TO_DATE_RATIO_PERCENT. */
+  denominatorValues?: Array<string | number | null | undefined>;
 }): string | null {
   if (input.operator === "MONTH_TO_DATE_SUM") {
     const values = input.numeratorValues ?? [];
@@ -193,6 +223,12 @@ export function computeCalculatedValue(input: {
     return computeRatioPercentValue(
       input.numeratorValue,
       input.denominatorValue,
+    );
+  }
+  if (input.operator === "MONTH_TO_DATE_RATIO_PERCENT") {
+    return computeMonthToDateRatioPercentValue(
+      input.numeratorValues ?? [],
+      input.denominatorValues ?? [],
     );
   }
   return null;

@@ -13,6 +13,16 @@ describe("isExcludedFromVdAttention", () => {
     );
   });
 
+  it("excludes per-AO month-to-date ratio TARGET", () => {
+    assert.equal(
+      isExcludedFromVdAttention({
+        kind: "TARGET",
+        calcOperator: "MONTH_TO_DATE_RATIO_PERCENT",
+      }),
+      true,
+    );
+  });
+
   it("keeps company WEIGHTED_RATIO_PERCENT TARGET (Sjukfrånvaro Alwex totalt)", () => {
     assert.equal(
       isExcludedFromVdAttention({

@@ -96,12 +96,18 @@ describe("kpi kind helpers", () => {
       kind: "TARGET" as const,
       calcOperator: "WEIGHTED_RATIO_PERCENT" as const,
     };
+    const monthToDateRatio = {
+      kind: "TARGET" as const,
+      calcOperator: "MONTH_TO_DATE_RATIO_PERCENT" as const,
+    };
     const manualTarget = { kind: "TARGET" as const, calcOperator: null };
     assert.equal(isSystemComputedKpi(computedTarget), true);
     assert.equal(isSystemComputedKpi(weighted), true);
+    assert.equal(isSystemComputedKpi(monthToDateRatio), true);
     assert.equal(isSystemComputedKpi(manualTarget), false);
     assert.equal(isManualReportableKpi(computedTarget), false);
     assert.equal(isManualReportableKpi(weighted), false);
+    assert.equal(isManualReportableKpi(monthToDateRatio), false);
     assert.equal(isManualReportableKpi(manualTarget), true);
     assert.equal(isNonTargetKpi(computedTarget), false);
     assert.equal(isWeightedRatioPercentKpi(weighted), true);

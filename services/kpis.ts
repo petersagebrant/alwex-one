@@ -425,11 +425,15 @@ function resolveKindPayload(input: {
   // Preserve / set system-computed TARGET ratio metadata (seeded Sjukfrånvaro).
   const targetCalcOperator =
     input.calcOperator === "RATIO_PERCENT" ||
+    input.calcOperator === "MONTH_TO_DATE_RATIO_PERCENT" ||
     input.calcOperator === "WEIGHTED_RATIO_PERCENT"
       ? input.calcOperator
       : null;
 
-  if (targetCalcOperator === "RATIO_PERCENT") {
+  if (
+    targetCalcOperator === "RATIO_PERCENT" ||
+    targetCalcOperator === "MONTH_TO_DATE_RATIO_PERCENT"
+  ) {
     const numeratorId = input.calcNumeratorKpiId?.trim() || null;
     const denominatorId = input.calcDenominatorKpiId?.trim() || null;
     if (!numeratorId || !denominatorId) {
@@ -453,7 +457,7 @@ function resolveKindPayload(input: {
       tolerance_type: auto.tolerance_type,
       green_tolerance: auto.green_tolerance,
       yellow_tolerance: auto.yellow_tolerance,
-      calc_operator: "RATIO_PERCENT",
+      calc_operator: targetCalcOperator,
       calc_numerator_kpi_id: numeratorId,
       calc_denominator_kpi_id: denominatorId,
       reporting_frequency: reportingFrequency,
@@ -610,7 +614,8 @@ export async function createKPI(input: CreateKPIInput): Promise<KPI> {
 
   if (
     (resolved.kpi_kind === "CALCULATED" ||
-      resolved.calc_operator === "RATIO_PERCENT") &&
+      resolved.calc_operator === "RATIO_PERCENT" ||
+      resolved.calc_operator === "MONTH_TO_DATE_RATIO_PERCENT") &&
     resolved.calc_numerator_kpi_id &&
     resolved.calc_denominator_kpi_id
   ) {
@@ -767,7 +772,8 @@ export async function updateKPI(input: UpdateKPIInput): Promise<KPI> {
 
   if (
     (resolved.kpi_kind === "CALCULATED" ||
-      resolved.calc_operator === "RATIO_PERCENT") &&
+      resolved.calc_operator === "RATIO_PERCENT" ||
+      resolved.calc_operator === "MONTH_TO_DATE_RATIO_PERCENT") &&
     resolved.calc_numerator_kpi_id &&
     resolved.calc_denominator_kpi_id
   ) {

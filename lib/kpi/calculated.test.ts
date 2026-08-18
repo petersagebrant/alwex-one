@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   computeCalculatedValue,
   computeDivideValue,
+  computeMonthToDateRatioPercentValue,
   computeRatioPercentValue,
   computeSumDivideValue,
   computeWeightedRatioPercent,
@@ -65,6 +66,32 @@ describe("calculated KPI helpers", () => {
     assert.equal(computeRatioPercentValue("32", null), null);
     assert.equal(computeRatioPercentValue("32", "0"), null);
     assert.equal(computeRatioPercentValue(null, "1000"), null);
+  });
+
+  it("computes month-to-date ratio as sum/sum, not average of daily percentages", () => {
+    assert.equal(
+      computeMonthToDateRatioPercentValue(["1", "3"], ["100", "200"]),
+      "1,333",
+    );
+    assert.equal(
+      computeMonthToDateRatioPercentValue(["0", "4"], ["100", "100"]),
+      "2",
+    );
+  });
+
+  it("requires active numeric rows on both sides of a month-to-date ratio", () => {
+    assert.equal(
+      computeMonthToDateRatioPercentValue([], ["100"]),
+      null,
+    );
+    assert.equal(
+      computeMonthToDateRatioPercentValue(["1"], []),
+      null,
+    );
+    assert.equal(
+      computeMonthToDateRatioPercentValue(["1"], ["0"]),
+      null,
+    );
   });
 
   it("computes WEIGHTED_RATIO_PERCENT as sum/sum×100, not average of %", () => {
@@ -141,6 +168,16 @@ describe("calculated KPI helpers", () => {
         denominatorValue: "1000",
       }),
       "3,2",
+    );
+    assert.equal(
+      computeCalculatedValue({
+        operator: "MONTH_TO_DATE_RATIO_PERCENT",
+        numeratorValue: null,
+        denominatorValue: null,
+        numeratorValues: ["1", "3"],
+        denominatorValues: ["100", "200"],
+      }),
+      "1,333",
     );
     assert.equal(
       computeCalculatedValue({

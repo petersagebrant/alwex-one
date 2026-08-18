@@ -2,7 +2,11 @@ import {
   computeRatioPercentValue,
   computeWeightedRatioPercent,
 } from "@/lib/kpi/calculated";
-import { isStatusTone, parseKpiStoredStatus } from "@/lib/kpi/kind";
+import {
+  hasValidKpiCurrentValue,
+  isStatusTone,
+  parseKpiStoredStatus,
+} from "@/lib/kpi/kind";
 import {
   hasValidRatioInputs,
   orderRatioKpisByWeightedInputs,
@@ -82,7 +86,9 @@ export async function getSjukfranvaroComparison(options?: {
       null;
 
     const aoPctKpis = kpis.filter(
-      (kpi) => kpi.calcOperator === "RATIO_PERCENT",
+      (kpi) =>
+        kpi.calcOperator === "RATIO_PERCENT" ||
+        kpi.calcOperator === "MONTH_TO_DATE_RATIO_PERCENT",
     );
 
     const weightedRows = companyKpi
@@ -142,14 +148,28 @@ export async function getSjukfranvaroComparison(options?: {
     };
 
     const areasOut: SjukfranvaroAreaRow[] = displayAoPctKpis.map((kpi) => {
+      const today = todayByKpi.get(kpi.id);
+      const statusRaw = parseKpiStoredStatus(today?.status ?? kpi.status);
+      if (kpi.calcOperator === "MONTH_TO_DATE_RATIO_PERCENT") {
+        const value = today?.value ?? null;
+        const isReported = hasValidKpiCurrentValue(value);
+        return {
+          areaId: kpi.businessAreaId,
+          areaName:
+            areaNameById.get(kpi.businessAreaId) ?? kpi.businessAreaName,
+          kpiId: kpi.id,
+          value: isReported ? value : null,
+          status: isReported && isStatusTone(statusRaw) ? statusRaw : null,
+          isReported,
+        };
+      }
+
       const numeratorValue = periodValue(kpi.calcNumeratorKpiId);
       const denominatorValue = periodValue(kpi.calcDenominatorKpiId);
       const isReported = hasValidRatioInputs(
         numeratorValue,
         denominatorValue,
       );
-      const today = todayByKpi.get(kpi.id);
-      const statusRaw = parseKpiStoredStatus(today?.status ?? kpi.status);
       const computedValue = isReported
         ? computeRatioPercentValue(numeratorValue, denominatorValue)
         : null;
@@ -208,6 +228,7 @@ export async function hasSjukfranvaroKpis(): Promise<boolean> {
     return rows.some(
       (row) =>
         row.calc_operator === "RATIO_PERCENT" ||
+        row.calc_operator === "MONTH_TO_DATE_RATIO_PERCENT" ||
         row.calc_operator === "WEIGHTED_RATIO_PERCENT",
     );
   } catch {

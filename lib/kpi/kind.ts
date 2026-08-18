@@ -8,6 +8,7 @@ export type KpiCalcOperator =
   | "DIVIDE"
   | "SUM_DIVIDE"
   | "MONTH_TO_DATE_SUM"
+  | "MONTH_TO_DATE_RATIO_PERCENT"
   | "RATIO_PERCENT"
   | "WEIGHTED_RATIO_PERCENT";
 

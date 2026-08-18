@@ -1,4 +1,4 @@
-import { activities, goals } from "@/data/mock";
+import { fetchAllActivities } from "@/lib/supabase/activities";
 import {
   businessAreaSlugExists,
   fetchBusinessAreaById,
@@ -7,6 +7,7 @@ import {
   updateBusinessAreaRow,
   type BusinessAreaRow,
 } from "@/lib/supabase/business-areas";
+import { fetchAllGoals } from "@/lib/supabase/goals";
 import { recordAuditLog } from "@/services/auditLog";
 import {
   collectFieldChanges,
@@ -68,7 +69,26 @@ async function uniqueSlug(base: string): Promise<string> {
 }
 
 export async function getBusinessAreas(): Promise<BusinessAreaSummary[]> {
-  const rows = await fetchBusinessAreas();
+  const [rows, goalRows, activityRows] = await Promise.all([
+    fetchBusinessAreas(),
+    fetchAllGoals(),
+    fetchAllActivities(),
+  ]);
+  const goalCounts = new Map<string, number>();
+  const activityCounts = new Map<string, number>();
+
+  for (const goal of goalRows) {
+    goalCounts.set(
+      goal.business_area_id,
+      (goalCounts.get(goal.business_area_id) ?? 0) + 1,
+    );
+  }
+  for (const activity of activityRows) {
+    activityCounts.set(
+      activity.business_area_id,
+      (activityCounts.get(activity.business_area_id) ?? 0) + 1,
+    );
+  }
 
   return rows.map((row) => ({
     slug: row.slug,
@@ -76,10 +96,8 @@ export async function getBusinessAreas(): Promise<BusinessAreaSummary[]> {
     manager: row.manager ?? "Ej angiven",
     status: toStatusTone(row.status),
     updatedAt: toDateKey(row.updated_at),
-    goalCount: goals.filter((goal) => goal.areaSlug === row.slug).length,
-    activityCount: activities.filter(
-      (activity) => activity.areaSlug === row.slug,
-    ).length,
+    goalCount: goalCounts.get(row.id) ?? 0,
+    activityCount: activityCounts.get(row.id) ?? 0,
   }));
 }
 

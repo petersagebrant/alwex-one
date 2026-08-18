@@ -1,5 +1,6 @@
 import { fetchBusinessAreas } from "@/lib/supabase/business-areas";
 import {
+  fetchAuditLogByBusinessAreaId,
   fetchAuditLogSince,
   fetchRecentAuditLog,
   insertAuditLog,
@@ -9,6 +10,7 @@ import type {
   AuditFieldChange,
   AuditLogEntry,
   CreateAuditLogInput,
+  HistoryEvent,
 } from "@/types";
 
 function parseChanges(value: unknown): AuditChangesPayload | null {
@@ -133,6 +135,22 @@ export async function getRecentAuditLog(
     }
     throw error;
   }
+}
+
+export async function getBusinessAreaHistory(
+  businessAreaId: string,
+  areaSlug: string,
+  limit = 50,
+): Promise<HistoryEvent[]> {
+  const rows = await fetchAuditLogByBusinessAreaId(businessAreaId, limit);
+
+  return rows.map((row) => ({
+    id: row.id,
+    areaSlug,
+    date: row.created_at,
+    title: row.description,
+    detail: `Utförd av ${row.actor_name}`,
+  }));
 }
 
 export async function getAuditLogSince(

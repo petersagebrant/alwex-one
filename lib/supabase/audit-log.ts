@@ -72,6 +72,44 @@ export async function fetchRecentAuditLog(
   })) as AuditLogRow[];
 }
 
+export async function fetchAuditLogByBusinessAreaId(
+  businessAreaId: string,
+  limit = 50,
+): Promise<AuditLogRow[]> {
+  const supabase = await createClient();
+
+  const primary = await supabase
+    .from("audit_log")
+    .select(auditSelect)
+    .eq("business_area_id", businessAreaId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (!primary.error) {
+    return (primary.data ?? []) as AuditLogRow[];
+  }
+
+  if (!isMissingChangesColumn(primary.error.message)) {
+    throw new Error(`Kunde inte hämta audit_log: ${primary.error.message}`);
+  }
+
+  const fallback = await supabase
+    .from("audit_log")
+    .select(auditSelectLegacy)
+    .eq("business_area_id", businessAreaId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (fallback.error) {
+    throw new Error(`Kunde inte hämta audit_log: ${fallback.error.message}`);
+  }
+
+  return (fallback.data ?? []).map((row) => ({
+    ...row,
+    changes: null,
+  })) as AuditLogRow[];
+}
+
 export async function fetchAuditLogSince(
   cutoffIso: string,
   limit = 150,
@@ -137,6 +175,7 @@ export async function insertAuditLog(
 
   if (primary.error && isMissingChangesColumn(primary.error.message)) {
     const { changes: _ignored, ...legacyPayload } = payload;
+    void _ignored;
     const fallback = await supabase
       .from("audit_log")
       .insert(legacyPayload)

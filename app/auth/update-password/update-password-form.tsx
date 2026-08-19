@@ -22,8 +22,6 @@ export function UpdatePasswordForm({
 
   useEffect(() => {
     if (hasServerSession) {
-      setReady(true);
-      setBootstrapping(false);
       return;
     }
 
@@ -48,7 +46,13 @@ export function UpdatePasswordForm({
             }
             console.log("[auth-recovery] update-password form setSession from hash");
             try {
-              await fetch("/auth/recovery-flag", { method: "POST" });
+              await fetch("/auth/recovery-flag", {
+                method: "POST",
+                mode: "same-origin",
+                credentials: "same-origin",
+                headers: { "Content-Type": "application/json" },
+                body: "{}",
+              });
             } catch {
               console.log("[auth-recovery] recovery-flag POST failed");
             }

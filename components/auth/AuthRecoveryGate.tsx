@@ -40,7 +40,13 @@ function isUpdatePasswordPath(pathname: string | null): boolean {
 
 async function setServerRecoveryFlag() {
   try {
-    await fetch("/auth/recovery-flag", { method: "POST" });
+    await fetch("/auth/recovery-flag", {
+      method: "POST",
+      mode: "same-origin",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
   } catch {
     console.log("[auth-recovery] recovery-flag POST failed");
   }
@@ -123,7 +129,7 @@ export function AuthRecoveryGate() {
         return;
       }
 
-      if (event === "PASSWORD_RECOVERY") {
+      if (event === "PASSWORD_RECOVERY" && session) {
         console.log("[auth-recovery] PASSWORD_RECOVERY event detected", {
           pathname,
           hasSession: Boolean(session),

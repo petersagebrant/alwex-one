@@ -28,7 +28,10 @@ import {
   expectedResultPeriodMonth,
   isMonthlyEconomicResultKpi,
 } from "@/lib/kpi/economics";
-import { fetchBusinessAreas } from "@/lib/supabase/business-areas";
+import {
+  fetchBusinessAreaById,
+  fetchBusinessAreas,
+} from "@/lib/supabase/business-areas";
 import { fetchKpiHistoryByPeriodMonthsForKpis } from "@/lib/supabase/kpi-history";
 import {
   fetchAllKpis,
@@ -587,10 +590,19 @@ export async function getKPIsByBusinessArea(
 
 export async function getKPIs(options?: {
   includeArchived?: boolean;
+  businessAreaId?: string;
 }): Promise<KPIListItem[]> {
   const [rows, areas] = await Promise.all([
-    fetchAllKpis({ includeArchived: options?.includeArchived ?? false }),
-    fetchBusinessAreas(),
+    options?.businessAreaId
+      ? fetchKpisByBusinessAreaId(options.businessAreaId, {
+          includeArchived: options?.includeArchived ?? false,
+        })
+      : fetchAllKpis({ includeArchived: options?.includeArchived ?? false }),
+    options?.businessAreaId
+      ? fetchBusinessAreaById(options.businessAreaId).then((area) =>
+          area ? [area] : [],
+        )
+      : fetchBusinessAreas(),
   ]);
 
   const areaNames = new Map(areas.map((area) => [area.id, area.name]));

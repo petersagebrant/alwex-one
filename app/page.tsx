@@ -67,6 +67,16 @@ export default async function Home() {
   const profileRow = currentUser
     ? await fetchProfileByUserId(currentUser.id).catch(() => null)
     : null;
+  const vdPrincipal =
+    currentUser && profileRow?.role === "vd"
+      ? {
+          userId: currentUser.id,
+          email: currentUser.email,
+          role: "vd" as const,
+          scope: "organization" as const,
+          businessAreaId: null,
+        }
+      : null;
 
   // AO-chef: fully separate, area-scoped dashboard. VD/admin path below unchanged.
   if (
@@ -157,7 +167,9 @@ export default async function Home() {
     Låg: "!border-emerald-200/80 !bg-emerald-50/40",
   };
 
-  const cachedAiBriefing = getCachedVdBriefing();
+  const cachedAiBriefing = vdPrincipal
+    ? getCachedVdBriefing(vdPrincipal)
+    : null;
   const firstNameFromGreeting = vdAssistant.greeting?.match(
     /^God morgon\s+([^!.]+)/i,
   )?.[1]?.trim();
@@ -266,12 +278,14 @@ export default async function Home() {
       <AppHeader current="home" />
 
       <main className="mx-auto w-full max-w-[1440px] flex-1 space-y-6 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
-        <VdBriefingPanel
-          initialContent={initialBriefing}
-          hasAiCache={Boolean(cachedAiBriefing)}
-          stats={briefingStats}
-          linkHints={briefingLinkHints}
-        />
+        {vdPrincipal ? (
+          <VdBriefingPanel
+            initialContent={initialBriefing}
+            hasAiCache={Boolean(cachedAiBriefing)}
+            stats={briefingStats}
+            linkHints={briefingLinkHints}
+          />
+        ) : null}
 
         <KpiOverviewSection data={kpiOverview} />
 
@@ -334,41 +348,43 @@ export default async function Home() {
           </Link>
         ) : null}
 
-        <InfoPanel
-          title="VD-assistent"
-          variant="ai-summary"
-          showLabel={false}
-          compact
-          className={assistantToneClass[vdAssistant.riskLevel ?? "Låg"]}
-          footer={
-            <p className="text-xs text-slate-500">
-              Senast analyserad{" "}
-              <span className="font-medium text-slate-700">
-                {vdAssistant.analyzedAtLabel ?? "—"}
-              </span>
-            </p>
-          }
-        >
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="space-y-1">
-              <p className="text-sm text-slate-600">
-                Risknivå:{" "}
-                <span className="font-semibold text-slate-900">
-                  {vdAssistant.riskLabel ?? vdAssistant.riskLevel ?? "Låg"}
+        {vdPrincipal ? (
+          <InfoPanel
+            title="VD-assistent"
+            variant="ai-summary"
+            showLabel={false}
+            compact
+            className={assistantToneClass[vdAssistant.riskLevel ?? "Låg"]}
+            footer={
+              <p className="text-xs text-slate-500">
+                Senast analyserad{" "}
+                <span className="font-medium text-slate-700">
+                  {vdAssistant.analyzedAtLabel ?? "—"}
                 </span>
               </p>
-              <p className="text-sm text-slate-500">
-                Sammanfattningen finns i VD Briefing ovan.
-              </p>
+            }
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="space-y-1">
+                <p className="text-sm text-slate-600">
+                  Risknivå:{" "}
+                  <span className="font-semibold text-slate-900">
+                    {vdAssistant.riskLabel ?? vdAssistant.riskLevel ?? "Låg"}
+                  </span>
+                </p>
+                <p className="text-sm text-slate-500">
+                  Sammanfattningen finns i VD Briefing ovan.
+                </p>
+              </div>
+              <Link
+                href="/assistant"
+                className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
+              >
+                Ställ en fråga
+              </Link>
             </div>
-            <Link
-              href="/assistant"
-              className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
-            >
-              Ställ en fråga
-            </Link>
-          </div>
-        </InfoPanel>
+          </InfoPanel>
+        ) : null}
 
         <InfoPanel
           title="Vad har förändrats sedan igår?"

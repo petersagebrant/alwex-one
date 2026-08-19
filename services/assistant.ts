@@ -1,5 +1,16 @@
+import "server-only";
+
 import OpenAI from "openai";
-import { getCurrentUser } from "@/lib/auth/require-user";
+import {
+  aiScopeKey,
+  assertAreaIdsInAiScope,
+  assertRowsInAiScope,
+  type AiPrincipal,
+} from "@/lib/ai/security";
+import {
+  buildAiCacheKey,
+  ScopedSingleflightCache,
+} from "@/lib/ai/cache";
 import { formatDateTimeSv } from "@/lib/format/date";
 import {
   countTargetKpiStatuses,
@@ -14,7 +25,10 @@ import {
   monthlyResultDisplayName,
 } from "@/lib/kpi/economics";
 import { buildMonthlyResultAiContext } from "@/lib/kpi/monthlyResultPresentation";
-import { fetchBusinessAreas } from "@/lib/supabase/business-areas";
+import {
+  fetchBusinessAreaById,
+  fetchBusinessAreas,
+} from "@/lib/supabase/business-areas";
 import type { BusinessAreaRow } from "@/lib/supabase/business-areas";
 import { getActivities, type ActivityListItem } from "@/services/activities";
 import { getAuditLogSince, type AuditLogListItem } from "@/services/auditLog";
@@ -225,16 +239,29 @@ export type AssistantContext = {
 /**
  * Builds a complete operational briefing for every assistant question.
  */
-export async function buildAssistantContext(): Promise<AssistantContext> {
-  const [areas, kpis, goals, activities, decisions, dashboard, currentUser] =
+export async function buildAssistantContext(
+  principal: AiPrincipal,
+): Promise<AssistantContext> {
+  const areaId =
+    principal.role === "ao_chef" ? principal.businessAreaId : undefined;
+  const [areas, kpis, goals, activities, decisions, dashboard] =
     await Promise.all([
-      fetchBusinessAreas().catch(() => [] as BusinessAreaRow[]),
-      getKPIs().catch(() => [] as KPIListItem[]),
-      getGoals().catch(() => [] as GoalListItem[]),
-      getActivities().catch(() => [] as ActivityListItem[]),
-      getDecisions().catch(() => [] as DecisionListItem[]),
-      getDashboardData().catch(() => null),
-      getCurrentUser().catch(() => null),
+      areaId
+        ? fetchBusinessAreaById(areaId)
+            .then((area) => (area ? [area] : []))
+            .catch(() => [] as BusinessAreaRow[])
+        : fetchBusinessAreas().catch(() => [] as BusinessAreaRow[]),
+      getKPIs({ businessAreaId: areaId }).catch(() => [] as KPIListItem[]),
+      getGoals({ businessAreaId: areaId }).catch(() => [] as GoalListItem[]),
+      getActivities({ businessAreaId: areaId }).catch(
+        () => [] as ActivityListItem[],
+      ),
+      getDecisions({ businessAreaId: areaId }).catch(
+        () => [] as DecisionListItem[],
+      ),
+      principal.role === "vd"
+        ? getDashboardData().catch(() => null)
+        : Promise.resolve(null),
     ]);
 
   const businessAreas = areas ?? [];
@@ -243,14 +270,35 @@ export async function buildAssistantContext(): Promise<AssistantContext> {
   const allActivities = activities ?? [];
   const allDecisions = decisions ?? [];
 
+  assertAreaIdsInAiScope(
+    principal,
+    businessAreas.map((area) => area.id),
+    "affärsområden",
+  );
+  assertRowsInAiScope(principal, allKpis, "KPI");
+  assertRowsInAiScope(principal, allGoals, "mål");
+  assertRowsInAiScope(principal, allActivities, "aktiviteter");
+  assertRowsInAiScope(principal, allDecisions, "beslut");
+
   const weekCutoff = daysAgoCutoff(7);
   const [auditSinceWeek, kpiHistoryRows] = await Promise.all([
-    getAuditLogSince(weekCutoff, 150).catch(() => [] as AuditLogListItem[]),
+    getAuditLogSince(weekCutoff, 150, areaId).catch(
+      () => [] as AuditLogListItem[],
+    ),
     getRecentKpiHistoryForKpis(
       allKpis.map((kpi) => kpi.id),
       3,
     ).catch(() => [] as KPIHistory[]),
   ]);
+  assertAreaIdsInAiScope(
+    principal,
+    (auditSinceWeek ?? []).map((entry) => entry.businessAreaId),
+    "revisionslogg",
+  );
+  const allowedKpiIds = new Set(allKpis.map((kpi) => kpi.id));
+  if ((kpiHistoryRows ?? []).some((row) => !allowedKpiIds.has(row.kpiId))) {
+    throw new Error("Säkerhetskontroll misslyckades för KPI-historik.");
+  }
 
   const delayedActivities = allActivities.filter(isDelayedActivity);
   const openDecisions = allDecisions.filter(
@@ -347,7 +395,7 @@ export async function buildAssistantContext(): Promise<AssistantContext> {
       vdPriority: vd?.priority ?? vd?.recommendation ?? "",
       vdPositiveSummary: vd?.positiveSummary ?? "",
       responsiblePersons,
-      firstName: firstNameFromEmail(currentUser?.email ?? null),
+      firstName: firstNameFromEmail(principal.email),
     },
     businessAreas,
     kpis: allKpis,
@@ -378,7 +426,10 @@ export async function generateAssistantAnswer(
  * Routes the question to local, hybrid or AI answering.
  * OpenAI is only used when classification requires it.
  */
-export async function askAssistant(question: string): Promise<string> {
+export async function askAssistant(
+  question: string,
+  principal: AiPrincipal,
+): Promise<string> {
   const totalStarted = Date.now();
   const trimmed = question.trim();
   if (!trimmed) {
@@ -389,7 +440,7 @@ export async function askAssistant(question: string): Promise<string> {
   console.log(`Question type: ${questionType.toUpperCase()}`);
 
   const contextStarted = Date.now();
-  const fullContext = await buildAssistantContext();
+  const fullContext = await buildAssistantContext(principal);
   console.log(
     `[askAssistant] buildAssistantContext: ${Date.now() - contextStarted}ms`,
   );
@@ -406,8 +457,8 @@ export async function askAssistant(question: string): Promise<string> {
 
     console.log(`[askAssistant] total askAssistant: ${Date.now() - totalStarted}ms`);
     return answer;
-  } catch (error) {
-    console.error(error);
+  } catch {
+    console.warn("[askAssistant] answer generation failed; using local fallback");
     console.log(
       `[askAssistant] total askAssistant (error): ${Date.now() - totalStarted}ms`,
     );
@@ -677,8 +728,7 @@ export async function answerHybrid(
       return localSummary;
     }
     return answer;
-  } catch (error) {
-    console.error(error);
+  } catch {
     console.log("[answerHybrid] OpenAI fel — returnerar lokal sammanfattning");
     return localSummary;
   }
@@ -698,13 +748,13 @@ export async function answerAI(
   }
 
   const filterStarted = Date.now();
-  const { context: relevant, scope, areaName } = selectRelevantAssistantContext(
+  const { context: relevant, scope } = selectRelevantAssistantContext(
     question,
     context,
   );
   const openAiPayload = toCompactOpenAiContext(relevant, scope);
   console.log(
-    `[answerAI] context filtering: ${Date.now() - filterStarted}ms (scope=${scope}${areaName ? ` area="${areaName}"` : ""}; payload=${JSON.stringify(openAiPayload).length} chars)`,
+    `[answerAI] context filtering: ${Date.now() - filterStarted}ms (scope=${scope}; payload_chars=${JSON.stringify(openAiPayload).length})`,
   );
 
   try {
@@ -740,8 +790,7 @@ export async function answerAI(
       return answerLocal(question, context);
     }
     return answer;
-  } catch (error) {
-    console.error(error);
+  } catch {
     console.log("[answerAI] OpenAI fel — faller tillbaka till LOCAL");
     return answerLocal(question, context);
   }
@@ -2414,7 +2463,7 @@ Exakt 3 korta åtgärder. Ansvarig på egen rad när namn finns.
 
 Skapad: [tidstämpel]`;
 
-const VD_BRIEFING_CACHE_TTL_MS = 15 * 60 * 1000;
+const VD_BRIEFING_CACHE_TTL_MS = 5 * 60 * 1000;
 /** Background AI upgrade budget; local briefing stays on screen if this fails. */
 const VD_BRIEFING_OPENAI_TIMEOUT_MS = 15_000;
 const VD_BRIEFING_OPENAI_MODEL = "gpt-5";
@@ -2424,26 +2473,21 @@ const VD_BRIEFING_REASONING_EFFORT = "minimal" as const;
 /** Bump when briefing format/payload changes so stale AI cache is not shown. */
 const VD_BRIEFING_CACHE_VERSION = 5;
 
-type VdBriefingCacheEntry = {
-  content: string;
-  expiresAt: number;
-  version: number;
-};
+const vdBriefingCache = new ScopedSingleflightCache<string>();
 
-let vdBriefingCache: VdBriefingCacheEntry | null = null;
-let vdBriefingInFlight: Promise<string> | null = null;
+function vdBriefingCacheKey(principal: AiPrincipal): string {
+  return buildAiCacheKey({
+    feature: "vd-briefing",
+    version: VD_BRIEFING_CACHE_VERSION,
+    role: principal.role,
+    userId: principal.userId,
+    scope: aiScopeKey(principal),
+  });
+}
 
 /** Sync read of a still-valid AI briefing cache entry. */
-export function getCachedVdBriefing(): string | null {
-  if (
-    vdBriefingCache &&
-    vdBriefingCache.version === VD_BRIEFING_CACHE_VERSION &&
-    vdBriefingCache.expiresAt > Date.now() &&
-    vdBriefingCache.content
-  ) {
-    return vdBriefingCache.content;
-  }
-  return null;
+export function getCachedVdBriefing(principal: AiPrincipal): string | null {
+  return vdBriefingCache.get(vdBriefingCacheKey(principal));
 }
 
 export type LocalVdBriefingInput = {
@@ -2774,9 +2818,12 @@ export function buildLocalVdBriefing(
  * Returns cached AI briefing when valid; otherwise generates via OpenAI.
  * Uses singleflight so concurrent callers share one OpenAI request.
  */
-export async function generateVdBriefing(): Promise<string> {
+export async function generateVdBriefing(
+  principal: AiPrincipal,
+): Promise<string> {
   const totalStarted = Date.now();
-  const cached = getCachedVdBriefing();
+  const key = vdBriefingCacheKey(principal);
+  const cached = vdBriefingCache.get(key);
   if (cached) {
     console.log(
       `[vd-briefing] cache hit (${Date.now() - totalStarted}ms, ${cached.length} chars)`,
@@ -2784,38 +2831,25 @@ export async function generateVdBriefing(): Promise<string> {
     return cached;
   }
 
-  if (vdBriefingInFlight) {
-    console.log("[vd-briefing] joining in-flight OpenAI request");
-    return vdBriefingInFlight;
-  }
-
-  vdBriefingInFlight = (async () => {
+  return vdBriefingCache.getOrCreate(key, VD_BRIEFING_CACHE_TTL_MS, async () => {
     try {
-      const content = await generateVdBriefingFromOpenAI();
-      vdBriefingCache = {
-        content,
-        expiresAt: Date.now() + VD_BRIEFING_CACHE_TTL_MS,
-        version: VD_BRIEFING_CACHE_VERSION,
-      };
+      const content = await generateVdBriefingFromOpenAI(principal);
       console.log(
         `[vd-briefing] total success: ${Date.now() - totalStarted}ms (${content.length} chars)`,
       );
       return content;
     } catch (error) {
       console.warn(
-        `[vd-briefing] total failed: ${Date.now() - totalStarted}ms` +
-          (error instanceof Error ? ` — ${error.message}` : ""),
+        `[vd-briefing] total failed: ${Date.now() - totalStarted}ms`,
       );
       throw error;
-    } finally {
-      vdBriefingInFlight = null;
     }
-  })();
-
-  return vdBriefingInFlight;
+  });
 }
 
-async function generateVdBriefingFromOpenAI(): Promise<string> {
+async function generateVdBriefingFromOpenAI(
+  principal: AiPrincipal,
+): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
     throw new Error(
@@ -2824,7 +2858,7 @@ async function generateVdBriefingFromOpenAI(): Promise<string> {
   }
 
   const contextStarted = Date.now();
-  const context = await buildAssistantContext();
+  const context = await buildAssistantContext(principal);
   const contextMs = Date.now() - contextStarted;
 
   const payloadStarted = Date.now();
@@ -2918,9 +2952,8 @@ async function generateVdBriefingFromOpenAI(): Promise<string> {
       );
       throw new Error("VD Briefing OpenAI timeout");
     }
-    const message = error instanceof Error ? error.message : "unknown error";
     console.error(
-      `[vd-briefing] OpenAI error after ${openaiMs}ms (model=${VD_BRIEFING_OPENAI_MODEL}): ${message}`,
+      `[vd-briefing] OpenAI request failed after ${openaiMs}ms (model=${VD_BRIEFING_OPENAI_MODEL})`,
     );
     throw error;
   } finally {

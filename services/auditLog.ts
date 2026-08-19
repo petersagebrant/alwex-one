@@ -1,4 +1,7 @@
-import { fetchBusinessAreas } from "@/lib/supabase/business-areas";
+import {
+  fetchBusinessAreaById,
+  fetchBusinessAreas,
+} from "@/lib/supabase/business-areas";
 import {
   fetchAuditLogByBusinessAreaId,
   fetchAuditLogSince,
@@ -156,11 +159,20 @@ export async function getBusinessAreaHistory(
 export async function getAuditLogSince(
   cutoff: Date,
   limit = 150,
+  businessAreaId?: string,
 ): Promise<AuditLogListItem[]> {
   try {
     const [rows, areas] = await Promise.all([
-      fetchAuditLogSince(cutoff.toISOString(), limit),
-      fetchBusinessAreas(),
+      businessAreaId
+        ? fetchAuditLogByBusinessAreaId(businessAreaId, limit).then((all) =>
+            all.filter((row) => row.created_at >= cutoff.toISOString()),
+          )
+        : fetchAuditLogSince(cutoff.toISOString(), limit),
+      businessAreaId
+        ? fetchBusinessAreaById(businessAreaId).then((area) =>
+            area ? [area] : [],
+          )
+        : fetchBusinessAreas(),
     ]);
 
     const areaSlugById = new Map(areas.map((area) => [area.id, area.slug]));

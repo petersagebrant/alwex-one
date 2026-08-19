@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { AppHeader } from "@/components/layout/AppHeader";
+import { requireAiPrincipal } from "@/lib/auth/ai-principal";
 import { AssistantChat } from "./AssistantChat";
 
 export const metadata: Metadata = {
@@ -7,7 +8,8 @@ export const metadata: Metadata = {
   description: "Ställ frågor om verksamheten utifrån aktuell data",
 };
 
-export default function AssistantPage() {
+export default async function AssistantPage() {
+  await requireAiPrincipal();
   return (
     <div className="flex min-h-full flex-1 flex-col bg-[#f7f8fa] text-neutral-900">
       <AppHeader current="assistant" />

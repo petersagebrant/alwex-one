@@ -1,4 +1,7 @@
-import { fetchBusinessAreas } from "@/lib/supabase/business-areas";
+import {
+  fetchBusinessAreaById,
+  fetchBusinessAreas,
+} from "@/lib/supabase/business-areas";
 import {
   fetchActivitiesByBusinessAreaId,
   fetchActivitiesByGoalId,
@@ -7,7 +10,10 @@ import {
   insertActivity,
   updateActivityRow,
 } from "@/lib/supabase/activities";
-import { fetchAllGoals } from "@/lib/supabase/goals";
+import {
+  fetchAllGoals,
+  fetchGoalsByBusinessAreaId,
+} from "@/lib/supabase/goals";
 import { recordAuditLog } from "@/services/auditLog";
 import {
   collectFieldChanges,
@@ -92,11 +98,21 @@ export type ActivityListItem = Activity & {
   goalTitle: string | null;
 };
 
-export async function getActivities(): Promise<ActivityListItem[]> {
+export async function getActivities(options?: {
+  businessAreaId?: string;
+}): Promise<ActivityListItem[]> {
   const [rows, areas, goals] = await Promise.all([
-    fetchAllActivities(),
-    fetchBusinessAreas(),
-    fetchAllGoals(),
+    options?.businessAreaId
+      ? fetchActivitiesByBusinessAreaId(options.businessAreaId)
+      : fetchAllActivities(),
+    options?.businessAreaId
+      ? fetchBusinessAreaById(options.businessAreaId).then((area) =>
+          area ? [area] : [],
+        )
+      : fetchBusinessAreas(),
+    options?.businessAreaId
+      ? fetchGoalsByBusinessAreaId(options.businessAreaId)
+      : fetchAllGoals(),
   ]);
 
   const areaNames = new Map(areas.map((area) => [area.id, area.name]));

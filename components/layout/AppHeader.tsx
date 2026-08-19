@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { getCurrentUser } from "@/lib/auth/require-user";
+import { fetchProfileByUserId } from "@/lib/supabase/profiles";
 import { signOutAction } from "@/app/login/actions";
 
 export type AppNavKey =
@@ -41,8 +42,17 @@ function initialsFromEmail(email: string | null): string {
 
 export async function AppHeader({ current = "home" }: AppHeaderProps) {
   const user = await getCurrentUser();
+  const profile = user
+    ? await fetchProfileByUserId(user.id).catch(() => null)
+    : null;
   const label = user?.email ?? "Ej inloggad";
   const initials = initialsFromEmail(user?.email ?? null);
+  const visibleNavItems = navItems.filter(
+    (item) =>
+      item.key !== "assistant" ||
+      profile?.role === "vd" ||
+      (profile?.role === "ao_chef" && Boolean(profile.business_area_id)),
+  );
 
   return (
     <header className="sticky top-0 z-30 border-b border-[#1f2430] bg-[#111827] text-white">
@@ -63,7 +73,7 @@ export async function AppHeader({ current = "home" }: AppHeaderProps) {
             aria-label="Huvudnavigation"
             className="-mx-1 flex items-center gap-1 overflow-x-auto px-1 pb-0.5 lg:pb-0"
           >
-            {navItems.map((item) => (
+            {visibleNavItems.map((item) => (
               <NavLink
                 key={item.key}
                 href={item.href}

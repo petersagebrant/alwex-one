@@ -31,11 +31,8 @@ export function VdBriefingPanel({
 }: VdBriefingPanelProps) {
   const safeInitial = initialContent?.trim() ? initialContent : "";
   const [content, setContent] = useState(safeInitial);
+  const [notice, setNotice] = useState<string | null>(null);
   const startedRef = useRef(false);
-
-  useEffect(() => {
-    setContent(initialContent?.trim() ? initialContent : "");
-  }, [initialContent]);
 
   useEffect(() => {
     if (hasAiCache) {
@@ -50,12 +47,14 @@ export function VdBriefingPanel({
 
     void (async () => {
       try {
-        const aiBriefing = await fetchVdBriefingAction();
-        if (!cancelled && typeof aiBriefing === "string" && aiBriefing.trim()) {
-          setContent(aiBriefing);
+        const result = await fetchVdBriefingAction();
+        if (!cancelled && result.content?.trim()) {
+          setContent(result.content);
         }
-      } catch (err) {
-        console.error(err);
+        if (!cancelled && result.error) {
+          setNotice(result.error);
+        }
+      } catch {
         // Keep local briefing — never surface OpenAI errors in the UI.
       }
     })();
@@ -66,6 +65,13 @@ export function VdBriefingPanel({
   }, [hasAiCache]);
 
   return (
-    <VdBriefing content={content} stats={stats} linkHints={linkHints} />
+    <div>
+      <VdBriefing content={content} stats={stats} linkHints={linkHints} />
+      {notice ? (
+        <p className="mt-2 text-xs text-amber-700" role="status">
+          {notice}
+        </p>
+      ) : null}
+    </div>
   );
 }

@@ -1,24 +1,34 @@
 "use server";
 
-import { requireUser } from "@/lib/auth/require-user";
+import { AI_ENDPOINTS, consumeAiRateLimit } from "@/lib/ai/rate-limit";
+import {
+  AiRateLimitError,
+  requireRateLimitThenRun,
+} from "@/lib/ai/rate-limit-core";
+import { requireVdAiPrincipal } from "@/lib/auth/ai-principal";
 import { generateVdBriefing } from "@/services/assistant";
 
 /**
  * Background AI refresh for VD Briefing.
- * Returns AI text on success, or null on timeout/error (never throws to the UI).
+ * Keeps local content on provider failure and returns a clear rate-limit notice.
  */
-export async function fetchVdBriefingAction(): Promise<string | null> {
-  await requireUser();
+export async function fetchVdBriefingAction(): Promise<{
+  content: string | null;
+  error: string | null;
+}> {
+  const principal = await requireVdAiPrincipal();
 
   try {
-    return await generateVdBriefing();
+    const content = await requireRateLimitThenRun(
+      () => consumeAiRateLimit(principal, AI_ENDPOINTS.vdBriefing),
+      () => generateVdBriefing(principal),
+    );
+    return { content, error: null };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (message.includes("timeout")) {
-      console.warn("[vd-briefing] AI upgrade skipped — keeping local briefing");
-    } else {
-      console.error("[vd-briefing] AI upgrade failed:", message);
+    if (error instanceof AiRateLimitError) {
+      return { content: null, error: error.message };
     }
-    return null;
+    console.warn("[vd-briefing] AI upgrade skipped — keeping local briefing");
+    return { content: null, error: null };
   }
 }

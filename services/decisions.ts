@@ -1,6 +1,10 @@
-import { fetchBusinessAreas } from "@/lib/supabase/business-areas";
+import {
+  fetchBusinessAreaById,
+  fetchBusinessAreas,
+} from "@/lib/supabase/business-areas";
 import {
   fetchAllDecisions,
+  fetchDecisionsByBusinessAreaId,
   fetchDecisionById,
   insertDecision,
   updateDecisionRow,
@@ -69,10 +73,18 @@ export type DecisionListItem = Decision & {
   businessAreaName: string;
 };
 
-export async function getDecisions(): Promise<DecisionListItem[]> {
+export async function getDecisions(options?: {
+  businessAreaId?: string;
+}): Promise<DecisionListItem[]> {
   const [rows, areas] = await Promise.all([
-    fetchAllDecisions(),
-    fetchBusinessAreas(),
+    options?.businessAreaId
+      ? fetchDecisionsByBusinessAreaId(options.businessAreaId)
+      : fetchAllDecisions(),
+    options?.businessAreaId
+      ? fetchBusinessAreaById(options.businessAreaId).then((area) =>
+          area ? [area] : [],
+        )
+      : fetchBusinessAreas(),
   ]);
 
   const areaNames = new Map(areas.map((area) => [area.id, area.name]));

@@ -5,7 +5,10 @@ import {
   insertGoal,
   updateGoalRow,
 } from "@/lib/supabase/goals";
-import { fetchBusinessAreas } from "@/lib/supabase/business-areas";
+import {
+  fetchBusinessAreaById,
+  fetchBusinessAreas,
+} from "@/lib/supabase/business-areas";
 import { recordAuditLog } from "@/services/auditLog";
 import {
   collectFieldChanges,
@@ -83,10 +86,18 @@ export async function getGoalsByBusinessAreaId(
   return rows.map(mapGoalRow);
 }
 
-export async function getGoals(): Promise<GoalListItem[]> {
+export async function getGoals(options?: {
+  businessAreaId?: string;
+}): Promise<GoalListItem[]> {
   const [rows, areas] = await Promise.all([
-    fetchAllGoals(),
-    fetchBusinessAreas(),
+    options?.businessAreaId
+      ? fetchGoalsByBusinessAreaId(options.businessAreaId)
+      : fetchAllGoals(),
+    options?.businessAreaId
+      ? fetchBusinessAreaById(options.businessAreaId).then((area) =>
+          area ? [area] : [],
+        )
+      : fetchBusinessAreas(),
   ]);
 
   const areaNames = new Map(areas.map((area) => [area.id, area.name]));

@@ -1,8 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type { AuthProfile } from "@/lib/auth/require-user";
+import { reportedTargetStatusTone } from "@/lib/kpi/areaOperationalStatus";
 import {
-  isStatusTone,
-  isTargetKpi,
   parseKpiStoredStatus,
   parseStatusTone,
 } from "@/lib/kpi/kind";
@@ -438,9 +437,8 @@ export async function getAoChefDashboardData(
   });
 
   const kpiStatuses = kpis
-    .filter((kpi) => isTargetKpi(kpi) && !kpi.isPeriodPending)
-    .map((kpi) => kpi.status)
-    .filter(isStatusTone);
+    .map((kpi) => reportedTargetStatusTone(kpi))
+    .filter((status): status is StatusTone => status != null);
   const goalStatuses = goals.map((goal) => toStatusTone(goal.status));
   const delayed = activities.filter(isDelayedActivity);
   const ongoing = activities.filter((activity) => activity.status === "Pågår");

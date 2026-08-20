@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { BusinessAreaSummary } from "@/types";
 import { formatDateSv } from "@/lib/format/date";
-import { StatusPill } from "@/components/common/StatusPill";
+import { AreaOperationalStatusBadge } from "@/components/areas/AreaOperationalStatusBadge";
 
 type AreaCardProps = {
   area: BusinessAreaSummary;
@@ -17,7 +17,7 @@ export function AreaCard({ area }: AreaCardProps) {
         <h2 className="text-[15px] font-semibold tracking-tight text-neutral-900 group-hover:text-[#4f46e5]">
           {area.name}
         </h2>
-        <StatusPill status={area.status} />
+        <AreaOperationalStatusBadge status={area.status} variant="pill" />
       </div>
 
       <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">

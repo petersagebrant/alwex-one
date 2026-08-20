@@ -1,7 +1,11 @@
 import { getCurrentUser } from "@/lib/auth/require-user";
 import { fetchBusinessAreas } from "@/lib/supabase/business-areas";
 import { formatDateSv, formatDateTimeSv } from "@/lib/format/date";
-import { isExcludedFromVdAttention } from "@/lib/kpi/vdAttentionFilter";
+import {
+  computeAreaOperationalStatus,
+  groupKpisByBusinessAreaId,
+} from "@/lib/kpi/areaOperationalStatus";
+import { classifyDashboardTargetKpis } from "@/lib/kpi/reportedTargetKpis";
 import {
   formatMonthlyEconomicSummary,
   isMonthlyEconomicResultKpi,
@@ -45,7 +49,8 @@ export type DashboardArea = {
   slug: string;
   name: string;
   manager: string;
-  status: StatusTone;
+  /** Display status from reported TARGET KPIs; null = Ej rapporterat. */
+  status: StatusTone | null;
   goalCount: number;
   activityCount: number;
   delayedActivityCount: number;
@@ -165,13 +170,6 @@ export type DashboardData = {
   vdAssistant: DashboardVdAssistant;
   yesterdayChanges: DashboardYesterdayChange[];
 };
-
-function toStatusTone(value: string): StatusTone {
-  if (value === "Grön" || value === "Gul" || value === "Röd") {
-    return value;
-  }
-  return "Gul";
-}
 
 function countStatus(count: number, zeroTone: StatusTone = "Gul"): StatusTone {
   return count > 0 ? "Grön" : zeroTone;
@@ -637,39 +635,19 @@ export async function getDashboardData(): Promise<DashboardData> {
     (areaRows ?? []).map((area) => [area.id, area.manager ?? "Ej angiven"]),
   );
 
-  const followUpKpis = (allKpis ?? []).filter(
-    (kpi) =>
-      kpi.kind === "TARGET" &&
-      !kpi.isPeriodPending &&
-      !isExcludedFromVdAttention(kpi) &&
-      (kpi.status === "Gul" || kpi.status === "Röd"),
-  );
-  const greenKpis = (allKpis ?? []).filter(
-    (kpi) =>
-      kpi.kind === "TARGET" && !kpi.isPeriodPending && kpi.status === "Grön",
-  );
-  const yellowKpis = (allKpis ?? []).filter(
-    (kpi) =>
-      kpi.kind === "TARGET" &&
-      !kpi.isPeriodPending &&
-      !isExcludedFromVdAttention(kpi) &&
-      kpi.status === "Gul",
-  );
-  const redKpis = (allKpis ?? []).filter(
-    (kpi) =>
-      kpi.kind === "TARGET" &&
-      !kpi.isPeriodPending &&
-      !isExcludedFromVdAttention(kpi) &&
-      kpi.status === "Röd",
-  );
+  const { followUpKpis, greenKpis, yellowKpis, redKpis } =
+    classifyDashboardTargetKpis(allKpis ?? []);
+  const kpisByArea = groupKpisByBusinessAreaId(allKpis ?? []);
+  const areaOperationalStatus = (areaId: string) =>
+    computeAreaOperationalStatus(kpisByArea.get(areaId) ?? []);
   const redAreaRows = (areaRows ?? []).filter(
-    (area) => toStatusTone(area.status) === "Röd",
+    (area) => areaOperationalStatus(area.id) === "Röd",
   );
   const yellowAreaRows = (areaRows ?? []).filter(
-    (area) => toStatusTone(area.status) === "Gul",
+    (area) => areaOperationalStatus(area.id) === "Gul",
   );
   const greenAreaRows = (areaRows ?? []).filter(
-    (area) => toStatusTone(area.status) === "Grön",
+    (area) => areaOperationalStatus(area.id) === "Grön",
   );
   const redAreaCount = redAreaRows.length;
   const waitingDecisionCount = openDecisions.length;
@@ -889,7 +867,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       slug: area.slug,
       name: area.name,
       manager: area.manager ?? "Ej angiven",
-      status: toStatusTone(area.status),
+      status: areaOperationalStatus(area.id),
       goalCount: goalsByArea.get(area.id) ?? 0,
       activityCount: activitiesByArea.get(area.id) ?? 0,
       delayedActivityCount: delayedByArea.get(area.id) ?? 0,

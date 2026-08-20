@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { VdDiaryTimeline } from "@/components/dashboard/VdDiaryTimeline";
 import { BeraknadTypeBadge } from "@/components/kpis/BeraknadTypeBadge";
+import { ReportingStatusBadge } from "@/components/kpis/ReportingStatusBadge";
 import { StatistikTypeBadge } from "@/components/kpis/StatistikTypeBadge";
 import {
   InfoPanel,
@@ -10,7 +11,7 @@ import {
   SummaryCard,
 } from "@/components/ui";
 import { formatKpiDisplayValue } from "@/lib/format/kpi";
-import { isStatusTone } from "@/lib/kpi/kind";
+import { reportedTargetStatusTone } from "@/lib/kpi/areaOperationalStatus";
 import type { AoChefDashboardData } from "@/services/aoChefDashboard";
 
 function yesterdayChangeDot(tone: string): string {
@@ -19,6 +20,27 @@ function yesterdayChangeDot(tone: string): string {
   if (tone === "green") return "bg-emerald-500";
   if (tone === "blue") return "bg-sky-500";
   return "bg-slate-400";
+}
+
+function AoChefKpiStatus({ kpi }: { kpi: AoChefDashboardData["kpis"][number] }) {
+  if (kpi.isPeriodPending) {
+    return (
+      <span className="rounded-md bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+        Inväntar bokslut
+      </span>
+    );
+  }
+  if (kpi.kind === "STATISTIC") {
+    return <StatistikTypeBadge />;
+  }
+  if (kpi.kind === "CALCULATED") {
+    return <BeraknadTypeBadge />;
+  }
+  const tone = reportedTargetStatusTone(kpi);
+  if (tone) {
+    return <StatusBadge status={tone} />;
+  }
+  return <ReportingStatusBadge reported={false} />;
 }
 
 type AoChefDashboardProps = {
@@ -183,17 +205,7 @@ export function AoChefDashboard({ data }: AoChefDashboardProps) {
                               : `${formatKpiDisplayValue(kpi.currentValue, kpi.unit)} mot mål ${formatKpiDisplayValue(kpi.targetValue, kpi.unit)}`}
                       </p>
                     </div>
-                    {kpi.isPeriodPending ? (
-                      <span className="rounded-md bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
-                        Inväntar bokslut
-                      </span>
-                    ) : kpi.kind === "STATISTIC" ? (
-                      <StatistikTypeBadge />
-                    ) : kpi.kind === "CALCULATED" ? (
-                      <BeraknadTypeBadge />
-                    ) : isStatusTone(kpi.status) ? (
-                      <StatusBadge status={kpi.status} />
-                    ) : null}
+                    <AoChefKpiStatus kpi={kpi} />
                   </Link>
                 </li>
               ))}

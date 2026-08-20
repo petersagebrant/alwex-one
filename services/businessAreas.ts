@@ -8,7 +8,12 @@ import {
   type BusinessAreaRow,
 } from "@/lib/supabase/business-areas";
 import { fetchAllGoals } from "@/lib/supabase/goals";
+import {
+  computeAreaOperationalStatus,
+  groupKpisByBusinessAreaId,
+} from "@/lib/kpi/areaOperationalStatus";
 import { recordAuditLog } from "@/services/auditLog";
+import { getKPIs } from "@/services/kpis";
 import {
   collectFieldChanges,
   formatEntityChangeDescription,
@@ -69,13 +74,15 @@ async function uniqueSlug(base: string): Promise<string> {
 }
 
 export async function getBusinessAreas(): Promise<BusinessAreaSummary[]> {
-  const [rows, goalRows, activityRows] = await Promise.all([
+  const [rows, goalRows, activityRows, kpis] = await Promise.all([
     fetchBusinessAreas(),
     fetchAllGoals(),
     fetchAllActivities(),
+    getKPIs().catch(() => []),
   ]);
   const goalCounts = new Map<string, number>();
   const activityCounts = new Map<string, number>();
+  const kpisByArea = groupKpisByBusinessAreaId(kpis);
 
   for (const goal of goalRows) {
     goalCounts.set(
@@ -94,7 +101,7 @@ export async function getBusinessAreas(): Promise<BusinessAreaSummary[]> {
     slug: row.slug,
     name: row.name,
     manager: row.manager ?? "Ej angiven",
-    status: toStatusTone(row.status),
+    status: computeAreaOperationalStatus(kpisByArea.get(row.id) ?? []),
     updatedAt: toDateKey(row.updated_at),
     goalCount: goalCounts.get(row.id) ?? 0,
     activityCount: activityCounts.get(row.id) ?? 0,

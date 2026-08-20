@@ -14,9 +14,16 @@ import {
 import { formatDateTimeSv } from "@/lib/format/date";
 import {
   countTargetKpiStatuses,
-  isTargetKpi,
   type KpiStoredStatus,
 } from "@/lib/kpi/kind";
+import {
+  AREA_STATUS_UNREPORTED,
+  computeAreaOperationalStatus,
+  formatAreaOperationalStatus,
+  groupKpisByBusinessAreaId,
+  reportedTargetStatusTone,
+} from "@/lib/kpi/areaOperationalStatus";
+import { isFollowUpTargetTone } from "@/lib/kpi/reportedTargetKpis";
 import { isExcludedFromVdAttention } from "@/lib/kpi/vdAttentionFilter";
 import {
   buildMonthlyResultState,
@@ -304,12 +311,13 @@ export async function buildAssistantContext(
   const openDecisions = allDecisions.filter(
     (decision) => decision.status !== "Klart",
   );
+  const areasForDisplay = withOperationalAreaStatus(businessAreas, allKpis);
   const areaManagers = new Map(
-    businessAreas.map((area) => [area.id, area.manager?.trim() || "Ej angiven"]),
+    areasForDisplay.map((area) => [area.id, area.manager?.trim() || "Ej angiven"]),
   );
 
   const openDeviations = buildOpenDeviations({
-    areas: businessAreas,
+    areas: areasForDisplay,
     kpis: allKpis,
     goals: allGoals,
     delayedActivities,
@@ -334,7 +342,7 @@ export async function buildAssistantContext(
   });
 
   const analysisInsights = buildAnalysisInsights({
-    areas: businessAreas,
+    areas: areasForDisplay,
     kpis: allKpis,
     goals: allGoals,
     delayedActivities,
@@ -343,7 +351,7 @@ export async function buildAssistantContext(
   });
 
   const trends = buildAssistantTrends({
-    areas: businessAreas,
+    areas: areasForDisplay,
     kpis: allKpis,
     goals: allGoals,
     activities: allActivities,
@@ -361,7 +369,7 @@ export async function buildAssistantContext(
   const responsiblePersons = [
     ...new Set(
       [
-        ...businessAreas.map((area) => area.manager?.trim() || ""),
+        ...areasForDisplay.map((area) => area.manager?.trim() || ""),
         ...allGoals.map((goal) => goal.owner?.trim() || ""),
         ...allActivities.map((activity) => activity.owner?.trim() || ""),
         ...allDecisions.map((decision) => decision.owner?.trim() || ""),
@@ -385,7 +393,7 @@ export async function buildAssistantContext(
     summary: {
       date,
       dateLabel,
-      areaCount: businessAreas.length,
+      areaCount: areasForDisplay.length,
       kpiCounts,
       goalCounts,
       delayedActivityCount: delayedActivities.length,
@@ -397,7 +405,7 @@ export async function buildAssistantContext(
       responsiblePersons,
       firstName: firstNameFromEmail(principal.email),
     },
-    businessAreas,
+    businessAreas: areasForDisplay,
     kpis: allKpis,
     goals: allGoals,
     activities: allActivities,
@@ -1013,10 +1021,7 @@ function isResultBudgetQuestion(q: string): boolean {
 function answerYellowKpis(context: AssistantContext): string {
   const yellow = (context.kpis ?? []).filter(
     (kpi) =>
-      isTargetKpi(kpi) &&
-      !isExcludedFromVdAttention(kpi) &&
-      !kpi.isPeriodPending &&
-      kpi.status === "Gul",
+      isVdFollowUpKpi(kpi) && reportedTargetStatusTone(kpi) === "Gul",
   );
   if (yellow.length === 0) {
     return "Inga KPI:er är gula just nu.";
@@ -1031,13 +1036,7 @@ function answerYellowKpis(context: AssistantContext): string {
 }
 
 function answerFollowUpKpis(context: AssistantContext): string {
-  const follow = (context.kpis ?? []).filter(
-    (kpi) =>
-      isTargetKpi(kpi) &&
-      !isExcludedFromVdAttention(kpi) &&
-      !kpi.isPeriodPending &&
-      (kpi.status === "Gul" || kpi.status === "Röd"),
-  );
+  const follow = (context.kpis ?? []).filter(isVdFollowUpKpi);
   if (follow.length === 0) {
     return "Inga KPI kräver uppföljning just nu.";
   }
@@ -2126,7 +2125,9 @@ function filterContextToArea(
     summary: {
       ...full.summary,
       areaCount: 1,
-      kpiCounts: countTargetKpiStatuses(kpis),
+      kpiCounts: countTargetKpiStatuses(
+        kpis.filter((kpi) => !kpi.isPeriodPending),
+      ),
       goalCounts: countStatuses(goals.map((goal) => goal.status)),
       delayedActivityCount: delayedFirst.filter(isDelayedActivity).length,
       openDecisionCount: decisions.length,
@@ -2155,12 +2156,7 @@ function filterContextToArea(
 
 function slimBroadContext(full: AssistantContext): AssistantContext {
   const followKpis = sortFollowUpFirst(
-    (full.kpis ?? []).filter(
-      (kpi) =>
-        isTargetKpi(kpi) &&
-        !isExcludedFromVdAttention(kpi) &&
-        (kpi.status === "Röd" || kpi.status === "Gul"),
-    ),
+    (full.kpis ?? []).filter(isVdFollowUpKpi),
   ).slice(0, 12);
   const monthlyResults = (full.kpis ?? []).filter(
     (kpi) => isMonthlyEconomicResultKpi(kpi) && !kpi.isPeriodPending,
@@ -3166,6 +3162,27 @@ function findKpiByKeywords(
   );
 }
 
+function withOperationalAreaStatus(
+  areas: BusinessAreaRow[],
+  kpis: KPIListItem[],
+): BusinessAreaRow[] {
+  const byArea = groupKpisByBusinessAreaId(kpis);
+  return areas.map((area) => ({
+    ...area,
+    status: formatAreaOperationalStatus(
+      computeAreaOperationalStatus(byArea.get(area.id) ?? []),
+    ),
+  }));
+}
+
+function isReportedFollowUpKpi(kpi: KPIListItem): boolean {
+  return isFollowUpTargetTone(reportedTargetStatusTone(kpi));
+}
+
+function isVdFollowUpKpi(kpi: KPIListItem): boolean {
+  return isReportedFollowUpKpi(kpi) && !isExcludedFromVdAttention(kpi);
+}
+
 function isFollowUpStatus(
   status: StatusTone | "Statistik" | null | undefined,
 ): boolean {
@@ -3197,10 +3214,12 @@ function buildAnalysisInsights(input: {
     const areaKpis = (input.kpis ?? []).filter(
       (kpi) => kpi.businessAreaId === areaId,
     );
-    const followKpis = areaKpis.filter(
-      (kpi) => !kpi.isPeriodPending && isFollowUpStatus(kpi.status),
-    );
-    if (followKpis.length === 0 && area.status !== "Gul" && area.status !== "Röd") {
+    const followKpis = areaKpis.filter(isReportedFollowUpKpi);
+    if (
+      followKpis.length === 0 &&
+      area.status !== "Gul" &&
+      area.status !== "Röd"
+    ) {
       continue;
     }
 
@@ -3374,8 +3393,14 @@ function buildPriorities(input: {
   const priorities: AssistantPriority[] = [];
 
   const topKpi =
-    input.kpis.find((kpi) => !kpi.isPeriodPending && kpi.status === "Röd") ??
-    input.kpis.find((kpi) => !kpi.isPeriodPending && kpi.status === "Gul") ??
+    input.kpis.find(
+      (kpi) =>
+        isVdFollowUpKpi(kpi) && reportedTargetStatusTone(kpi) === "Röd",
+    ) ??
+    input.kpis.find(
+      (kpi) =>
+        isVdFollowUpKpi(kpi) && reportedTargetStatusTone(kpi) === "Gul",
+    ) ??
     null;
 
   if (topKpi) {
@@ -3504,10 +3529,7 @@ function answerPriority(context: AssistantContext): string {
 function answerRedKpis(context: AssistantContext): string {
   const red = (context.kpis ?? []).filter(
     (kpi) =>
-      isTargetKpi(kpi) &&
-      !kpi.isPeriodPending &&
-      !isExcludedFromVdAttention(kpi) &&
-      kpi.status === "Röd",
+      isVdFollowUpKpi(kpi) && reportedTargetStatusTone(kpi) === "Röd",
   );
   if (red.length === 0) {
     return "Inga KPI är röda just nu.";
@@ -3582,15 +3604,12 @@ function answerAreaStatus(
     (kpi) => kpi.businessAreaId === area.id,
   );
   const followKpis = areaKpis
-    .filter(
-      (kpi) =>
-        isTargetKpi(kpi) &&
-        !kpi.isPeriodPending &&
-        (kpi.status === "Röd" || kpi.status === "Gul"),
-    )
+    .filter(isReportedFollowUpKpi)
     .sort((a, b) => {
-      if (a.status === b.status) return 0;
-      return a.status === "Röd" ? -1 : 1;
+      const aTone = reportedTargetStatusTone(a);
+      const bTone = reportedTargetStatusTone(b);
+      if (aTone === bTone) return 0;
+      return aTone === "Röd" ? -1 : 1;
     });
   const topKpi = followKpis[0] ?? null;
 
@@ -3604,10 +3623,8 @@ function answerAreaStatus(
       (goal.status === "Gul" || goal.status === "Röd"),
   );
 
-  const status =
-    area.status === "Grön" || area.status === "Gul" || area.status === "Röd"
-      ? area.status
-      : "Gul";
+  const operationalStatus = computeAreaOperationalStatus(areaKpis);
+  const status = formatAreaOperationalStatus(operationalStatus);
 
   let lage: string;
   if (topKpi) {
@@ -3616,6 +3633,8 @@ function answerAreaStatus(
     lage = "Relevant KPI-data saknas för området i underlaget.";
   } else if (status === "Grön") {
     lage = "Området ligger enligt plan utifrån tillgängliga KPI.";
+  } else if (status === AREA_STATUS_UNREPORTED) {
+    lage = "Inga relevanta TARGET-KPI är rapporterade för området ännu.";
   } else {
     lage = `Området har status ${status}, men ingen tydlig KPI-avvikelse finns i underlaget.`;
   }

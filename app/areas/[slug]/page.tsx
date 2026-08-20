@@ -6,13 +6,14 @@ import { AreaActivitiesList } from "@/components/areas/AreaActivitiesList";
 import { AreaGoalsList } from "@/components/areas/AreaGoalsList";
 import { AreaHistoryList } from "@/components/areas/AreaHistoryList";
 import { AreaKpiList } from "@/components/areas/AreaKpiList";
+import { AreaOperationalStatusBadge } from "@/components/areas/AreaOperationalStatusBadge";
 import {
   InfoPanel,
   SectionHeader,
-  StatusBadge,
   SummaryCard,
 } from "@/components/ui";
 import { formatDateSv, formatDateTimeSv } from "@/lib/format/date";
+import { computeAreaOperationalStatus } from "@/lib/kpi/areaOperationalStatus";
 import { fetchBusinessAreaBySlug } from "@/lib/supabase/business-areas";
 import { getActivitiesByBusinessAreaId } from "@/services/activities";
 import { getBusinessAreaHistory } from "@/services/auditLog";
@@ -20,18 +21,10 @@ import { getDecisions } from "@/services/decisions";
 import { getGoalsByBusinessAreaId } from "@/services/goals";
 import { getKPIsByBusinessArea } from "@/services/kpis";
 import { enrichKpisForAreaDisplay } from "@/services/kpiOverview";
-import type { StatusTone } from "@/types";
 
 type AreaDetailPageProps = {
   params: Promise<{ slug: string }>;
 };
-
-function toStatusTone(value: string): StatusTone {
-  if (value === "Grön" || value === "Gul" || value === "Röd") {
-    return value;
-  }
-  return "Gul";
-}
 
 export async function generateMetadata({
   params,
@@ -66,7 +59,7 @@ export default async function AreaDetailPage({ params }: AreaDetailPageProps) {
     (decision) => decision.businessAreaId === dbArea.id,
   );
 
-  const totalStatus = toStatusTone(dbArea.status);
+  const totalStatus = computeAreaOperationalStatus(areaKpis);
   const displayName = dbArea.name;
   const displayManager = dbArea.manager ?? "Ej angiven";
   const displayUpdatedAt = dbArea.updated_at;
@@ -92,7 +85,7 @@ export default async function AreaDetailPage({ params }: AreaDetailPageProps) {
                 <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
                   {displayName}
                 </h1>
-                <StatusBadge status={totalStatus} />
+                <AreaOperationalStatusBadge status={totalStatus} />
               </div>
               {displayDescription ? (
                 <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-600 sm:text-[15px]">

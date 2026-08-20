@@ -52,7 +52,8 @@ export type BusinessAreaSummary = {
   slug: string;
   name: string;
   manager: string;
-  status: import("./status").StatusTone;
+  /** Display status from reported TARGET KPIs; null = Ej rapporterat. */
+  status: import("./status").StatusTone | null;
   updatedAt: string;
   goalCount: number;
   activityCount: number;

@@ -1,6 +1,11 @@
 import { parseNumeric } from "@/lib/kpi/parseNumeric";
 import { isExcludedFromVdAttention } from "@/lib/kpi/vdAttentionFilter";
 import {
+  computeAreaOperationalStatus,
+  groupKpisByBusinessAreaId,
+  reportedTargetStatusTone,
+} from "@/lib/kpi/areaOperationalStatus";
+import {
   formatMonthlyEconomicSummary,
   isMonthlyEconomicResultKpi,
   monthlyResultDisplayName,
@@ -181,10 +186,8 @@ export function buildVdAttentionItems(input: {
 
   // 1) Red KPIs
   for (const kpi of input.kpis) {
-    if (kpi.kind !== "TARGET") continue;
-    if (kpi.isPeriodPending) continue;
+    if (reportedTargetStatusTone(kpi) !== "Röd") continue;
     if (isExcludedFromVdAttention(kpi)) continue;
-    if (kpi.status !== "Röd") continue;
     push({
       id: `kpi-red-${kpi.id}`,
       type: "KPI",
@@ -204,10 +207,9 @@ export function buildVdAttentionItems(input: {
 
   // 2) Significant negative KPI deviations (not already covered as red-only)
   for (const kpi of input.kpis) {
-    if (kpi.kind !== "TARGET") continue;
-    if (kpi.isPeriodPending) continue;
+    const tone = reportedTargetStatusTone(kpi);
+    if (tone == null || tone === "Grön") continue;
     if (isExcludedFromVdAttention(kpi)) continue;
-    if (kpi.status === "Grön") continue;
     if (!isSignificantDeviation(kpi)) continue;
     const alreadyRed = seen.has(`kpi-red-${kpi.id}`);
     if (alreadyRed) {
@@ -280,10 +282,8 @@ export function buildVdAttentionItems(input: {
 
   // 5) Yellow KPIs with clear negative trend
   for (const kpi of input.kpis) {
-    if (kpi.kind !== "TARGET") continue;
-    if (kpi.isPeriodPending) continue;
+    if (reportedTargetStatusTone(kpi) !== "Gul" || kpi.trend !== "Ner") continue;
     if (isExcludedFromVdAttention(kpi)) continue;
-    if (kpi.status !== "Gul" || kpi.trend !== "Ner") continue;
     if (seen.has(`kpi-red-${kpi.id}`) || seen.has(`kpi-gap-${kpi.id}`)) {
       continue;
     }
@@ -304,9 +304,12 @@ export function buildVdAttentionItems(input: {
     });
   }
 
-  // 6) Red business areas
+  // 6) Red business areas (from reported TARGET, not stored business_areas.status)
+  const kpisByArea = groupKpisByBusinessAreaId(input.kpis);
   for (const area of input.areas) {
-    if (area.status !== "Röd") continue;
+    if (computeAreaOperationalStatus(kpisByArea.get(area.id) ?? []) !== "Röd") {
+      continue;
+    }
     push({
       id: `area-red-${area.id}`,
       type: "Affärsområde",

@@ -1,6 +1,12 @@
--- Mark & Anläggning: calculate Sjukfrånvaro cumulatively for the current
--- calendar month as SUM(active Sjuktimmar) / SUM(active Ordinarie arbetstid).
--- Other business areas keep their existing daily RATIO_PERCENT model.
+-- Forward-only reconciliation after 20260818250000.
+-- 20260818240000 was never applied to the linked hosted database and was
+-- retired locally so a normal migration push cannot apply its stale constraint.
+--
+-- Scope: reconcile the latest KPI constraints, extend the reusable MTD
+-- recalculation function, and configure only active Mark & Anläggning
+-- Sjukfrånvaro. No history is backfilled, archived, or deleted.
+
+begin;
 
 alter table public.kpis
   drop constraint if exists kpis_calc_operator_check;
@@ -18,6 +24,8 @@ alter table public.kpis
     )
   );
 
+-- Preserve the complete post-20260818250000 model, including Lager TARGET
+-- SUM_DIVIDE's forward-only effective date.
 alter table public.kpis
   drop constraint if exists kpis_calc_fields_consistency;
 alter table public.kpis
@@ -62,6 +70,16 @@ alter table public.kpis
     )
     or (
       kpi_kind = 'TARGET'
+      and calc_operator = 'SUM_DIVIDE'
+      and calc_numerator_kpi_id is null
+      and calc_denominator_kpi_id is not null
+      and calc_denominator_kpi_id <> id
+      and direction is not null
+      and target_value is not null
+      and calc_effective_from is not null
+    )
+    or (
+      kpi_kind = 'TARGET'
       and calc_operator = 'WEIGHTED_RATIO_PERCENT'
       and calc_numerator_kpi_id is null
       and calc_denominator_kpi_id is null
@@ -77,11 +95,10 @@ alter table public.kpis
   );
 
 comment on column public.kpis.calc_operator is
-  'CALCULATED: DIVIDE, SUM_DIVIDE, MONTH_TO_DATE_SUM. Computed TARGET: RATIO_PERCENT, MONTH_TO_DATE_RATIO_PERCENT, WEIGHTED_RATIO_PERCENT.';
+  'CALCULATED: DIVIDE, SUM_DIVIDE, MONTH_TO_DATE_SUM. Computed TARGET: RATIO_PERCENT, MONTH_TO_DATE_RATIO_PERCENT, SUM_DIVIDE, WEIGHTED_RATIO_PERCENT.';
 
--- Extend the existing MTD recalculation entry point. The trigger installed by
--- 20260818220000 calls this function after source inserts and after value,
--- report_date, or archived_at changes.
+-- The trigger from 20260818220000 continues to call this entry point after
+-- source inserts and value, report_date, or archived_at updates.
 create or replace function public.recalculate_month_to_date_kpis(
   p_input_kpi_id uuid,
   p_changed_date date,
@@ -113,7 +130,6 @@ begin
   for v_calc in
     select
       c.id,
-      c.kpi_kind,
       c.calc_operator,
       c.calc_numerator_kpi_id,
       c.calc_denominator_kpi_id,
@@ -140,6 +156,9 @@ begin
         )
       )
   loop
+    -- DATE values are business report dates. Bound all propagation to the
+    -- changed date's calendar month; the deployment guard below intentionally
+    -- performs no historical/current-month write.
     for v_date in
       select distinct d.report_date
       from (
@@ -249,46 +268,79 @@ end;
 $$;
 
 comment on function public.recalculate_month_to_date_kpis(uuid, date, uuid) is
-  'Recomputes MONTH_TO_DATE_SUM and MONTH_TO_DATE_RATIO_PERCENT from active source rows; updates the changed date and later source dates in the same month.';
+  'Recomputes MONTH_TO_DATE_SUM and MONTH_TO_DATE_RATIO_PERCENT from active source rows within a calendar month; updates the changed date and later source dates in that month.';
 
 do $$
 declare
+  v_area_ids uuid[];
+  v_sick_ratio_ids uuid[];
   v_area_id uuid;
   v_sick_ratio_id uuid;
   v_numerator_id uuid;
   v_denominator_id uuid;
-  v_first_report_date date;
-  v_stockholm_today date := (now() at time zone 'Europe/Stockholm')::date;
 begin
-  select ba.id
-  into v_area_id
+  select array_agg(ba.id order by ba.id)
+  into v_area_ids
   from public.business_areas ba
-  where ba.slug = 'mark-anlaggning'
-  limit 1;
+  where ba.slug = 'mark-anlaggning';
 
-  if v_area_id is null then
-    raise exception 'Mark & Anläggning business area not found';
+  if coalesce(cardinality(v_area_ids), 0) <> 1 then
+    raise exception 'Expected exactly one Mark & Anläggning business area';
   end if;
+  v_area_id := v_area_ids[1];
 
-  select
-    k.id,
-    k.calc_numerator_kpi_id,
-    k.calc_denominator_kpi_id
-  into
-    v_sick_ratio_id,
-    v_numerator_id,
-    v_denominator_id
+  select array_agg(k.id order by k.id)
+  into v_sick_ratio_ids
   from public.kpis k
   where k.business_area_id = v_area_id
     and k.name = 'Sjukfrånvaro'
     and k.kpi_kind = 'TARGET'
-    and k.archived_at is null
-  limit 1;
+    and k.archived_at is null;
 
-  if v_sick_ratio_id is null
-     or v_numerator_id is null
-     or v_denominator_id is null then
-    raise exception 'Active Mark & Anläggning Sjukfrånvaro inputs not found';
+  if coalesce(cardinality(v_sick_ratio_ids), 0) <> 1 then
+    raise exception 'Expected exactly one active Mark & Anläggning Sjukfrånvaro TARGET';
+  end if;
+  v_sick_ratio_id := v_sick_ratio_ids[1];
+
+  select k.calc_numerator_kpi_id, k.calc_denominator_kpi_id
+  into v_numerator_id, v_denominator_id
+  from public.kpis k
+  where k.id = v_sick_ratio_id
+    and k.calc_operator in (
+      'RATIO_PERCENT',
+      'MONTH_TO_DATE_RATIO_PERCENT'
+    );
+
+  if v_numerator_id is null
+     or v_denominator_id is null
+     or v_numerator_id = v_denominator_id then
+    raise exception 'Mark Sjukfrånvaro must retain distinct ratio source IDs';
+  end if;
+
+  if not exists (
+    select 1
+    from public.kpis k
+    where k.id = v_numerator_id
+      and k.business_area_id = v_area_id
+      and k.name = 'Sjuktimmar'
+      and k.kpi_kind = 'STATISTIC'
+      and k.calc_operator is null
+      and k.archived_at is null
+  ) then
+    raise exception 'Expected active Mark Sjuktimmar STATISTIC numerator';
+  end if;
+
+  if not exists (
+    select 1
+    from public.kpis k
+    where k.id = v_denominator_id
+      and k.business_area_id = v_area_id
+      and k.name = 'Ordinarie arbetstid'
+      and k.kpi_kind = 'STATISTIC'
+      and k.calc_operator is null
+      and k.archived_at is null
+  ) then
+    raise exception 'Expected active Mark Ordinarie arbetstid STATISTIC denominator';
   end if;
 
   update public.kpis
@@ -302,23 +354,24 @@ begin
       reporting_frequency = 'DAILY',
       ratio_reporting_mode = 'SEPARATE_INPUTS',
       updated_at = now()
-  where id = v_sick_ratio_id;
-
-  select min(h.report_date)
-  into v_first_report_date
-  from public.kpi_history h
-  where h.kpi_id in (v_numerator_id, v_denominator_id)
-    and h.report_date >= date_trunc('month', v_stockholm_today)::date
-    and h.report_date < (
-      date_trunc('month', v_stockholm_today) + interval '1 month'
-    )::date;
-
-  if v_first_report_date is not null then
-    perform public.recalculate_month_to_date_kpis(
-      v_numerator_id,
-      v_first_report_date,
-      null
+  where id = v_sick_ratio_id
+    and (
+      calc_operator is distinct from 'MONTH_TO_DATE_RATIO_PERCENT'
+      or target_value is distinct from '3'
+      or unit is distinct from '%'
+      or direction is distinct from 'LOWER_IS_BETTER'
+      or tolerance_type is distinct from 'ABSOLUTE'
+      or green_tolerance is not null
+      or yellow_tolerance is distinct from 1
+      or reporting_frequency is distinct from 'DAILY'
+      or ratio_reporting_mode is distinct from 'SEPARATE_INPUTS'
     );
-  end if;
+
+  -- Deliberately no deployment-time backfill. Existing KPI history is
+  -- immutable, including earlier months and existing current-month results.
+  -- Future source inserts/updates invoke the existing trigger and recompute
+  -- only the changed date plus later source dates in that calendar month.
 end;
 $$;
+
+commit;

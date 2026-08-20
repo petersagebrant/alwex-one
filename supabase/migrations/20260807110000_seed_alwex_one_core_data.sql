@@ -314,7 +314,7 @@ from (
       'kyl-frys',
       'Leveransprecision',
       'Kvalitet',
-      '97',
+      '99,0',
       '99,4',
       '%',
       'Grön',

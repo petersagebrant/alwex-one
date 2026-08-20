@@ -1,15 +1,15 @@
-# Datamodell — Alwex One
+# Datamodell — LEIR
 
 | Fält | Värde |
 | --- | --- |
-| Produkt | Alwex One |
+| Produkt | LEIR |
 | Dokument | `docs/DataModel.md` |
 | Relaterat | `docs/SystemSpecification.md`, `docs/ProductBacklog.md` |
 | Status | Konceptuell modell (ingen databas ännu) |
 | Version | 0.1 |
 | Senast uppdaterad | 2026-08-05 |
 
-Detta dokument beskriver den logiska datamodellen för Alwex One. Det skapar ingen databas och ändrar ingen programkod. Svenska begrepp används i texten; föreslagna engelska **tabellnamn** anges för framtida implementation.
+Detta dokument beskriver den logiska datamodellen för LEIR. Det skapar ingen databas och ändrar ingen programkod. Svenska begrepp används i texten; föreslagna engelska **tabellnamn** anges för framtida implementation.
 
 ---
 
@@ -43,7 +43,7 @@ Följande fält föreslås där det är relevant på de flesta entiteter:
 **Tabellnamn:** `organizations`
 
 ### Syfte
-Representerar koncernen eller den översta organisatoriska enheten som äger Alwex One-instansen (t.ex. Alwex-koncernen).
+Representerar koncernen eller den översta organisatoriska enheten som äger LEIR-instansen (t.ex. Alwex-koncernen).
 
 ### Viktigaste fält
 - `id`

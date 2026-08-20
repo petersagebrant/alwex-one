@@ -1,18 +1,20 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { signInAction } from "./actions";
 
 export const metadata: Metadata = {
-  title: "Logga in | Alwex One",
-  description: "Logga in till Alwex One",
+  title: "Logga in | LEIR",
+  description: "Logga in till LEIR",
 };
 
 type LoginPageProps = {
-  searchParams: Promise<{ error?: string; next?: string }>;
+  searchParams: Promise<{ error?: string; next?: string; message?: string }>;
 };
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = await searchParams;
   const error = params.error;
+  const message = params.message;
   const next = params.next?.startsWith("/") ? params.next : "/";
 
   return (
@@ -20,7 +22,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       <div className="w-full max-w-md rounded-xl border border-neutral-200 bg-white p-6 shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-8">
         <div className="mb-6">
           <p className="text-[13px] font-semibold tracking-[0.08em] text-neutral-900 uppercase">
-            Alwex One
+            LEIR
           </p>
           <h1 className="mt-3 text-2xl font-semibold tracking-tight text-neutral-900">
             Logga in
@@ -29,6 +31,12 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             Använd ditt Supabase-konto för att fortsätta.
           </p>
         </div>
+
+        {message ? (
+          <p className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+            {message}
+          </p>
+        ) : null}
 
         {error ? (
           <p className="mb-5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
@@ -57,12 +65,20 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           </div>
 
           <div>
-            <label
-              htmlFor="password"
-              className="block text-xs font-medium text-neutral-500"
-            >
-              Lösenord
-            </label>
+            <div className="flex items-center justify-between gap-3">
+              <label
+                htmlFor="password"
+                className="block text-xs font-medium text-neutral-500"
+              >
+                Lösenord
+              </label>
+              <Link
+                href="/auth/forgot-password"
+                className="text-xs font-medium text-neutral-600 underline-offset-2 hover:text-neutral-900 hover:underline"
+              >
+                Glömt lösenord?
+              </Link>
+            </div>
             <input
               id="password"
               name="password"

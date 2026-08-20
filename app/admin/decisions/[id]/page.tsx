@@ -29,8 +29,8 @@ export async function generateMetadata({
   const decision = await getDecisionById(id).catch(() => null);
   return {
     title: decision
-      ? `${decision.title} | Beslut | Alwex One`
-      : "Beslut | Alwex One",
+      ? `${decision.title} | Beslut | LEIR`
+      : "Beslut | LEIR",
     description: "Beslutsdetalj",
   };
 }

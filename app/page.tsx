@@ -1,5 +1,9 @@
 import Link from "next/link";
 import { AppHeader } from "@/components/layout/AppHeader";
+import { AoChefDashboard } from "@/components/dashboard/AoChefDashboard";
+import { KpiOverviewSection } from "@/components/dashboard/KpiOverviewSection";
+import { VdAttentionList } from "@/components/dashboard/VdAttentionList";
+import { VdBriefingPanel } from "@/components/dashboard/VdBriefingPanel";
 import { VdDiaryTimeline } from "../components/dashboard/VdDiaryTimeline";
 import {
   InfoPanel,
@@ -8,8 +12,18 @@ import {
   SummaryCard,
   type UiStatus,
 } from "@/components/ui";
+import {
+  buildLocalVdBriefing,
+  getCachedVdBriefing,
+} from "@/services/assistant";
+import { getAoChefDashboardData } from "@/services/aoChefDashboard";
 import { getDashboardData } from "@/services/dashboard";
 import { getKPIs } from "@/services/kpis";
+import { getKpiOverviewData } from "@/services/kpiOverview";
+import { getDashboardReportingContext } from "@/services/kpiReporting";
+import { countTargetKpiStatuses } from "@/lib/kpi/kind";
+import { getCurrentUser } from "@/lib/auth/require-user";
+import { fetchProfileByUserId } from "@/lib/supabase/profiles";
 import { formatDateTimeSv } from "@/lib/format/date";
 import type { StatusTone } from "@/types";
 
@@ -27,14 +41,12 @@ function toUiStatus(status: StatusTone): UiStatus {
   return status;
 }
 
-function formatKpiValue(
-  value: string | null | undefined,
-  unit: string | null | undefined,
-): string {
-  if (!value) {
-    return "—";
-  }
-  return unit ? `${value} ${unit}` : value;
+function yesterdayChangeDot(tone: string): string {
+  if (tone === "red") return "bg-rose-500";
+  if (tone === "yellow") return "bg-amber-400";
+  if (tone === "green") return "bg-emerald-500";
+  if (tone === "blue") return "bg-sky-500";
+  return "bg-slate-400";
 }
 
 function yesterdayChangeIconClass(text: string): string {
@@ -51,9 +63,58 @@ function yesterdayChangeIconClass(text: string): string {
 }
 
 export default async function Home() {
-  const [data, kpiDetails] = await Promise.all([
+  const currentUser = await getCurrentUser().catch(() => null);
+  const profileRow = currentUser
+    ? await fetchProfileByUserId(currentUser.id).catch(() => null)
+    : null;
+  const vdPrincipal =
+    currentUser && profileRow?.role === "vd"
+      ? {
+          userId: currentUser.id,
+          email: currentUser.email,
+          role: "vd" as const,
+          scope: "organization" as const,
+          businessAreaId: null,
+        }
+      : null;
+
+  // AO-chef: fully separate, area-scoped dashboard. VD/admin path below unchanged.
+  if (
+    profileRow?.role === "ao_chef" &&
+    profileRow.business_area_id
+  ) {
+    const aoData = await getAoChefDashboardData({
+      id: currentUser!.id,
+      email: currentUser!.email,
+      role: "ao_chef",
+      businessAreaId: profileRow.business_area_id,
+    });
+    return <AoChefDashboard data={aoData} />;
+  }
+
+  const [data, kpiDetails, reportingContext, kpiOverview] = await Promise.all([
     getDashboardData(),
     getKPIs().catch(() => []),
+    profileRow
+      ? getDashboardReportingContext({
+          role: profileRow.role,
+          businessAreaId: profileRow.business_area_id,
+        }).catch(() => ({
+          kind: "none" as const,
+          myReporting: null,
+          orgStats: null,
+        }))
+      : Promise.resolve({
+          kind: "none" as const,
+          myReporting: null,
+          orgStats: null,
+        }),
+    getKpiOverviewData().catch(() => ({
+      reportDate: "",
+      orgStatusCounts: { Grön: 0, Gul: 0, Röd: 0 },
+      alwexTotalt: null,
+      areas: [],
+    })),
   ]);
   const kpis = data?.kpis ?? [];
   const businessAreas = data?.businessAreas ?? [];
@@ -72,12 +133,17 @@ export default async function Home() {
     kpis: [],
     delayedActivities: [],
     openDecisions: [],
+    priorityItems: [],
   };
   const sinceLoginChanges = data?.sinceLoginChanges ?? [];
   const vdAssistant = data?.vdAssistant ?? {
     greeting: "",
+    situation: "",
+    priority: "",
+    observations: [] as string[],
+    positiveSummary: "",
+    highlights: [] as string[],
     intro: "",
-    highlights: [],
     recommendation: "",
     riskLevel: "Låg" as const,
     riskLabel: "Låg",
@@ -85,20 +151,7 @@ export default async function Home() {
   };
   const yesterdayChanges = data?.yesterdayChanges ?? [];
   const historyEvents = data?.historyEvents ?? [];
-  const assistantHighlights =
-    vdAssistant.highlights ??
-    (vdAssistant as { situationLines?: string[] }).situationLines ??
-    [];
   const focusKpis = vdFocus.kpis ?? [];
-  const kpiDetailById = new Map(
-    (kpiDetails ?? []).map((kpi) => [kpi.id, kpi]),
-  );
-
-  const vdCardToneClass: Record<string, string> = {
-    red: "!border-rose-200/80 !bg-rose-50/70",
-    yellow: "!border-amber-200/80 !bg-amber-50/70",
-    green: "!border-emerald-200/80 !bg-emerald-50/70",
-  };
 
   const sinceLoginDot: Record<string, string> = {
     red: "bg-rose-500",
@@ -114,38 +167,224 @@ export default async function Home() {
     Låg: "!border-emerald-200/80 !bg-emerald-50/40",
   };
 
+  const cachedAiBriefing = vdPrincipal
+    ? getCachedVdBriefing(vdPrincipal)
+    : null;
+  const firstNameFromGreeting = vdAssistant.greeting?.match(
+    /^God morgon\s+([^!.]+)/i,
+  )?.[1]?.trim();
+  const summaryKpiValue = (id: string) =>
+    Number(kpis.find((kpi) => kpi.id === id)?.value ?? 0) || 0;
+  const localBriefing = buildLocalVdBriefing({
+    firstName: firstNameFromGreeting ?? null,
+    summaryText: vdAssistant.situation?.trim() ?? "",
+    followUpKpis: (focusKpis ?? []).map((kpi) => ({
+      name: kpi?.name ?? "",
+      area: kpi?.area ?? "",
+      status: kpi?.status,
+      owner: kpi?.owner ?? "",
+      monthlyEconomicSummary: kpi?.monthlyEconomicSummary ?? null,
+    })),
+    greenAreaNames: (businessAreas ?? [])
+      .filter((area) => area?.status === "Grön")
+      .map((area) => area?.name ?? "")
+      .filter(Boolean),
+    delayedActivities: (vdFocus.delayedActivities ?? []).map((activity) => ({
+      title: activity?.title ?? "",
+      area: activity?.area ?? "",
+      owner: activity?.owner ?? "",
+      deadline: activity?.deadline ?? "",
+    })),
+    openDecisions: (vdFocus.openDecisions ?? []).map((decision) => ({
+      title: decision?.title ?? "",
+      area: decision?.area ?? "",
+      owner: decision?.owner ?? "",
+      dueDate: decision?.dueDate ?? "",
+    })),
+    actionGoals: (actionGoals ?? []).map((goal) => ({
+      goal: goal?.goal ?? "",
+      area: goal?.area ?? "",
+      owner: goal?.owner ?? "",
+      status: goal?.status,
+    })),
+    delayedActivityCount: vdFocus.summary?.delayedActivityCount ?? 0,
+    openDecisionCount: vdFocus.summary?.openDecisionCount ?? 0,
+    priorityText:
+      vdAssistant.priority?.trim() ||
+      vdAssistant.recommendation?.trim() ||
+      "",
+    positiveSummary: vdAssistant.positiveSummary?.trim() ?? "",
+    counts: {
+      areas: businessAreas?.length ?? 0,
+      kpis: kpiDetails?.length ?? 0,
+      goals: summaryKpiValue("goals"),
+      activities: summaryKpiValue("activities"),
+      decisions: Math.max(
+        vdFocus.summary?.openDecisionCount ?? 0,
+        vdFocus.openDecisions?.length ?? 0,
+        upcomingDecisions?.length ?? 0,
+      ),
+    },
+    analyzedAtLabel:
+      vdAssistant.analyzedAtLabel?.trim() ||
+      formatDateTimeSv(new Date().toISOString()),
+  });
+  const initialBriefing = cachedAiBriefing ?? localBriefing;
+
+  const targetStatusCounts = countTargetKpiStatuses(kpiDetails ?? []);
+  const briefingStats = {
+    areas: businessAreas?.length ?? 0,
+    greenKpis: targetStatusCounts.Grön,
+    yellowKpis: targetStatusCounts.Gul,
+    redKpis: targetStatusCounts.Röd,
+    delayedActivities: vdFocus.summary?.delayedActivityCount ?? 0,
+  };
+
+  const briefingLinkHints = [
+    ...(businessAreas ?? []).map((area) => ({
+      label: area.name,
+      href: `/areas/${area.slug}`,
+      area: area.name,
+    })),
+    ...(focusKpis ?? []).map((kpi) => ({
+      label: kpi.name,
+      href: kpi.href,
+      area: kpi.area,
+    })),
+    ...(actionGoals ?? []).map((goal) => ({
+      label: goal.goal,
+      href: `/admin/goals/${goal.id}`,
+      area: goal.area,
+    })),
+    ...(vdFocus.delayedActivities ?? []).map((activity) => ({
+      label: activity.title,
+      href: activity.href,
+      area: activity.area,
+    })),
+    ...(vdFocus.openDecisions ?? []).map((decision) => ({
+      label: decision.title,
+      href: decision.href,
+      area: decision.area,
+    })),
+    ...(attentionItems ?? []).map((item) => ({
+      label: item.title,
+      href: `/areas/${item.slug}`,
+      area: item.title,
+    })),
+  ].filter((hint) => hint.label && hint.href);
+
   return (
     <div className="flex min-h-full flex-1 flex-col bg-[#eef2f6] font-sans text-slate-800">
       <AppHeader current="home" />
 
       <main className="mx-auto w-full max-w-[1440px] flex-1 space-y-6 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
-        <InfoPanel
-          title="VD-assistent"
-          variant="ai-summary"
-          showLabel={false}
-          compact
-          className={assistantToneClass[vdAssistant.riskLevel]}
-          footer={
-            <p className="text-xs text-slate-500">
-              Senast analyserad{" "}
-              <span className="font-medium text-slate-700">
-                {vdAssistant.analyzedAtLabel}
-              </span>
-            </p>
-          }
-        >
-          <div className="space-y-2">
-            <p className="text-sm text-slate-700">{vdAssistant.greeting}</p>
-            <p className="text-sm text-slate-600">
-              {(assistantHighlights ?? []).length > 0
-                ? (assistantHighlights ?? []).join(" ")
-                : vdAssistant.intro}
-            </p>
-            <p className="text-sm font-semibold text-slate-900">
-              {vdAssistant.recommendation}
-            </p>
-          </div>
-        </InfoPanel>
+        {vdPrincipal ? (
+          <VdBriefingPanel
+            initialContent={initialBriefing}
+            hasAiCache={Boolean(cachedAiBriefing)}
+            stats={briefingStats}
+            linkHints={briefingLinkHints}
+          />
+        ) : null}
+
+        <KpiOverviewSection data={kpiOverview} />
+
+        {reportingContext.kind === "ao_chef" &&
+        reportingContext.myReporting ? (
+          <InfoPanel
+            title="Mina KPI:er idag"
+            showLabel={false}
+            compact
+            className="!border-slate-200/80 !bg-white"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-slate-900">
+                  {reportingContext.myReporting.reportedCount} av{" "}
+                  {reportingContext.myReporting.totalCount} rapporterade
+                </p>
+                <p className="text-sm text-slate-500">
+                  {reportingContext.myReporting.businessAreaName}
+                </p>
+              </div>
+              <Link
+                href="/report/kpis"
+                className="inline-flex items-center rounded-xl bg-[#0b1220] px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+              >
+                {reportingContext.myReporting.reportedCount <
+                reportingContext.myReporting.totalCount
+                  ? "Rapportera KPI"
+                  : "Visa rapporter"}
+              </Link>
+            </div>
+          </InfoPanel>
+        ) : null}
+
+        {reportingContext.kind === "leadership" &&
+        reportingContext.orgStats ? (
+          <Link
+            href="/report/kpis"
+            className="group block rounded-2xl outline-none transition hover:brightness-[0.99] focus-visible:ring-2 focus-visible:ring-slate-300"
+          >
+            <InfoPanel
+              title="KPI-rapportering idag"
+              showLabel={false}
+              compact
+              className="!border-slate-200/80 !bg-white"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-slate-700">
+                  KPI rapporterade idag:{" "}
+                  <span className="font-semibold text-slate-900">
+                    {reportingContext.orgStats.reported} av{" "}
+                    {reportingContext.orgStats.total}
+                  </span>
+                </p>
+                <span className="inline-flex items-center rounded-xl bg-[#0b1220] px-3.5 py-2 text-sm font-semibold text-white transition group-hover:bg-slate-800">
+                  Rapportera KPI
+                </span>
+              </div>
+            </InfoPanel>
+          </Link>
+        ) : null}
+
+        {vdPrincipal ? (
+          <InfoPanel
+            title="VD-assistent"
+            variant="ai-summary"
+            showLabel={false}
+            compact
+            className={assistantToneClass[vdAssistant.riskLevel ?? "Låg"]}
+            footer={
+              <p className="text-xs text-slate-500">
+                Senast analyserad{" "}
+                <span className="font-medium text-slate-700">
+                  {vdAssistant.analyzedAtLabel ?? "—"}
+                </span>
+              </p>
+            }
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="space-y-1">
+                <p className="text-sm text-slate-600">
+                  Risknivå:{" "}
+                  <span className="font-semibold text-slate-900">
+                    {vdAssistant.riskLabel ?? vdAssistant.riskLevel ?? "Låg"}
+                  </span>
+                </p>
+                <p className="text-sm text-slate-500">
+                  Sammanfattningen finns i VD Briefing ovan.
+                </p>
+              </div>
+              <Link
+                href="/assistant"
+                className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
+              >
+                Ställ en fråga
+              </Link>
+            </div>
+          </InfoPanel>
+        ) : null}
 
         <InfoPanel
           title="Vad har förändrats sedan igår?"
@@ -156,27 +395,68 @@ export default async function Home() {
         >
           {(yesterdayChanges ?? []).length === 0 ? (
             <p className="text-sm text-slate-600">
-              Inga förändringar registrerade ännu.
+              Inga väsentliga förändringar sedan igår.
             </p>
           ) : (
             <ul className="divide-y divide-slate-100">
-              {(yesterdayChanges ?? []).map((change) => (
-                <li
-                  key={change.id}
-                  className="flex items-center gap-3 py-2 first:pt-0 last:pb-0"
-                >
-                  <span
-                    aria-hidden
-                    className={`h-2.5 w-2.5 shrink-0 rounded-full ${yesterdayChangeIconClass(change.text)}`}
-                  />
-                  <p className="min-w-0 flex-1 text-sm font-medium text-slate-800">
-                    {change.text}
-                  </p>
-                  <time className="shrink-0 text-xs text-slate-500">
-                    Sedan igår
-                  </time>
-                </li>
-              ))}
+              {(yesterdayChanges ?? []).map((change) => {
+                const body = (
+                  <div className="flex min-w-0 items-start gap-3">
+                    <span
+                      aria-hidden
+                      className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${
+                        yesterdayChangeDot(change.tone) ||
+                        yesterdayChangeIconClass(change.text)
+                      }`}
+                    />
+                    <div className="min-w-0 flex-1">
+                      {change.area ? (
+                        <p className="text-sm font-semibold text-slate-900">
+                          {change.area}
+                        </p>
+                      ) : null}
+                      <p
+                        className={`text-sm text-slate-700 ${
+                          change.area ? "mt-0.5" : "font-medium text-slate-800"
+                        }`}
+                      >
+                        {change.detail || change.text}
+                      </p>
+                      {change.owner ? (
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          Ansvarig: {change.owner}
+                        </p>
+                      ) : null}
+                      <p className="mt-1 text-xs text-slate-500">
+                        {change.occurredAtLabel || "Sedan igår"}
+                      </p>
+                    </div>
+                  </div>
+                );
+
+                return (
+                  <li key={change.id} className="py-3 first:pt-0 last:pb-0">
+                    {change.href ? (
+                      <Link
+                        href={change.href}
+                        className="group block rounded-lg outline-none transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-300"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          {body}
+                          <span
+                            aria-hidden
+                            className="mt-0.5 shrink-0 text-base leading-none text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-slate-500"
+                          >
+                            ›
+                          </span>
+                        </div>
+                      </Link>
+                    ) : (
+                      body
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </InfoPanel>
@@ -193,10 +473,10 @@ export default async function Home() {
 
         <InfoPanel
           title="VD:s uppmärksamhet idag"
-          variant="warning"
+          variant="info"
           showLabel={false}
           compact
-          className={vdCardToneClass[vdFocus.cardTone]}
+          className="!border-slate-200/80 !bg-white"
         >
           <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <div className="rounded-lg border border-slate-200/70 bg-white/80 px-3 py-2">
@@ -229,80 +509,7 @@ export default async function Home() {
             </div>
           </dl>
 
-          {(focusKpis ?? []).length > 0 ? (
-            <div className="mt-4">
-              <SectionHeader title="KPI som kräver uppföljning" />
-              <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
-                {(focusKpis ?? []).map((kpi) => {
-                  const detail = kpiDetailById.get(kpi.id);
-                  return (
-                    <article
-                      key={kpi.id}
-                      className="flex h-full flex-col rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,0.05)]"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <h3 className="text-xl font-semibold tracking-tight text-slate-900">
-                            {kpi.name}
-                          </h3>
-                          <p className="mt-0.5 text-sm text-slate-500">
-                            {kpi.area}
-                          </p>
-                        </div>
-                        <StatusBadge status={toUiStatus(kpi.status)} />
-                      </div>
-
-                      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm text-slate-600">
-                        <div>
-                          <dt className="text-xs text-slate-500">
-                            Aktuellt värde
-                          </dt>
-                          <dd className="mt-0.5 text-base font-semibold text-slate-900">
-                            {formatKpiValue(
-                              detail?.currentValue,
-                              detail?.unit,
-                            )}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt className="text-xs text-slate-500">Målvärde</dt>
-                          <dd className="mt-0.5 text-base font-semibold text-slate-900">
-                            {formatKpiValue(
-                              detail?.targetValue,
-                              detail?.unit,
-                            )}
-                          </dd>
-                        </div>
-                        <div className="flex items-baseline justify-between gap-2 col-span-2 border-t border-slate-100 pt-2">
-                          <dt>Trend</dt>
-                          <dd className="font-medium text-slate-800">
-                            {kpi.trend}
-                          </dd>
-                        </div>
-                        <div className="flex items-baseline justify-between gap-2 col-span-2">
-                          <dt>Ansvarig</dt>
-                          <dd className="font-medium text-slate-800">
-                            {kpi.owner}
-                          </dd>
-                        </div>
-                      </dl>
-
-                      <Link
-                        href={kpi.href}
-                        className="mt-4 inline-flex w-full items-center justify-center rounded-xl bg-[#0b1220] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
-                      >
-                        Öppna KPI
-                      </Link>
-                    </article>
-                  );
-                })}
-              </div>
-            </div>
-          ) : (
-            <p className="mt-4 text-sm text-slate-700">
-              Inga KPI kräver uppföljning just nu.
-            </p>
-          )}
+          <VdAttentionList items={vdFocus.priorityItems ?? []} />
 
           <div className="mt-4 flex flex-wrap gap-2">
             <Link
@@ -372,7 +579,7 @@ export default async function Home() {
 
         <section aria-labelledby="kpi-heading">
           <h2 id="kpi-heading" className="sr-only">
-            Nyckeltal
+            Organisationsnyckeltal
           </h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {(kpis ?? []).map((kpi) => (

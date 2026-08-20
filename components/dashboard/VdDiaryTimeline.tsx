@@ -9,14 +9,6 @@ const toneDotClass: Record<VdDiaryTone, string> = {
   slate: "bg-slate-400",
 };
 
-const toneEmoji: Record<VdDiaryTone, string> = {
-  yellow: "🟡",
-  green: "🟢",
-  blue: "🔵",
-  red: "🔴",
-  slate: "⚪",
-};
-
 type VdDiaryTimelineProps = {
   events: VdDiaryEvent[];
 };
@@ -33,51 +25,68 @@ export function VdDiaryTimeline({ events }: VdDiaryTimelineProps) {
   }
 
   return (
-    <ul className="-mx-4 sm:-mx-4">
-      {items.map((event) => (
-        <li key={event.id} className="border-b border-slate-100 last:border-b-0">
-          <Link
-            href={event.href || "/"}
-            className="grid h-16 cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-4 transition hover:bg-slate-50"
-          >
-            <div className="flex min-w-0 items-start gap-3">
+    <ul className="divide-y divide-slate-100">
+      {items.map((event) => {
+        const body = (
+          <div className="flex min-w-0 items-start gap-3">
+            <span
+              aria-hidden
+              className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${toneDotClass[event.tone] ?? toneDotClass.slate}`}
+            />
+            <div className="min-w-0 flex-1 leading-snug">
+              <p className="text-[11px] font-medium tracking-wide text-slate-500 uppercase">
+                {event.headline}
+              </p>
+              <p className="mt-0.5 text-sm font-semibold text-slate-900">
+                {event.title}
+              </p>
+              {event.changeSummary ? (
+                <p className="mt-0.5 text-sm text-slate-700">
+                  {event.changeSummary}
+                </p>
+              ) : null}
+              <p className="mt-1 text-xs text-slate-500">
+                {event.area}
+                {event.owner && event.owner !== "—" ? (
+                  <>
+                    <span className="mx-1.5 text-slate-300" aria-hidden>
+                      ·
+                    </span>
+                    {event.owner}
+                  </>
+                ) : null}
+                <span className="mx-1.5 text-slate-300" aria-hidden>
+                  ·
+                </span>
+                <time dateTime={event.occurredAt}>{event.occurredAtLabel}</time>
+              </p>
+            </div>
+            {event.href ? (
               <span
                 aria-hidden
-                className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${toneDotClass[event.tone] ?? toneDotClass.slate}`}
-                title={toneEmoji[event.tone] ?? toneEmoji.slate}
-              />
-
-              <div className="min-w-0 leading-tight">
-                <p className="truncate text-[11px] font-medium text-slate-500">
-                  <span aria-hidden className="mr-1">
-                    {toneEmoji[event.tone] ?? toneEmoji.slate}
-                  </span>
-                  {event.headline}
-                </p>
-                <p className="mt-0.5 truncate text-sm font-semibold text-slate-900">
-                  {event.title}
-                </p>
-                <p className="mt-0.5 truncate text-[11px] text-slate-500">
-                  {event.area}
-                  <span className="mx-1.5 text-slate-300" aria-hidden>
-                    •
-                  </span>
-                  {event.owner}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex shrink-0 items-center gap-2">
-              <time className="whitespace-nowrap text-right text-xs text-slate-500">
-                {event.occurredAtLabel}
-              </time>
-              <span aria-hidden className="text-slate-300">
+                className="mt-0.5 shrink-0 text-base leading-none text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-slate-500"
+              >
                 ›
               </span>
-            </div>
-          </Link>
-        </li>
-      ))}
+            ) : null}
+          </div>
+        );
+
+        return (
+          <li key={event.id} className="py-3 first:pt-0 last:pb-0">
+            {event.href ? (
+              <Link
+                href={event.href}
+                className="group block rounded-lg outline-none transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-300"
+              >
+                {body}
+              </Link>
+            ) : (
+              body
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }

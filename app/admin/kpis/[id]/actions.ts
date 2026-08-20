@@ -2,12 +2,13 @@
 
 import { redirect } from "next/navigation";
 import { requireOperationalWriter } from "@/lib/auth/require-user";
+import {
+  isKpiStoredStatus,
+  parseKpiKind,
+  STATISTIC_STATUS,
+} from "@/lib/kpi/kind";
+import { fetchKpiById } from "@/lib/supabase/kpis";
 import { addKPIHistoryEntry } from "@/services/kpiHistory";
-import type { StatusTone } from "@/types";
-
-function isStatus(value: string): value is StatusTone {
-  return value === "Grön" || value === "Gul" || value === "Röd";
-}
 
 export async function addKpiHistoryAction(formData: FormData) {
   await requireOperationalWriter();
@@ -27,7 +28,28 @@ export async function addKpiHistoryAction(formData: FormData) {
     );
   }
 
-  if (!isStatus(statusValue)) {
+  const kpi = await fetchKpiById(kpiId).catch(() => null);
+  if (!kpi) {
+    redirect(
+      `/admin/kpis/${encodeURIComponent(kpiId)}?error=${encodeURIComponent("KPI hittades inte.")}`,
+    );
+  }
+
+  const kind = parseKpiKind(kpi.kpi_kind);
+  if (kind === "CALCULATED" || kpi.calc_operator) {
+    redirect(
+      `/admin/kpis/${encodeURIComponent(kpiId)}?error=${encodeURIComponent("Beräknade KPI:er får endast uppdateras via indata.")}`,
+    );
+  }
+
+  const status =
+    kind === "STATISTIC"
+      ? STATISTIC_STATUS
+      : isKpiStoredStatus(statusValue) && statusValue !== STATISTIC_STATUS
+        ? statusValue
+        : null;
+
+  if (!status) {
     redirect(
       `/admin/kpis/${encodeURIComponent(kpiId)}?error=${encodeURIComponent("Ogiltig status.")}`,
     );
@@ -43,7 +65,7 @@ export async function addKpiHistoryAction(formData: FormData) {
     await addKPIHistoryEntry({
       kpiId,
       value,
-      status: statusValue,
+      status,
       comment,
       recordedAt,
     });

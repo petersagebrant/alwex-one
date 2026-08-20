@@ -1,14 +1,26 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AppHeader } from "@/components/layout/AppHeader";
+import { KpiAdminFormFields } from "@/components/admin/KpiAdminFormFields";
+import { KpiArchiveControls } from "@/components/admin/KpiArchiveControls";
+import { BeraknadTypeBadge } from "@/components/kpis/BeraknadTypeBadge";
+import { StatistikTypeBadge } from "@/components/kpis/StatistikTypeBadge";
 import { StatusBadge } from "@/components/ui";
+import { requireProfile } from "@/lib/auth/require-user";
+import { canManageBusinessAreas } from "@/lib/auth/roles";
+import { isCalculatedKpi, isNonTargetKpi, isStatisticKpi } from "@/lib/kpi/kind";
+import {
+  formatMonthlyEconomicSummary,
+  isMonthlyEconomicResultKpi,
+  monthlyResultDisplayName,
+} from "@/lib/kpi/economics";
 import { getBusinessAreaOptions } from "@/services/businessAreas";
-import { getKPIById, getKPIs } from "@/services/kpis";
+import { getKPIById, getKPIs, isKpiArchived } from "@/services/kpis";
 import type { KPIListItem } from "@/services/kpis";
 import { createKpiAction, updateKpiAction } from "./actions";
 
 export const metadata: Metadata = {
-  title: "Administrera KPI | Alwex One",
+  title: "Administrera KPI | LEIR",
   description: "Lista, skapa och uppdatera nyckeltal",
 };
 
@@ -32,166 +44,6 @@ function TrendBadge({ trend }: { trend: string }) {
   );
 }
 
-function KpiFormFields({
-  areas,
-  kpi,
-}: {
-  areas: { id: string; name: string }[];
-  kpi?: KPIListItem | null;
-}) {
-  return (
-    <>
-      <div>
-        <label
-          htmlFor="businessAreaId"
-          className="block text-xs font-medium text-neutral-500"
-        >
-          Affärsområde
-        </label>
-        <select
-          id="businessAreaId"
-          name="businessAreaId"
-          required
-          defaultValue={kpi?.businessAreaId ?? ""}
-          className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
-        >
-          <option value="" disabled>
-            Välj affärsområde
-          </option>
-          {areas.map((area) => (
-            <option key={area.id} value={area.id}>
-              {area.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div>
-        <label
-          htmlFor="name"
-          className="block text-xs font-medium text-neutral-500"
-        >
-          Namn
-        </label>
-        <input
-          id="name"
-          name="name"
-          type="text"
-          required
-          defaultValue={kpi?.name ?? ""}
-          className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
-        />
-      </div>
-
-      <div>
-        <label
-          htmlFor="category"
-          className="block text-xs font-medium text-neutral-500"
-        >
-          Kategori
-        </label>
-        <input
-          id="category"
-          name="category"
-          type="text"
-          defaultValue={kpi?.category ?? ""}
-          className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
-        />
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div>
-          <label
-            htmlFor="currentValue"
-            className="block text-xs font-medium text-neutral-500"
-          >
-            Nuvarande värde
-          </label>
-          <input
-            id="currentValue"
-            name="currentValue"
-            type="text"
-            defaultValue={kpi?.currentValue ?? ""}
-            className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
-          />
-        </div>
-
-        <div>
-          <label
-            htmlFor="targetValue"
-            className="block text-xs font-medium text-neutral-500"
-          >
-            Målvärde
-          </label>
-          <input
-            id="targetValue"
-            name="targetValue"
-            type="text"
-            defaultValue={kpi?.targetValue ?? ""}
-            className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
-          />
-        </div>
-
-        <div>
-          <label
-            htmlFor="unit"
-            className="block text-xs font-medium text-neutral-500"
-          >
-            Enhet
-          </label>
-          <input
-            id="unit"
-            name="unit"
-            type="text"
-            defaultValue={kpi?.unit ?? ""}
-            className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div>
-          <label
-            htmlFor="status"
-            className="block text-xs font-medium text-neutral-500"
-          >
-            Status
-          </label>
-          <select
-            id="status"
-            name="status"
-            defaultValue={kpi?.status ?? "Gul"}
-            className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
-          >
-            <option value="Grön">Grön</option>
-            <option value="Gul">Gul</option>
-            <option value="Röd">Röd</option>
-          </select>
-        </div>
-
-        <div>
-          <label
-            htmlFor="trend"
-            className="block text-xs font-medium text-neutral-500"
-          >
-            Trend
-          </label>
-          <select
-            id="trend"
-            name="trend"
-            defaultValue={kpi?.trend ?? "Oförändrad"}
-            className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
-          >
-            <option value="Upp">Upp</option>
-            <option value="Oförändrad">Oförändrad</option>
-            <option value="Ner">Ner</option>
-          </select>
-        </div>
-      </div>
-    </>
-  );
-}
-
 export default async function AdminKpisPage({
   searchParams,
 }: AdminKpisPageProps) {
@@ -200,12 +52,17 @@ export default async function AdminKpisPage({
   const editId = params.edit?.trim() || null;
   const error = params.error;
 
+  const profile = await requireProfile();
+  const canArchive = canManageBusinessAreas(profile.role);
+
   const [kpis, areas, editingKpi] = await Promise.all([
-    getKPIs().catch(() => [] as KPIListItem[]),
+    getKPIs({ includeArchived: canArchive }).catch(() => [] as KPIListItem[]),
     getBusinessAreaOptions(),
     editId ? getKPIById(editId).catch(() => null) : Promise.resolve(null),
   ]);
 
+  const activeKpis = kpis.filter((kpi) => !isKpiArchived(kpi));
+  const archivedKpis = kpis.filter((kpi) => isKpiArchived(kpi));
   const showEdit = Boolean(editId && editingKpi);
 
   return (
@@ -226,7 +83,10 @@ export default async function AdminKpisPage({
               Administrera KPI
             </h1>
             <p className="mt-1 text-sm text-neutral-500">
-              {kpis.length} KPI i databasen
+              {activeKpis.length} aktiva
+              {canArchive && archivedKpis.length > 0
+                ? ` · ${archivedKpis.length} arkiverade`
+                : null}
             </p>
           </div>
 
@@ -260,7 +120,15 @@ export default async function AdminKpisPage({
             ) : null}
 
             <div className="mt-4 space-y-4">
-              <KpiFormFields areas={areas} />
+              <KpiAdminFormFields
+                areas={areas}
+                kpis={activeKpis.map((item) => ({
+                  id: item.id,
+                  name: item.name,
+                  businessAreaId: item.businessAreaId,
+                  kind: item.kind,
+                }))}
+              />
             </div>
 
             <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -287,6 +155,12 @@ export default async function AdminKpisPage({
           >
             <input type="hidden" name="id" value={editingKpi.id} />
             <h2 className="text-sm font-semibold text-neutral-900">Ändra KPI</h2>
+            {isKpiArchived(editingKpi) ? (
+              <p className="mt-2 text-sm text-amber-800">
+                Denna KPI är arkiverad. Historik behålls; återaktivera för att
+                använda den i rapportering igen.
+              </p>
+            ) : null}
 
             {error ? (
               <p className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
@@ -295,7 +169,16 @@ export default async function AdminKpisPage({
             ) : null}
 
             <div className="mt-4 space-y-4">
-              <KpiFormFields areas={areas} kpi={editingKpi} />
+              <KpiAdminFormFields
+                areas={areas}
+                kpi={editingKpi}
+                kpis={activeKpis.map((item) => ({
+                  id: item.id,
+                  name: item.name,
+                  businessAreaId: item.businessAreaId,
+                  kind: item.kind,
+                }))}
+              />
             </div>
 
             <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -321,51 +204,123 @@ export default async function AdminKpisPage({
           </p>
         ) : null}
 
-        <section className="rounded-xl border border-neutral-200 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-          <div className="border-b border-neutral-200 px-5 py-4">
-            <h2 className="text-sm font-semibold text-neutral-900">Alla KPI</h2>
-          </div>
+        <KpiAdminListSection
+          title="Aktiva KPI"
+          kpis={activeKpis}
+          canArchive={canArchive}
+          emptyText="Inga aktiva KPI registrerade ännu."
+        />
 
-          {kpis.length === 0 ? (
-            <p className="px-5 py-8 text-sm text-neutral-500">
-              Inga KPI registrerade ännu.
-            </p>
-          ) : (
-            <ul className="divide-y divide-neutral-100">
-              {kpis.map((kpi) => (
-                <li key={kpi.id}>
-                  <Link
-                    href={`/admin/kpis/${kpi.id}`}
-                    className="block cursor-pointer px-5 py-4 transition hover:bg-neutral-50 hover:shadow-[inset_3px_0_0_0_#111827]"
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="font-medium text-neutral-900">
-                          {kpi.name}
-                        </p>
-                        <p className="mt-1 text-xs text-neutral-500">
-                          {kpi.businessAreaName}
-                          {kpi.category ? ` · ${kpi.category}` : null}
-                          {kpi.currentValue
-                            ? ` · ${kpi.currentValue}${kpi.unit ? ` ${kpi.unit}` : ""}`
-                            : null}
-                          {kpi.targetValue
-                            ? ` · Mål ${kpi.targetValue}${kpi.unit ? ` ${kpi.unit}` : ""}`
-                            : null}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <StatusBadge status={kpi.status} />
-                        <TrendBadge trend={kpi.trend} />
-                      </div>
-                    </div>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        {canArchive && archivedKpis.length > 0 ? (
+          <KpiAdminListSection
+            title="Arkiverade KPI"
+            kpis={archivedKpis}
+            canArchive={canArchive}
+            emptyText="Inga arkiverade KPI."
+          />
+        ) : null}
       </main>
     </div>
+  );
+}
+
+function KpiAdminListSection({
+  title,
+  kpis,
+  canArchive,
+  emptyText,
+}: {
+  title: string;
+  kpis: KPIListItem[];
+  canArchive: boolean;
+  emptyText: string;
+}) {
+  return (
+    <section className="rounded-xl border border-neutral-200 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+      <div className="border-b border-neutral-200 px-5 py-4">
+        <h2 className="text-sm font-semibold text-neutral-900">{title}</h2>
+      </div>
+
+      {kpis.length === 0 ? (
+        <p className="px-5 py-8 text-sm text-neutral-500">{emptyText}</p>
+      ) : (
+        <ul className="divide-y divide-neutral-100">
+          {kpis.map((kpi) => {
+            const archived = isKpiArchived(kpi);
+            return (
+              <li key={kpi.id} className="px-5 py-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <Link
+                    href={`/admin/kpis/${kpi.id}`}
+                    className="min-w-0 flex-1 transition hover:opacity-90"
+                  >
+                    <p className="font-medium text-neutral-900">
+                      {isMonthlyEconomicResultKpi(kpi)
+                        ? monthlyResultDisplayName(kpi.name, kpi.latestPeriodMonth)
+                        : kpi.name}
+                      {archived ? (
+                        <span className="ml-2 text-xs font-semibold text-neutral-500">
+                          Arkiverad
+                        </span>
+                      ) : null}
+                    </p>
+                    <p className="mt-1 text-xs text-neutral-500">
+                      {kpi.businessAreaName}
+                      {kpi.category ? ` · ${kpi.category}` : null}
+                      {isStatisticKpi(kpi)
+                        ? " · Typ: Statistik"
+                        : isCalculatedKpi(kpi)
+                          ? " · Typ: Beräknad"
+                          : null}
+                      {isMonthlyEconomicResultKpi(kpi)
+                        ? ` · ${formatMonthlyEconomicSummary({
+                            actualValue: kpi.latestActualValue,
+                            budgetValue: kpi.latestBudgetValue,
+                            deviationValue: kpi.currentValue,
+                            unit: kpi.unit,
+                            periodMonth: kpi.latestPeriodMonth,
+                            status: kpi.isPeriodPending ? null : kpi.status,
+                          })}`
+                        : kpi.currentValue
+                        ? ` · ${kpi.currentValue}${kpi.unit ? ` ${kpi.unit}` : ""}`
+                        : null}
+                      {!isNonTargetKpi(kpi) &&
+                      !isMonthlyEconomicResultKpi(kpi) &&
+                      kpi.targetValue
+                        ? ` · Mål ${kpi.targetValue}${kpi.unit ? ` ${kpi.unit}` : ""}`
+                        : null}
+                    </p>
+                  </Link>
+                  <div className="flex flex-col items-end gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {kpi.isPeriodPending ? (
+                        <span className="rounded-md bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+                          Inväntar bokslut
+                        </span>
+                      ) : isStatisticKpi(kpi) ? (
+                        <StatistikTypeBadge />
+                      ) : isCalculatedKpi(kpi) ? (
+                        <BeraknadTypeBadge />
+                      ) : kpi.status !== "Statistik" ? (
+                        <StatusBadge status={kpi.status} />
+                      ) : null}
+                      <TrendBadge trend={kpi.trend} />
+                    </div>
+                    {canArchive ? (
+                      <KpiArchiveControls
+                        kpiId={kpi.id}
+                        kpiName={kpi.name}
+                        businessAreaName={kpi.businessAreaName}
+                        archived={archived}
+                      />
+                    ) : null}
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }

@@ -1,6 +1,8 @@
+import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { getCurrentUser } from "@/lib/auth/require-user";
+import { fetchProfileByUserId } from "@/lib/supabase/profiles";
 import { signOutAction } from "@/app/login/actions";
 
 export type AppNavKey =
@@ -9,7 +11,8 @@ export type AppNavKey =
   | "goals"
   | "activities"
   | "decisions"
-  | "kpis";
+  | "kpis"
+  | "assistant";
 
 type AppHeaderProps = {
   current?: AppNavKey;
@@ -21,7 +24,8 @@ const navItems: { key: AppNavKey; href: string; label: string }[] = [
   { key: "goals", href: "/admin/goals", label: "Mål" },
   { key: "activities", href: "/admin/activities", label: "Aktiviteter" },
   { key: "decisions", href: "/admin/decisions", label: "Beslut" },
-  { key: "kpis", href: "/admin/kpis", label: "KPI" },
+  { key: "kpis", href: "/report/kpis", label: "KPI" },
+  { key: "assistant", href: "/assistant", label: "AI-assistent" },
 ];
 
 function initialsFromEmail(email: string | null): string {
@@ -38,27 +42,38 @@ function initialsFromEmail(email: string | null): string {
 
 export async function AppHeader({ current = "home" }: AppHeaderProps) {
   const user = await getCurrentUser();
+  const profile = user
+    ? await fetchProfileByUserId(user.id).catch(() => null)
+    : null;
   const label = user?.email ?? "Ej inloggad";
   const initials = initialsFromEmail(user?.email ?? null);
+  const visibleNavItems = navItems.filter(
+    (item) =>
+      item.key !== "assistant" ||
+      profile?.role === "vd" ||
+      (profile?.role === "ao_chef" && Boolean(profile.business_area_id)),
+  );
 
   return (
     <header className="sticky top-0 z-30 border-b border-[#1f2430] bg-[#111827] text-white">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:gap-4 lg:px-8 lg:py-0 lg:h-14">
         <div className="flex min-w-0 flex-1 flex-col gap-3 lg:flex-row lg:items-center lg:gap-6">
-          <Link href="/" className="min-w-0 shrink-0">
-            <p className="text-[13px] font-semibold tracking-[0.08em] text-white uppercase">
-              Alwex One
-            </p>
-            <p className="truncate text-xs text-slate-400">
-              Målbild och verksamhetsuppföljning
-            </p>
+          <Link href="/" className="inline-flex shrink-0 items-center">
+            <Image
+              src="/leir-logo.png"
+              alt="LEIR"
+              width={113}
+              height={40}
+              className="h-9 w-auto"
+              fetchPriority="high"
+            />
           </Link>
 
           <nav
             aria-label="Huvudnavigation"
             className="-mx-1 flex items-center gap-1 overflow-x-auto px-1 pb-0.5 lg:pb-0"
           >
-            {navItems.map((item) => (
+            {visibleNavItems.map((item) => (
               <NavLink
                 key={item.key}
                 href={item.href}

@@ -1,4 +1,7 @@
-import { fetchBusinessAreas } from "@/lib/supabase/business-areas";
+import {
+  fetchBusinessAreaById,
+  fetchBusinessAreas,
+} from "@/lib/supabase/business-areas";
 import {
   fetchActivitiesByBusinessAreaId,
   fetchActivitiesByGoalId,
@@ -7,8 +10,18 @@ import {
   insertActivity,
   updateActivityRow,
 } from "@/lib/supabase/activities";
-import { fetchAllGoals } from "@/lib/supabase/goals";
+import {
+  fetchAllGoals,
+  fetchGoalsByBusinessAreaId,
+} from "@/lib/supabase/goals";
 import { recordAuditLog } from "@/services/auditLog";
+import {
+  collectFieldChanges,
+  formatEntityChangeDescription,
+  formatEntityCreateDescription,
+  resolveActorName,
+  snapshotCreateChanges,
+} from "@/services/changeHistory";
 import type {
   Activity,
   ActivityPriority,
@@ -18,6 +31,18 @@ import type {
 } from "@/types";
 
 const DEFAULT_ACTOR = "Peter Sagebrant";
+
+const ACTIVITY_TRACKED_FIELDS = [
+  "title",
+  "description",
+  "owner",
+  "status",
+  "priority",
+  "deadline",
+  "completed_at",
+  "business_area_id",
+  "goal_id",
+] as const;
 
 function toStatus(value: string): ActivityStatus {
   if (
@@ -73,11 +98,21 @@ export type ActivityListItem = Activity & {
   goalTitle: string | null;
 };
 
-export async function getActivities(): Promise<ActivityListItem[]> {
+export async function getActivities(options?: {
+  businessAreaId?: string;
+}): Promise<ActivityListItem[]> {
   const [rows, areas, goals] = await Promise.all([
-    fetchAllActivities(),
-    fetchBusinessAreas(),
-    fetchAllGoals(),
+    options?.businessAreaId
+      ? fetchActivitiesByBusinessAreaId(options.businessAreaId)
+      : fetchAllActivities(),
+    options?.businessAreaId
+      ? fetchBusinessAreaById(options.businessAreaId).then((area) =>
+          area ? [area] : [],
+        )
+      : fetchBusinessAreas(),
+    options?.businessAreaId
+      ? fetchGoalsByBusinessAreaId(options.businessAreaId)
+      : fetchAllGoals(),
   ]);
 
   const areaNames = new Map(areas.map((area) => [area.id, area.name]));
@@ -119,7 +154,7 @@ export async function createActivity(
   const completedAt =
     input.status === "Klar" ? new Date().toISOString() : null;
 
-  const row = await insertActivity({
+  const payload = {
     business_area_id: input.businessAreaId,
     goal_id: input.goalId || null,
     title,
@@ -129,15 +164,22 @@ export async function createActivity(
     priority: input.priority,
     deadline: input.deadline || null,
     completed_at: completedAt,
-  });
+  };
 
+  const row = await insertActivity(payload);
+
+  const createChanges = snapshotCreateChanges(payload, ACTIVITY_TRACKED_FIELDS);
+  const actorName = await resolveActorName(
+    input.owner?.trim() || DEFAULT_ACTOR,
+  );
   await recordAuditLog({
     entityType: "activity",
     entityId: row.id,
     action: "created",
-    description: `Skapade aktiviteten "${row.title}"`,
-    actorName: input.owner?.trim() || DEFAULT_ACTOR,
+    description: formatEntityCreateDescription("aktiviteten", row.title),
+    actorName,
     businessAreaId: row.business_area_id,
+    changes: createChanges.length > 0 ? { fields: createChanges } : null,
   });
 
   return mapActivityRow(row);
@@ -183,12 +225,16 @@ export async function updateActivity(
   }
 
   const existing = await fetchActivityById(input.id);
+  if (!existing) {
+    throw new Error("Aktiviteten hittades inte.");
+  }
+
   const completedAt =
     input.status === "Klar"
-      ? (existing?.completed_at ?? new Date().toISOString())
+      ? (existing.completed_at ?? new Date().toISOString())
       : null;
 
-  const row = await updateActivityRow(input.id, {
+  const next = {
     business_area_id: input.businessAreaId,
     goal_id: input.goalId || null,
     title,
@@ -198,17 +244,47 @@ export async function updateActivity(
     priority: input.priority,
     deadline: input.deadline || null,
     completed_at: completedAt,
+  };
+
+  const changes = collectFieldChanges(
+    {
+      business_area_id: existing.business_area_id,
+      goal_id: existing.goal_id,
+      title: existing.title,
+      description: existing.description,
+      owner: existing.owner,
+      status: existing.status,
+      priority: existing.priority,
+      deadline: existing.deadline,
+      completed_at: existing.completed_at,
+    },
+    next,
+    ACTIVITY_TRACKED_FIELDS,
+  );
+
+  const row = await updateActivityRow(input.id, {
+    ...next,
     updated_at: new Date().toISOString(),
   });
 
-  await recordAuditLog({
-    entityType: "activity",
-    entityId: row.id,
-    action: "updated",
-    description: `Uppdaterade aktiviteten "${row.title}"`,
-    actorName: input.owner?.trim() || DEFAULT_ACTOR,
-    businessAreaId: row.business_area_id,
-  });
+  if (changes.length > 0) {
+    const actorName = await resolveActorName(
+      input.owner?.trim() || DEFAULT_ACTOR,
+    );
+    await recordAuditLog({
+      entityType: "activity",
+      entityId: row.id,
+      action: "updated",
+      description: formatEntityChangeDescription(
+        "aktiviteten",
+        row.title,
+        changes,
+      ),
+      actorName,
+      businessAreaId: row.business_area_id,
+      changes: { fields: changes },
+    });
+  }
 
   return mapActivityRow(row);
 }

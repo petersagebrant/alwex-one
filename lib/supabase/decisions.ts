@@ -53,6 +53,23 @@ export async function fetchAllDecisions(): Promise<DecisionRow[]> {
   return data ?? [];
 }
 
+export async function fetchDecisionsByBusinessAreaId(
+  businessAreaId: string,
+): Promise<DecisionRow[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("decisions")
+    .select(decisionSelect)
+    .eq("business_area_id", businessAreaId)
+    .order("due_date", { ascending: true, nullsFirst: false })
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new Error(`Kunde inte hämta decisions: ${error.message}`);
+  }
+  return data ?? [];
+}
+
 export async function fetchDecisionById(
   id: string,
 ): Promise<DecisionRow | null> {

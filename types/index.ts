@@ -18,18 +18,33 @@ export type {
   CreateDecisionInput,
   UpdateDecisionInput,
 } from "./decision";
-export type { AuditLogEntry, CreateAuditLogInput } from "./audit-log";
+export type { AuditLogEntry, CreateAuditLogInput, AuditFieldChange, AuditChangesPayload } from "./audit-log";
 export type {
   KPI,
   Kpi,
   KpiTrend,
+  KpiDirection,
+  KpiToleranceType,
+  KpiKind,
+  KpiCalcOperator,
+  KpiReportingFrequency,
+  KpiStoredStatus,
   CreateKPIInput,
   UpdateKPIInput,
 } from "./kpi";
 export type {
   KPIHistory,
   CreateKPIHistoryInput,
+  UpsertDailyKpiReportInput,
+  UpsertMonthlyKpiReportInput,
 } from "./kpi-history";
+export type {
+  DailyKpiComputationMeta,
+  DailyKpiReportItem,
+  MyKpisForTodayReporting,
+  RatioPercentReportGroup,
+  TodayOrgReportingStats,
+} from "./kpi-reporting";
 export type { HistoryEvent } from "./history";
 export type { VdDiaryEvent, VdDiaryTone } from "./vd-diary";
 

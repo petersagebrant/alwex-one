@@ -11,7 +11,7 @@ import {
 } from "@/services/businessAreas";
 
 export const metadata: Metadata = {
-  title: "Administrera affärsområden | Alwex One",
+  title: "Administrera affärsområden | LEIR",
   description: "Skapa och uppdatera affärsområden",
 };
 

@@ -33,8 +33,8 @@ export async function generateMetadata({
 
   return {
     title: activity
-      ? `${activity.title} | Alwex One`
-      : "Aktivitet | Alwex One",
+      ? `${activity.title} | LEIR`
+      : "Aktivitet | LEIR",
   };
 }
 

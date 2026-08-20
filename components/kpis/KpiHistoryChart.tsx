@@ -1,9 +1,10 @@
 import { InfoPanel } from "@/components/ui";
-import type { StatusTone } from "@/types";
+import type { KpiStoredStatus } from "@/lib/kpi/kind";
+import { formatKpiDisplayValue } from "@/lib/format/kpi";
 
 export type KpiHistoryChartPoint = {
   value: string;
-  status: StatusTone;
+  status: KpiStoredStatus;
   recordedAt: string;
   label: string;
 };
@@ -12,13 +13,16 @@ type KpiHistoryChartProps = {
   points: KpiHistoryChartPoint[];
   targetValue?: string | null;
   unit?: string | null;
+  /** Statistik KPIs: no target legend / GYR; "Rapporterat värde" wording. */
+  isStatistic?: boolean;
   className?: string;
 };
 
-const statusPointFill: Record<StatusTone, string> = {
+const statusPointFill: Record<KpiStoredStatus, string> = {
   Grön: "#10b981",
   Gul: "#f59e0b",
   Röd: "#f43f5e",
+  Statistik: "#64748b",
 };
 
 function parseNumericValue(value: string): number | null {
@@ -94,6 +98,7 @@ export function KpiHistoryChart({
   points,
   targetValue,
   unit,
+  isStatistic = false,
   className = "",
 }: KpiHistoryChartProps) {
   if (points.length === 0) {
@@ -183,6 +188,14 @@ export function KpiHistoryChart({
         ((targetNumeric - minValue) / range) * innerHeight;
 
   const change = computeChange(numericPoints);
+  const latestPoint = numericPoints[numericPoints.length - 1];
+  const previousPoint =
+    numericPoints.length >= 2 ? numericPoints[numericPoints.length - 2] : null;
+  const reportedValueSummary = isStatistic
+    ? previousPoint
+      ? `Rapporterat värde: ${previousPoint.value} → ${latestPoint.value}${unit?.trim() ? ` ${unit.trim()}` : ""}`
+      : `Rapporterat värde: ${formatKpiDisplayValue(latestPoint.value, unit)}`
+    : null;
 
   return (
     <div className={className}>
@@ -336,9 +349,9 @@ export function KpiHistoryChart({
       <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-slate-500">
         <span className="inline-flex items-center gap-2">
           <span className="h-0.5 w-4 rounded bg-blue-600" aria-hidden />
-          Utfall
+          {isStatistic ? "Rapporterat värde" : "Utfall"}
         </span>
-        {targetNumeric !== null ? (
+        {!isStatistic && targetNumeric !== null ? (
           <span className="inline-flex items-center gap-2">
             <span
               className="inline-block w-4 border-t-2 border-dashed border-slate-400"
@@ -347,19 +360,38 @@ export function KpiHistoryChart({
             Målvärde
           </span>
         ) : null}
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" aria-hidden />
-          Grön
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full bg-amber-500" aria-hidden />
-          Gul
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full bg-rose-500" aria-hidden />
-          Röd
-        </span>
+        {!isStatistic ? (
+          <>
+            <span className="inline-flex items-center gap-1.5">
+              <span
+                className="h-2.5 w-2.5 rounded-full bg-emerald-500"
+                aria-hidden
+              />
+              Grön
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span
+                className="h-2.5 w-2.5 rounded-full bg-amber-500"
+                aria-hidden
+              />
+              Gul
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span
+                className="h-2.5 w-2.5 rounded-full bg-rose-500"
+                aria-hidden
+              />
+              Röd
+            </span>
+          </>
+        ) : null}
       </div>
+
+      {reportedValueSummary ? (
+        <p className="mt-3 text-sm font-medium text-slate-800">
+          {reportedValueSummary}
+        </p>
+      ) : null}
 
       {change ? (
         <div className="mt-5 rounded-xl border border-slate-200/80 bg-slate-50/80 px-4 py-3">

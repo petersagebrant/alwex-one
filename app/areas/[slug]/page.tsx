@@ -12,17 +12,14 @@ import {
   StatusBadge,
   SummaryCard,
 } from "@/components/ui";
-import {
-  getAllAreaSlugs,
-  getBusinessAreaBySlug,
-  getHistoryByArea,
-} from "@/data/mock";
 import { formatDateSv, formatDateTimeSv } from "@/lib/format/date";
 import { fetchBusinessAreaBySlug } from "@/lib/supabase/business-areas";
 import { getActivitiesByBusinessAreaId } from "@/services/activities";
+import { getBusinessAreaHistory } from "@/services/auditLog";
 import { getDecisions } from "@/services/decisions";
 import { getGoalsByBusinessAreaId } from "@/services/goals";
 import { getKPIsByBusinessArea } from "@/services/kpis";
+import { enrichKpisForAreaDisplay } from "@/services/kpiOverview";
 import type { StatusTone } from "@/types";
 
 type AreaDetailPageProps = {
@@ -36,62 +33,44 @@ function toStatusTone(value: string): StatusTone {
   return "Gul";
 }
 
-export function generateStaticParams() {
-  return getAllAreaSlugs().map((slug) => ({ slug }));
-}
-
 export async function generateMetadata({
   params,
 }: AreaDetailPageProps): Promise<Metadata> {
   const { slug } = await params;
   const dbArea = await fetchBusinessAreaBySlug(slug).catch(() => null);
-  const mockArea = getBusinessAreaBySlug(slug);
-  const area = dbArea
-    ? {
-        name: dbArea.name,
-        description: dbArea.description ?? undefined,
-      }
-    : mockArea;
 
   return {
-    title: area ? `${area.name} | Alwex One` : "Affärsområde | Alwex One",
-    description: area?.description ?? undefined,
+    title: dbArea ? `${dbArea.name} | LEIR` : "Affärsområde | LEIR",
+    description: dbArea?.description ?? undefined,
   };
 }
 
 export default async function AreaDetailPage({ params }: AreaDetailPageProps) {
   const { slug } = await params;
-  const mockArea = getBusinessAreaBySlug(slug);
-  const dbArea = await fetchBusinessAreaBySlug(slug).catch(() => null);
+  const dbArea = await fetchBusinessAreaBySlug(slug);
 
-  if (!dbArea && !mockArea) {
+  if (!dbArea) {
     notFound();
   }
 
-  const areaGoals = dbArea
-    ? await getGoalsByBusinessAreaId(dbArea.id)
-    : [];
-  const areaActivities = dbArea
-    ? await getActivitiesByBusinessAreaId(dbArea.id)
-    : [];
-  const areaKpis = dbArea ? await getKPIsByBusinessArea(dbArea.id) : [];
-  const areaDecisions = dbArea
-    ? (await getDecisions().catch(() => [])).filter(
-        (decision) => decision.businessAreaId === dbArea.id,
-      )
-    : [];
+  const [areaGoals, areaActivities, areaKpis, decisions, areaHistory] =
+    await Promise.all([
+      getGoalsByBusinessAreaId(dbArea.id),
+      getActivitiesByBusinessAreaId(dbArea.id),
+      getKPIsByBusinessArea(dbArea.id),
+      getDecisions(),
+      getBusinessAreaHistory(dbArea.id, dbArea.slug),
+    ]);
+  const areaKpiItems = await enrichKpisForAreaDisplay(areaKpis);
+  const areaDecisions = decisions.filter(
+    (decision) => decision.businessAreaId === dbArea.id,
+  );
 
-  const areaHistory = getHistoryByArea(slug);
-  const totalStatus = dbArea
-    ? toStatusTone(dbArea.status)
-    : (mockArea?.status ?? "Gul");
-  const displayName = dbArea?.name ?? mockArea?.name ?? slug;
-  const displayManager =
-    dbArea?.manager ?? mockArea?.manager ?? "Ej angiven";
-  const displayUpdatedAt =
-    dbArea?.updated_at ?? mockArea?.updatedAt ?? new Date().toISOString();
-  const displayDescription =
-    dbArea?.description ?? mockArea?.description ?? null;
+  const totalStatus = toStatusTone(dbArea.status);
+  const displayName = dbArea.name;
+  const displayManager = dbArea.manager ?? "Ej angiven";
+  const displayUpdatedAt = dbArea.updated_at;
+  const displayDescription = dbArea.description;
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-[#f7f8fa] text-neutral-900">
@@ -180,7 +159,7 @@ export default async function AreaDetailPage({ params }: AreaDetailPageProps) {
             : "Ingen VD-kommentar registrerad ännu."}
         </InfoPanel>
 
-        <AreaKpiList kpis={areaKpis} />
+        <AreaKpiList items={areaKpiItems} />
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
           <div className="space-y-4 xl:col-span-2">

@@ -1,19 +1,31 @@
-function getRequiredEnv(name: string): string {
-  const value = process.env[name];
+/**
+ * Reads Supabase public env vars.
+ *
+ * IMPORTANT: Access NEXT_PUBLIC_* keys via static property paths
+ * (process.env.NEXT_PUBLIC_FOO), not process.env[name]. Next.js only
+ * inlines statically referenced public env vars into the browser bundle.
+ * Dynamic lookup breaks client components such as AuthRecoveryGate.
+ */
+export function getSupabaseEnv() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
-  if (!value) {
+  if (!url) {
     throw new Error(
-      `Saknad miljövariabel: ${name}. ` +
-        `Kopiera .env.local.example till .env.local och fyll i värdena från ditt Supabase-projekt.`,
+      "Saknad miljövariabel: NEXT_PUBLIC_SUPABASE_URL. " +
+        "Kopiera .env.local.example till .env.local och fyll i värdena från ditt Supabase-projekt.",
     );
   }
 
-  return value;
-}
+  if (!publishableKey) {
+    throw new Error(
+      "Saknad miljövariabel: NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY. " +
+        "Kopiera .env.local.example till .env.local och fyll i värdena från ditt Supabase-projekt.",
+    );
+  }
 
-export function getSupabaseEnv() {
   return {
-    url: getRequiredEnv("NEXT_PUBLIC_SUPABASE_URL"),
-    publishableKey: getRequiredEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
+    url,
+    publishableKey,
   };
 }

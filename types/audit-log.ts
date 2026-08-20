@@ -1,3 +1,13 @@
+export type AuditFieldChange = {
+  field: string;
+  from: string | null;
+  to: string | null;
+};
+
+export type AuditChangesPayload = {
+  fields: AuditFieldChange[];
+};
+
 export type AuditLogEntry = {
   id: string;
   entityType: string;
@@ -7,6 +17,8 @@ export type AuditLogEntry = {
   actorName: string;
   businessAreaId: string | null;
   createdAt: string;
+  /** Structured from/to field changes when available. */
+  changes: AuditChangesPayload | null;
 };
 
 export type CreateAuditLogInput = {
@@ -16,4 +28,5 @@ export type CreateAuditLogInput = {
   description: string;
   actorName: string;
   businessAreaId?: string | null;
+  changes?: AuditChangesPayload | null;
 };

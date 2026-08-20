@@ -1,8 +1,8 @@
-# Systemspecifikation — Alwex One
+# Systemspecifikation — LEIR
 
 | Fält | Värde |
 | --- | --- |
-| Produkt | Alwex One |
+| Produkt | LEIR |
 | Dokument | `docs/SystemSpecification.md` |
 | Språk | Svenska |
 | Status | Grunddokument för utveckling |
@@ -32,7 +32,7 @@
 
 ## 1. Vision
 
-Alwex One ska vara koncernens gemensamma digitala plattform för ledning, målstyrning och verksamhetsuppföljning. Plattformen samlar status, ansvar och beslut i en tydlig helhet så att ledningen kan styra Alwex baserat på aktuell och gemensam information.
+LEIR ska vara koncernens gemensamma digitala plattform för ledning, målstyrning och verksamhetsuppföljning. Plattformen samlar status, ansvar och beslut i en tydlig helhet så att ledningen kan styra Alwex baserat på aktuell och gemensam information.
 
 ---
 
@@ -44,7 +44,7 @@ Ge VD och ledning en snabb överblick över koncernens resultat, avvikelser och 
 
 ## 3. Användarroller
 
-Definiera vilka som använder Alwex One och vad de får se respektive göra. Centrala roller är VD, affärsområdeschef, controller/ekonomi och ledningsstöd. Rollerna styr behörighet, vyer och ansvar i systemet.
+Definiera vilka som använder LEIR och vad de får se respektive göra. Centrala roller är VD, affärsområdeschef, controller/ekonomi och ledningsstöd. Rollerna styr behörighet, vyer och ansvar i systemet.
 
 ---
 
@@ -114,4 +114,4 @@ Förbereda kopplingar mot ekonomi-, BI- och övriga verksamhetssystem för autom
 
 ---
 
-*Detta dokument är en levande grundspecifikation för Alwex One och ska detaljeras kapitel för kapitel under utvecklingen.*
+*Detta dokument är en levande grundspecifikation för LEIR och ska detaljeras kapitel för kapitel under utvecklingen.*

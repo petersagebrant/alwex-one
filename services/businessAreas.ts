@@ -1,4 +1,4 @@
-import { activities, goals } from "@/data/mock";
+import { fetchAllActivities } from "@/lib/supabase/activities";
 import {
   businessAreaSlugExists,
   fetchBusinessAreaById,
@@ -7,7 +7,15 @@ import {
   updateBusinessAreaRow,
   type BusinessAreaRow,
 } from "@/lib/supabase/business-areas";
+import { fetchAllGoals } from "@/lib/supabase/goals";
 import { recordAuditLog } from "@/services/auditLog";
+import {
+  collectFieldChanges,
+  formatEntityChangeDescription,
+  formatEntityCreateDescription,
+  resolveActorName,
+  snapshotCreateChanges,
+} from "@/services/changeHistory";
 import type {
   BusinessAreaSummary,
   StatusTone,
@@ -15,6 +23,14 @@ import type {
 } from "@/types";
 
 const DEFAULT_ACTOR = "Peter Sagebrant";
+
+const AREA_TRACKED_FIELDS = [
+  "name",
+  "manager",
+  "status",
+  "description",
+  "vd_comment",
+] as const;
 
 function toStatusTone(value: string): StatusTone {
   if (value === "Grön" || value === "Gul" || value === "Röd") {
@@ -53,7 +69,26 @@ async function uniqueSlug(base: string): Promise<string> {
 }
 
 export async function getBusinessAreas(): Promise<BusinessAreaSummary[]> {
-  const rows = await fetchBusinessAreas();
+  const [rows, goalRows, activityRows] = await Promise.all([
+    fetchBusinessAreas(),
+    fetchAllGoals(),
+    fetchAllActivities(),
+  ]);
+  const goalCounts = new Map<string, number>();
+  const activityCounts = new Map<string, number>();
+
+  for (const goal of goalRows) {
+    goalCounts.set(
+      goal.business_area_id,
+      (goalCounts.get(goal.business_area_id) ?? 0) + 1,
+    );
+  }
+  for (const activity of activityRows) {
+    activityCounts.set(
+      activity.business_area_id,
+      (activityCounts.get(activity.business_area_id) ?? 0) + 1,
+    );
+  }
 
   return rows.map((row) => ({
     slug: row.slug,
@@ -61,10 +96,8 @@ export async function getBusinessAreas(): Promise<BusinessAreaSummary[]> {
     manager: row.manager ?? "Ej angiven",
     status: toStatusTone(row.status),
     updatedAt: toDateKey(row.updated_at),
-    goalCount: goals.filter((goal) => goal.areaSlug === row.slug).length,
-    activityCount: activities.filter(
-      (activity) => activity.areaSlug === row.slug,
-    ).length,
+    goalCount: goalCounts.get(row.id) ?? 0,
+    activityCount: activityCounts.get(row.id) ?? 0,
   }));
 }
 
@@ -126,21 +159,37 @@ export async function createBusinessArea(
 
   const slug = await uniqueSlug(slugifyName(name));
 
-  const row = await insertBusinessArea({
+  const payload = {
     name,
     slug,
     description: data.description.trim(),
     manager: data.manager.trim(),
     status: data.status,
-  });
+  };
 
+  const row = await insertBusinessArea(payload);
+
+  const createChanges = snapshotCreateChanges(
+    {
+      name: payload.name,
+      manager: payload.manager,
+      status: payload.status,
+      description: payload.description,
+      vd_comment: null,
+    },
+    AREA_TRACKED_FIELDS,
+  );
+  const actorName = await resolveActorName(
+    data.manager.trim() || DEFAULT_ACTOR,
+  );
   await recordAuditLog({
     entityType: "business_area",
     entityId: row.id,
     action: "created",
-    description: `Skapade affärsområdet "${row.name}"`,
-    actorName: data.manager.trim() || DEFAULT_ACTOR,
+    description: formatEntityCreateDescription("affärsområdet", row.name),
+    actorName,
     businessAreaId: row.id,
+    changes: createChanges.length > 0 ? { fields: createChanges } : null,
   });
 }
 
@@ -161,23 +210,49 @@ export async function updateBusinessArea(
     throw new Error("Affärsområdet hittades inte.");
   }
 
-  const row = await updateBusinessAreaRow(input.id, {
+  const next = {
     name,
     description: input.description.trim() || null,
     manager: input.manager.trim() || null,
     status: input.status,
     vd_comment: input.vdComment.trim() || null,
+  };
+
+  const changes = collectFieldChanges(
+    {
+      name: existing.name,
+      description: existing.description,
+      manager: existing.manager,
+      status: existing.status,
+      vd_comment: existing.vd_comment,
+    },
+    next,
+    AREA_TRACKED_FIELDS,
+  );
+
+  const row = await updateBusinessAreaRow(input.id, {
+    ...next,
     updated_at: new Date().toISOString(),
   });
 
-  await recordAuditLog({
-    entityType: "business_area",
-    entityId: row.id,
-    action: "updated",
-    description: `Uppdaterade affärsområdet "${row.name}"`,
-    actorName: input.manager.trim() || DEFAULT_ACTOR,
-    businessAreaId: row.id,
-  });
+  if (changes.length > 0) {
+    const actorName = await resolveActorName(
+      input.manager.trim() || DEFAULT_ACTOR,
+    );
+    await recordAuditLog({
+      entityType: "business_area",
+      entityId: row.id,
+      action: "updated",
+      description: formatEntityChangeDescription(
+        "affärsområdet",
+        row.name,
+        changes,
+      ),
+      actorName,
+      businessAreaId: row.id,
+      changes: { fields: changes },
+    });
+  }
 
   return mapBusinessAreaDetail(row);
 }

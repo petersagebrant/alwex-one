@@ -6,7 +6,7 @@ export const kpis: Kpi[] = [
     areaSlug: "kyl-frys",
     label: "Leveransprecision",
     value: "99,4 %",
-    target: "≥ 99,0 %",
+    target: "≥ 97 %",
     status: "Grön",
   },
   {

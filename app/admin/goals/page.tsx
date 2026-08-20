@@ -9,7 +9,7 @@ import type { GoalListItem } from "@/services/goals";
 import { createGoalAction, updateGoalAction } from "./actions";
 
 export const metadata: Metadata = {
-  title: "Administrera mål | Alwex One",
+  title: "Administrera mål | LEIR",
   description: "Lista, skapa och uppdatera mål",
 };
 

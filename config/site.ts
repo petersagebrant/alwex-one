@@ -1,4 +1,4 @@
 export const siteConfig = {
-  name: "Alwex One",
+  name: "LEIR",
   description: "Ledning, målstyrning och verksamhetsuppföljning",
 };

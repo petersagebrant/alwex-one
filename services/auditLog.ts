@@ -1,9 +1,52 @@
-import { fetchBusinessAreas } from "@/lib/supabase/business-areas";
 import {
+  fetchBusinessAreaById,
+  fetchBusinessAreas,
+} from "@/lib/supabase/business-areas";
+import {
+  fetchAuditLogByBusinessAreaId,
+  fetchAuditLogSince,
   fetchRecentAuditLog,
   insertAuditLog,
 } from "@/lib/supabase/audit-log";
-import type { AuditLogEntry, CreateAuditLogInput } from "@/types";
+import type {
+  AuditChangesPayload,
+  AuditFieldChange,
+  AuditLogEntry,
+  CreateAuditLogInput,
+  HistoryEvent,
+} from "@/types";
+
+function parseChanges(value: unknown): AuditChangesPayload | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const fields = (value as { fields?: unknown }).fields;
+  if (!Array.isArray(fields)) {
+    return null;
+  }
+
+  const parsed: AuditFieldChange[] = [];
+  for (const item of fields) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+    const row = item as Record<string, unknown>;
+    if (typeof row.field !== "string") {
+      continue;
+    }
+    parsed.push({
+      field: row.field,
+      from:
+        row.from === null || row.from === undefined
+          ? null
+          : String(row.from),
+      to: row.to === null || row.to === undefined ? null : String(row.to),
+    });
+  }
+
+  return parsed.length > 0 ? { fields: parsed } : null;
+}
 
 function mapAuditLogRow(row: {
   id: string;
@@ -14,6 +57,7 @@ function mapAuditLogRow(row: {
   actor_name: string;
   business_area_id: string | null;
   created_at: string;
+  changes?: unknown | null;
 }): AuditLogEntry {
   return {
     id: row.id,
@@ -24,6 +68,7 @@ function mapAuditLogRow(row: {
     actorName: row.actor_name,
     businessAreaId: row.business_area_id,
     createdAt: row.created_at,
+    changes: parseChanges(row.changes),
   };
 }
 
@@ -95,6 +140,59 @@ export async function getRecentAuditLog(
   }
 }
 
+export async function getBusinessAreaHistory(
+  businessAreaId: string,
+  areaSlug: string,
+  limit = 50,
+): Promise<HistoryEvent[]> {
+  const rows = await fetchAuditLogByBusinessAreaId(businessAreaId, limit);
+
+  return rows.map((row) => ({
+    id: row.id,
+    areaSlug,
+    date: row.created_at,
+    title: row.description,
+    detail: `Utförd av ${row.actor_name}`,
+  }));
+}
+
+export async function getAuditLogSince(
+  cutoff: Date,
+  limit = 150,
+  businessAreaId?: string,
+): Promise<AuditLogListItem[]> {
+  try {
+    const [rows, areas] = await Promise.all([
+      businessAreaId
+        ? fetchAuditLogByBusinessAreaId(businessAreaId, limit).then((all) =>
+            all.filter((row) => row.created_at >= cutoff.toISOString()),
+          )
+        : fetchAuditLogSince(cutoff.toISOString(), limit),
+      businessAreaId
+        ? fetchBusinessAreaById(businessAreaId).then((area) =>
+            area ? [area] : [],
+          )
+        : fetchBusinessAreas(),
+    ]);
+
+    const areaSlugById = new Map(areas.map((area) => [area.id, area.slug]));
+
+    return rows.map((row) => {
+      const entry = mapAuditLogRow(row);
+      return {
+        ...entry,
+        href: resolveHref(entry, areaSlugById),
+      };
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("audit_log") || message.includes("schema cache")) {
+      return [];
+    }
+    throw error;
+  }
+}
+
 export async function createAuditLogEntry(
   input: CreateAuditLogInput,
 ): Promise<AuditLogEntry> {
@@ -126,6 +224,7 @@ export async function createAuditLogEntry(
     description,
     actor_name: actorName,
     business_area_id: input.businessAreaId ?? null,
+    changes: input.changes ?? null,
   });
 
   return mapAuditLogRow(row);

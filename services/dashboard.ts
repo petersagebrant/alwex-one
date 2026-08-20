@@ -1,25 +1,37 @@
+import { getCurrentUser } from "@/lib/auth/require-user";
 import { fetchBusinessAreas } from "@/lib/supabase/business-areas";
 import { formatDateSv, formatDateTimeSv } from "@/lib/format/date";
+import { isExcludedFromVdAttention } from "@/lib/kpi/vdAttentionFilter";
+import {
+  formatMonthlyEconomicSummary,
+  isMonthlyEconomicResultKpi,
+} from "@/lib/kpi/economics";
 import { getActivities, type ActivityListItem } from "@/services/activities";
 import { getAllActivityComments } from "@/services/activityComments";
-import {
-  getRecentAuditLog,
-  type AuditLogListItem,
-} from "@/services/auditLog";
+import { getAuditLogSince, getRecentAuditLog } from "@/services/auditLog";
 import { getDecisions } from "@/services/decisions";
 import { getGoals } from "@/services/goals";
-import { getKPIs } from "@/services/kpis";
+import { getKPIs, type KPIListItem } from "@/services/kpis";
 import {
-  getKpiHistoryChangeLinesSince,
+  getKpiHistoryForChangeReport,
   getRecentKpiHistoryEntries,
 } from "@/services/kpiHistory";
 import {
   buildSinceLoginChanges,
-  formatSinceLoginTime,
   getSinceLoginCutoff,
   type SinceLoginChange,
 } from "@/services/sinceLogin";
-import type { StatusTone, VdDiaryEvent, VdDiaryTone } from "@/types";
+import { buildDashboardHistoryEvents } from "@/services/historyFeed";
+import {
+  buildVdAttentionItems,
+  type VdAttentionItem,
+} from "@/services/vdAttention";
+import {
+  buildYesterdayChangeReport,
+  getYesterdayCutoff,
+  type YesterdayChangeItem,
+} from "@/services/yesterdayChanges";
+import type { StatusTone, VdDiaryEvent } from "@/types";
 
 export type DashboardKpi = {
   id: string;
@@ -80,6 +92,7 @@ export type DashboardVdFocusKpi = {
   trend: string;
   owner: string;
   href: string;
+  monthlyEconomicSummary: string | null;
 };
 
 export type DashboardVdFocusActivity = {
@@ -111,24 +124,33 @@ export type DashboardVdFocus = {
   kpis: DashboardVdFocusKpi[];
   delayedActivities: DashboardVdFocusActivity[];
   openDecisions: DashboardVdFocusDecision[];
+  /** Prioritized operational queue for VD (max 5). */
+  priorityItems: VdAttentionItem[];
 };
 
 export type DashboardVdAssistantRisk = "Låg" | "Medel" | "Hög";
 
 export type DashboardVdAssistant = {
   greeting: string;
-  intro: string;
-  highlights: string[];
+  /** Dynamiskt nuläge (2–4 meningar). */
+  situation: string;
+  /** Prioritet idag — viktigaste gula/röda KPI eller att inga kritiska avvikelser finns. */
+  priority: string;
+  /** Tre datadrivna observationer. */
+  observations: string[];
+  /** Kort positiv sammanfattning. */
+  positiveSummary: string;
+  /** Bakåtkompatibilitet: samma innehåll som priority. */
   recommendation: string;
+  /** Bakåtkompatibilitet: situation uppdelad i rader. */
+  highlights: string[];
+  intro: string;
   riskLevel: DashboardVdAssistantRisk;
   riskLabel: string;
   analyzedAtLabel: string;
 };
 
-export type DashboardYesterdayChange = {
-  id: string;
-  text: string;
-};
+export type DashboardYesterdayChange = YesterdayChangeItem;
 
 export type DashboardData = {
   kpis: DashboardKpi[];
@@ -170,19 +192,6 @@ function swedishCountPhrase(
   return many.replace("{n}", String(count));
 }
 
-function getYesterdayCutoff(): Date {
-  const todayMidnight = getSinceLoginCutoff();
-  return new Date(todayMidnight.getTime() - 24 * 60 * 60 * 1000);
-}
-
-function isAfter(iso: string | null | undefined, cutoff: Date): boolean {
-  if (!iso) {
-    return false;
-  }
-  const time = new Date(iso).getTime();
-  return Number.isFinite(time) && time >= cutoff.getTime();
-}
-
 function todayDateKey(): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Europe/Stockholm",
@@ -204,274 +213,275 @@ function isDelayedActivity(activity: ActivityListItem): boolean {
   return deadlineKey < todayDateKey();
 }
 
-function extractQuotedTitle(description: string): string {
-  const match = description.match(/"([^"]+)"/);
-  return match?.[1]?.trim() || description.trim() || "Händelse";
+function firstNameFromUser(email: string | null): string | null {
+  if (!email) {
+    return null;
+  }
+  const local = email.split("@")[0]?.trim();
+  if (!local) {
+    return null;
+  }
+  const token = local.split(/[._-]/)[0] ?? local;
+  if (!token) {
+    return null;
+  }
+  return token.charAt(0).toUpperCase() + token.slice(1).toLowerCase();
 }
 
-function auditHeadline(entityType: string, action: string): string {
-  if (entityType === "kpi") {
-    if (action === "created") return "Ny KPI";
-    return "KPI ändrad";
+function formatKpiStatusCounts(
+  green: number,
+  yellow: number,
+  red: number,
+): string {
+  const parts: string[] = [];
+  if (green > 0) {
+    parts.push(
+      green === 1 ? "1 KPI är grön" : `${green} KPI:er är gröna`,
+    );
   }
-  if (entityType === "goal") {
-    if (action === "created") return "Nytt mål";
-    return "Mål uppdaterat";
+  if (yellow > 0) {
+    parts.push(yellow === 1 ? "1 gul" : `${yellow} gula`);
   }
-  if (entityType === "activity") {
-    if (action === "created") return "Ny aktivitet";
-    if (action === "commented") return "Ny kommentar";
-    return "Aktivitet uppdaterad";
-  }
-  if (entityType === "decision") {
-    if (action === "created") return "Nytt beslut";
-    if (action === "completed") return "Beslut avslutat";
-    return "Beslut uppdaterat";
-  }
-  if (entityType === "business_area") {
-    if (action === "created") return "Nytt affärsområde";
-    return "Affärsområde uppdaterat";
-  }
-  if (entityType === "activity_comment") {
-    return "Ny kommentar";
-  }
-  return "Händelse";
-}
-
-function auditTone(entityType: string, action: string): VdDiaryTone {
-  if (entityType === "kpi") {
-    return "yellow";
-  }
-  if (entityType === "decision") {
-    return action === "completed" ? "green" : "blue";
-  }
-  if (entityType === "goal") {
-    return "green";
-  }
-  if (entityType === "activity") {
-    return action === "created" ? "blue" : "slate";
-  }
-  if (entityType === "business_area") {
-    return "slate";
-  }
-  return "slate";
-}
-
-function statusToneToDiary(status: StatusTone): VdDiaryTone {
-  if (status === "Röd") return "red";
-  if (status === "Gul") return "yellow";
-  return "green";
-}
-
-function buildHistoryEvents(input: {
-  auditEntries: AuditLogListItem[];
-  kpiHistory: Awaited<ReturnType<typeof getRecentKpiHistoryEntries>>;
-  kpiMeta: Map<
-    string,
-    { name: string; area: string; owner: string }
-  >;
-  areaNames: Map<string, string>;
-  limit: number;
-}): VdDiaryEvent[] {
-  const fromAudit: VdDiaryEvent[] = (input.auditEntries ?? []).map((entry) => ({
-    id: `audit-${entry.id}`,
-    tone: auditTone(entry.entityType, entry.action),
-    headline: auditHeadline(entry.entityType, entry.action),
-    title: extractQuotedTitle(entry.description),
-    area: entry.businessAreaId
-      ? (input.areaNames.get(entry.businessAreaId) ?? "—")
-      : "—",
-    owner: entry.actorName || "Ej angiven",
-    occurredAt: entry.createdAt,
-    occurredAtLabel: formatSinceLoginTime(entry.createdAt),
-    href: entry.href || "/",
-  }));
-
-  const fromKpiHistory: VdDiaryEvent[] = (input.kpiHistory ?? []).map(
-    (entry) => {
-      const meta = input.kpiMeta.get(entry.kpiId);
-      return {
-        id: `kpi-history-${entry.id}`,
-        tone: statusToneToDiary(entry.status),
-        headline: "KPI-historik",
-        title: meta?.name ?? "KPI",
-        area: meta?.area ?? "—",
-        owner: meta?.owner ?? "Ej angiven",
-        occurredAt: entry.recordedAt || entry.createdAt,
-        occurredAtLabel: formatSinceLoginTime(
-          entry.recordedAt || entry.createdAt,
-        ),
-        href: `/admin/kpis/${entry.kpiId}`,
-      };
-    },
-  );
-
-  return [...fromAudit, ...fromKpiHistory]
-    .sort(
-      (a, b) =>
-        new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),
-    )
-    .slice(0, input.limit);
-}
-
-function buildYesterdayChanges(input: {
-  newActivityCount: number;
-  changedKpiCount: number;
-  closedDecisionCount: number;
-  newGoalCount: number;
-  statusChangeCount: number;
-  kpiHistoryLines: { id: string; text: string }[];
-}): DashboardYesterdayChange[] {
-  const changes: DashboardYesterdayChange[] = [];
-
-  if (input.newActivityCount > 0) {
-    changes.push({
-      id: "yesterday-new-activities",
-      text: swedishCountPhrase(
-        input.newActivityCount,
-        "1 ny aktivitet",
-        "{n} nya aktiviteter",
-        "",
-      ),
-    });
+  if (red > 0) {
+    parts.push(red === 1 ? "1 röd" : `${red} röda`);
   }
 
-  if (input.changedKpiCount > 0) {
-    changes.push({
-      id: "yesterday-changed-kpis",
-      text: swedishCountPhrase(
-        input.changedKpiCount,
-        "1 ändrad KPI",
-        "{n} ändrade KPI",
-        "",
-      ),
-    });
+  if (parts.length === 0) {
+    return "Inga KPI:er är registrerade ännu.";
   }
 
-  if (input.closedDecisionCount > 0) {
-    changes.push({
-      id: "yesterday-closed-decisions",
-      text: swedishCountPhrase(
-        input.closedDecisionCount,
-        "1 avslutat beslut",
-        "{n} avslutade beslut",
-        "",
-      ),
-    });
-  }
-
-  if (input.newGoalCount > 0) {
-    changes.push({
-      id: "yesterday-new-goals",
-      text: swedishCountPhrase(
-        input.newGoalCount,
-        "1 nytt mål",
-        "{n} nya mål",
-        "",
-      ),
-    });
-  }
-
-  if (input.statusChangeCount > 0) {
-    changes.push({
-      id: "yesterday-status-changes",
-      text: swedishCountPhrase(
-        input.statusChangeCount,
-        "1 statusförändring",
-        "{n} statusförändringar",
-        "",
-      ),
-    });
-  }
-
-  for (const line of input.kpiHistoryLines.slice(0, 3)) {
-    if (changes.some((change) => change.text === line.text)) {
-      continue;
+  if (green > 0 && (yellow > 0 || red > 0)) {
+    // "10 KPI:er är gröna, 3 gula och 1 röd."
+    const rest = parts.slice(1);
+    if (rest.length === 1) {
+      return `${parts[0]}, ${rest[0]}.`;
     }
-    changes.push(line);
+    return `${parts[0]}, ${rest.slice(0, -1).join(", ")} och ${rest[rest.length - 1]}.`;
   }
 
-  return changes;
+  return `${parts.join(", ")}.`;
+}
+
+function kpiObservation(kpi: KPIListItem): string {
+  const area = kpi.businessAreaName;
+  const name = kpi.name.toLowerCase();
+  const current = (kpi.currentValue ?? "").replace(/\s/g, "");
+  const isNegativeValue = current.startsWith("-") || current.startsWith("−");
+
+  if (isMonthlyEconomicResultKpi(kpi) && isNegativeValue) {
+    const summary = formatMonthlyEconomicSummary({
+      actualValue: kpi.latestActualValue,
+      budgetValue: kpi.latestBudgetValue,
+      deviationValue: kpi.currentValue,
+      unit: kpi.unit,
+      periodMonth: kpi.latestPeriodMonth,
+      status: kpi.status,
+    });
+    return `${area} låg under budget. ${summary}.`;
+  }
+  if (name.includes("belägg") && kpi.status !== "Grön") {
+    return `${area} har lägre beläggning än målet.`;
+  }
+  if (
+    (name.includes("volym") || kpi.trend === "Ner") &&
+    kpi.status !== "Grön"
+  ) {
+    return `${area} har negativ volymtrend.`;
+  }
+  if (name.includes("budgetavvik") && kpi.status !== "Grön") {
+    return `${area} har budgetavvikelse över mål.`;
+  }
+  if (kpi.status === "Röd") {
+    return `${area}: KPI:n ${kpi.name} är röd.`;
+  }
+  return `${area}: KPI:n ${kpi.name} är gul.`;
 }
 
 function buildVdAssistant(input: {
-  kpiFollowUpCount: number;
+  firstName: string | null;
+  areaCount: number;
+  greenKpiCount: number;
+  yellowKpiCount: number;
+  redKpiCount: number;
   delayedCount: number;
-  redAreaCount: number;
   openDecisionCount: number;
+  greenAreaCount: number;
   yellowAreaNames: string[];
   redAreaNames: string[];
-  topFollowUpKpi: { name: string; owner: string; status: StatusTone } | null;
-  topDelayedActivity: { title: string; owner: string } | null;
+  followUpKpis: KPIListItem[];
+  topFollowUpKpi: {
+    name: string;
+    owner: string;
+    status: StatusTone;
+    areaName: string;
+  } | null;
+  yellowGoals: { title: string; area: string }[];
 }): DashboardVdAssistant {
-  const nulage = [
-    swedishCountPhrase(
-      input.kpiFollowUpCount,
-      "1 KPI behöver följas upp",
-      "{n} KPI behöver följas upp",
-      "inga KPI behöver följas upp",
+  const yellowAreaNames = input.yellowAreaNames ?? [];
+  const redAreaNames = input.redAreaNames ?? [];
+  const followUpKpis = input.followUpKpis ?? [];
+  const yellowGoals = input.yellowGoals ?? [];
+
+  const greeting = input.firstName
+    ? `God morgon ${input.firstName}.`
+    : "God morgon.";
+
+  const situationParts: string[] = [];
+  situationParts.push(
+    input.areaCount === 1
+      ? "1 affärsområde följs upp."
+      : `${input.areaCount} affärsområden följs upp.`,
+  );
+  situationParts.push(
+    formatKpiStatusCounts(
+      input.greenKpiCount,
+      input.yellowKpiCount,
+      input.redKpiCount,
     ),
+  );
+  situationParts.push(
     swedishCountPhrase(
       input.delayedCount,
-      "1 aktivitet är försenad",
-      "{n} aktiviteter är försenade",
-      "inga försenade aktiviteter",
+      "1 aktivitet är försenad.",
+      "{n} aktiviteter är försenade.",
+      "Inga aktiviteter är försenade.",
     ),
-    swedishCountPhrase(
-      input.openDecisionCount,
-      "1 öppet beslut",
-      "{n} öppna beslut",
-      "inga öppna beslut",
-    ),
-  ].join(", ");
+  );
 
-  let deviation: string;
-  if (input.redAreaNames.length > 0) {
-    deviation = `${input.redAreaNames[0]} har röd status.`;
-  } else if (input.topFollowUpKpi?.status === "Röd") {
-    deviation = `KPI:n ${input.topFollowUpKpi.name} är röd och kräver omedelbar uppföljning.`;
-  } else if (input.topDelayedActivity) {
-    deviation = `Aktiviteten "${input.topDelayedActivity.title}" är försenad.`;
+  if (input.topFollowUpKpi?.status === "Röd") {
+    situationParts.push(
+      `${input.topFollowUpKpi.areaName} har den viktigaste negativa avvikelsen.`,
+    );
+  } else if (redAreaNames.length > 0) {
+    situationParts.push(
+      `${redAreaNames[0]} har den viktigaste negativa avvikelsen.`,
+    );
   } else if (input.topFollowUpKpi) {
-    deviation = `KPI:n ${input.topFollowUpKpi.name} är gul och bör följas upp.`;
-  } else if (input.yellowAreaNames.length > 0) {
-    deviation = `${input.yellowAreaNames[0]} har gul status.`;
-  } else {
-    deviation = "Inga kritiska avvikelser just nu.";
+    situationParts.push(
+      `${input.topFollowUpKpi.areaName} kräver uppföljning via KPI:n ${input.topFollowUpKpi.name}.`,
+    );
+  } else if (yellowAreaNames.length > 0) {
+    situationParts.push(
+      `${yellowAreaNames[0]} följs upp med gul status.`,
+    );
   }
 
-  let recommendation: string;
+  const situation = situationParts.slice(0, 4).join(" ");
+
+  let priority: string;
   if (input.topFollowUpKpi) {
-    recommendation = `Prioritet idag: följ upp KPI:n ${input.topFollowUpKpi.name} tillsammans med ${input.topFollowUpKpi.owner}.`;
-  } else if (input.topDelayedActivity) {
-    recommendation = `Prioritet idag: säkra nästa steg för "${input.topDelayedActivity.title}" med ${input.topDelayedActivity.owner}.`;
-  } else if (input.openDecisionCount > 0) {
-    recommendation =
-      "Prioritet idag: driva de öppna besluten framåt så att de inte ligger still.";
-  } else if (input.redAreaCount > 0) {
-    recommendation =
-      "Prioritet idag: gå igenom affärsområden med röd status och säkra åtgärdsplan.";
+    priority = `Prioritet idag:\nFölj upp KPI:n ${input.topFollowUpKpi.name} tillsammans med ${input.topFollowUpKpi.owner}.`;
   } else {
-    recommendation =
-      "Prioritet idag: behåll den dagliga översikten och följ upp eventuella gulmarkeringar i tid.";
+    priority = "Inga kritiska avvikelser finns.";
+  }
+
+  const observationCandidates: string[] = [];
+  for (const kpi of followUpKpis) {
+    observationCandidates.push(kpiObservation(kpi));
+  }
+  for (const goal of yellowGoals) {
+    observationCandidates.push(
+      `Målet "${goal.title}" i ${goal.area} kräver uppföljning.`,
+    );
+  }
+  if (input.delayedCount > 0) {
+    observationCandidates.push(
+      swedishCountPhrase(
+        input.delayedCount,
+        "1 aktivitet är försenad.",
+        "{n} aktiviteter är försenade.",
+        "",
+      ),
+    );
+  }
+  if (input.openDecisionCount === 0) {
+    observationCandidates.push(
+      "Inga öppna beslut blockerar verksamheten.",
+    );
+  } else {
+    observationCandidates.push(
+      swedishCountPhrase(
+        input.openDecisionCount,
+        "1 öppet beslut kräver uppföljning.",
+        "{n} öppna beslut kräver uppföljning.",
+        "",
+      ),
+    );
+  }
+  if (input.greenAreaCount > 0 && input.areaCount > 0) {
+    observationCandidates.push(
+      input.greenAreaCount === input.areaCount
+        ? "Alla affärsområden har grön status."
+        : `${input.greenAreaCount} av ${input.areaCount} affärsområden har grön status.`,
+    );
+  }
+
+  const seen = new Set<string>();
+  const observations: string[] = [];
+  for (const line of observationCandidates) {
+    if (!line || seen.has(line)) {
+      continue;
+    }
+    seen.add(line);
+    observations.push(line);
+    if (observations.length >= 3) {
+      break;
+    }
+  }
+  while (observations.length < 3) {
+    if (input.greenKpiCount > 0 && !seen.has("kpi-green")) {
+      seen.add("kpi-green");
+      observations.push(
+        input.greenKpiCount === 1
+          ? "1 KPI ligger inom mål."
+          : `${input.greenKpiCount} KPI:er ligger inom mål.`,
+      );
+      continue;
+    }
+    if (!seen.has("follow-up-done")) {
+      seen.add("follow-up-done");
+      observations.push("Daglig uppföljning kan fokusera på gröna områden.");
+      continue;
+    }
+    break;
+  }
+
+  let positiveSummary: string;
+  const greenKpiShare =
+    input.greenKpiCount + input.yellowKpiCount + input.redKpiCount > 0
+      ? input.greenKpiCount /
+        (input.greenKpiCount + input.yellowKpiCount + input.redKpiCount)
+      : 1;
+  if (input.redKpiCount === 0 && input.yellowKpiCount === 0) {
+    positiveSummary = "Inga kritiska avvikelser — verksamheten ligger enligt plan.";
+  } else if (greenKpiShare >= 0.6 || input.greenAreaCount >= input.areaCount / 2) {
+    positiveSummary = "De flesta affärsområden utvecklas enligt plan.";
+  } else if (input.redKpiCount > 0) {
+    positiveSummary = `${input.greenKpiCount} KPI:er ligger fortfarande inom mål trots pågående avvikelser.`;
+  } else {
+    positiveSummary = "Avvikelserna är hanterbara och de flesta nyckeltal följer planen.";
   }
 
   let riskLevel: DashboardVdAssistantRisk = "Låg";
   if (
-    input.redAreaCount > 0 ||
+    redAreaNames.length > 0 ||
     input.delayedCount >= 2 ||
     input.topFollowUpKpi?.status === "Röd"
   ) {
     riskLevel = "Hög";
-  } else if (input.kpiFollowUpCount > 0 || input.delayedCount > 0) {
+  } else if (input.yellowKpiCount > 0 || input.delayedCount > 0) {
     riskLevel = "Medel";
   }
 
   return {
-    greeting: "God morgon Peter.",
-    intro: "Här är min sammanfattning av läget just nu.",
-    highlights: [`Nuläge: ${nulage}.`, `Viktigaste avvikelse: ${deviation}`],
-    recommendation,
+    greeting,
+    situation,
+    priority,
+    observations,
+    positiveSummary,
+    recommendation: priority,
+    highlights: situationParts.slice(0, 4),
+    intro: situation,
     riskLevel,
     riskLabel: riskLevel,
     analyzedAtLabel: formatDateTimeSv(new Date().toISOString()),
@@ -480,6 +490,7 @@ function buildVdAssistant(input: {
 
 export async function getDashboardData(): Promise<DashboardData> {
   const [
+    currentUser,
     areaRows,
     goals,
     activities,
@@ -489,6 +500,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     allKpis,
     recentKpiHistory,
   ] = await Promise.all([
+    getCurrentUser(),
     fetchBusinessAreas().catch(() => []),
     getGoals().catch(() => []),
     getActivities().catch(() => []),
@@ -626,13 +638,38 @@ export async function getDashboardData(): Promise<DashboardData> {
   );
 
   const followUpKpis = (allKpis ?? []).filter(
-    (kpi) => kpi.status === "Gul" || kpi.status === "Röd",
+    (kpi) =>
+      kpi.kind === "TARGET" &&
+      !kpi.isPeriodPending &&
+      !isExcludedFromVdAttention(kpi) &&
+      (kpi.status === "Gul" || kpi.status === "Röd"),
+  );
+  const greenKpis = (allKpis ?? []).filter(
+    (kpi) =>
+      kpi.kind === "TARGET" && !kpi.isPeriodPending && kpi.status === "Grön",
+  );
+  const yellowKpis = (allKpis ?? []).filter(
+    (kpi) =>
+      kpi.kind === "TARGET" &&
+      !kpi.isPeriodPending &&
+      !isExcludedFromVdAttention(kpi) &&
+      kpi.status === "Gul",
+  );
+  const redKpis = (allKpis ?? []).filter(
+    (kpi) =>
+      kpi.kind === "TARGET" &&
+      !kpi.isPeriodPending &&
+      !isExcludedFromVdAttention(kpi) &&
+      kpi.status === "Röd",
   );
   const redAreaRows = (areaRows ?? []).filter(
     (area) => toStatusTone(area.status) === "Röd",
   );
   const yellowAreaRows = (areaRows ?? []).filter(
     (area) => toStatusTone(area.status) === "Gul",
+  );
+  const greenAreaRows = (areaRows ?? []).filter(
+    (area) => toStatusTone(area.status) === "Grön",
   );
   const redAreaCount = redAreaRows.length;
   const waitingDecisionCount = openDecisions.length;
@@ -649,29 +686,34 @@ export async function getDashboardData(): Promise<DashboardData> {
     followUpKpis.find((kpi) => kpi.status === "Röd") ??
     followUpKpis[0] ??
     null;
-  const topDelayedActivity = delayedActivities[0] ?? null;
 
   const vdAssistant = buildVdAssistant({
-    kpiFollowUpCount: followUpKpis.length,
+    firstName: firstNameFromUser(currentUser?.email ?? null),
+    areaCount: businessAreaCount,
+    greenKpiCount: greenKpis.length,
+    yellowKpiCount: yellowKpis.length,
+    redKpiCount: redKpis.length,
     delayedCount,
-    redAreaCount,
     openDecisionCount: waitingDecisionCount,
+    greenAreaCount: greenAreaRows.length,
     yellowAreaNames: yellowAreaRows.map((area) => area.name),
     redAreaNames: redAreaRows.map((area) => area.name),
+    followUpKpis,
     topFollowUpKpi: topFollowUpKpi
       ? {
           name: topFollowUpKpi.name,
           owner:
             areaManagers.get(topFollowUpKpi.businessAreaId) ?? "ansvarig",
-          status: topFollowUpKpi.status,
+          status: topFollowUpKpi.status as StatusTone,
+          areaName: topFollowUpKpi.businessAreaName,
         }
       : null,
-    topDelayedActivity: topDelayedActivity
-      ? {
-          title: topDelayedActivity.title,
-          owner: topDelayedActivity.owner ?? "ansvarig",
-        }
-      : null,
+    yellowGoals: (goals ?? [])
+      .filter((goal) => goal.status === "Gul" || goal.status === "Röd")
+      .map((goal) => ({
+        title: goal.title,
+        area: areaNames.get(goal.businessAreaId) ?? goal.businessAreaName,
+      })),
   });
 
   const vdFocus: DashboardVdFocus = {
@@ -686,10 +728,20 @@ export async function getDashboardData(): Promise<DashboardData> {
       id: kpi.id,
       name: kpi.name,
       area: kpi.businessAreaName,
-      status: kpi.status,
+      status: kpi.status as StatusTone,
       trend: kpi.trend,
       owner: areaManagers.get(kpi.businessAreaId) ?? "Ej angiven",
-      href: `/admin/kpis/${kpi.id}`,
+      href: `/kpis/${kpi.id}`,
+      monthlyEconomicSummary: isMonthlyEconomicResultKpi(kpi)
+        ? formatMonthlyEconomicSummary({
+            actualValue: kpi.latestActualValue,
+            budgetValue: kpi.latestBudgetValue,
+            deviationValue: kpi.currentValue,
+            unit: kpi.unit,
+            periodMonth: kpi.latestPeriodMonth,
+            status: kpi.status,
+          })
+        : null,
     })),
     delayedActivities: delayedActivities.map((activity) => ({
       id: activity.id,
@@ -709,6 +761,20 @@ export async function getDashboardData(): Promise<DashboardData> {
       dueDate: decision.dueDate ? formatDateSv(decision.dueDate) : "—",
       href: `/admin/decisions/${decision.id}`,
     })),
+    priorityItems: buildVdAttentionItems({
+      kpis: allKpis ?? [],
+      delayedActivities,
+      openDecisions,
+      areas: (areaRows ?? []).map((area) => ({
+        id: area.id,
+        name: area.name,
+        slug: area.slug,
+        manager: area.manager ?? null,
+        status: area.status,
+      })),
+      areaManagers,
+      limit: 5,
+    }),
   };
 
   const sinceLoginChanges = buildSinceLoginChanges({
@@ -723,9 +789,6 @@ export async function getDashboardData(): Promise<DashboardData> {
   });
 
   const yesterdayCutoff = getYesterdayCutoff();
-  const kpiNames = new Map(
-    (allKpis ?? []).map((kpi) => [kpi.id, kpi.name]),
-  );
   const kpiMeta = new Map(
     (allKpis ?? []).map((kpi) => [
       kpi.id,
@@ -733,61 +796,47 @@ export async function getDashboardData(): Promise<DashboardData> {
         name: kpi.name,
         area: kpi.businessAreaName,
         owner: areaManagers.get(kpi.businessAreaId) ?? "Ej angiven",
+        kind: kpi.kind,
+        unit: kpi.unit,
       },
     ]),
   );
 
-  const kpiHistoryChanges = await getKpiHistoryChangeLinesSince(
-    yesterdayCutoff,
-    kpiNames,
-  ).catch(() => []);
+  const [yesterdayAudit, yesterdayKpiHistory] = await Promise.all([
+    getAuditLogSince(yesterdayCutoff, 200).catch(() => []),
+    getKpiHistoryForChangeReport(yesterdayCutoff).catch(() => []),
+  ]);
 
-  const changedKpiIds = new Set(
-    (recentKpiHistory ?? [])
-      .filter((entry) =>
-        isAfter(entry.recordedAt || entry.createdAt, yesterdayCutoff),
-      )
-      .map((entry) => entry.kpiId),
-  );
-
-  const newActivityCount = (activities ?? []).filter((activity) =>
-    isAfter(activity.createdAt, yesterdayCutoff),
-  ).length;
-  const newGoalCount = (goals ?? []).filter((goal) =>
-    isAfter(goal.createdAt, yesterdayCutoff),
-  ).length;
-  const closedDecisionCount = (allDecisions ?? []).filter(
-    (decision) =>
-      decision.status === "Klart" &&
-      isAfter(decision.updatedAt, yesterdayCutoff),
-  ).length;
-
-  const statusChangeCount = (recentAudit ?? []).filter((entry) => {
-    if (!isAfter(entry.createdAt, yesterdayCutoff)) {
-      return false;
-    }
-    return (
-      entry.action === "updated" ||
-      entry.action === "completed" ||
-      entry.description.toLowerCase().includes("status")
-    );
-  }).length;
-
-  const yesterdayChanges = buildYesterdayChanges({
-    newActivityCount,
-    changedKpiCount: changedKpiIds.size,
-    closedDecisionCount,
-    newGoalCount,
-    statusChangeCount,
-    kpiHistoryLines: kpiHistoryChanges,
+  const yesterdayChanges = buildYesterdayChangeReport({
+    cutoff: yesterdayCutoff,
+    auditEntries: yesterdayAudit,
+    kpiHistory: yesterdayKpiHistory,
+    kpis: allKpis ?? [],
+    goals: goals ?? [],
+    activities: activities ?? [],
+    areas: (areaRows ?? []).map((area) => ({
+      id: area.id,
+      name: area.name,
+      slug: area.slug,
+      manager: area.manager ?? null,
+      status: area.status,
+    })),
+    limit: 5,
   });
 
-  const historyEvents = buildHistoryEvents({
+  const historyEvents = buildDashboardHistoryEvents({
     auditEntries: recentAudit ?? [],
     kpiHistory: recentKpiHistory ?? [],
     kpiMeta,
+    goalTitles: new Map((goals ?? []).map((goal) => [goal.id, goal.title])),
+    activityTitles: new Map(
+      (activities ?? []).map((activity) => [activity.id, activity.title]),
+    ),
+    decisionTitles: new Map(
+      (allDecisions ?? []).map((decision) => [decision.id, decision.title]),
+    ),
     areaNames,
-    limit: 20,
+    limit: 5,
   });
 
   return {

@@ -19,7 +19,7 @@ export async function requireAiPrincipal() {
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("id, role, business_area_id")
+    .select("id, role, business_area_id, disabled_at")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -27,7 +27,8 @@ export async function requireAiPrincipal() {
     profileError ||
     !profile ||
     profile.id !== user.id ||
-    !isAppRole(profile.role)
+    !isAppRole(profile.role) ||
+    profile.disabled_at
   ) {
     return resolveAiPrincipal(
       { id: user.id, email: user.email ?? null },

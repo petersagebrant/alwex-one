@@ -33,9 +33,9 @@ export function canManageBusinessAreas(role: AppRole): boolean {
   return role === "vd" || role === "administrator";
 }
 
-/** Administratör — användarrelaterade inställningar (profiles). */
+/** VD / Administratör — inbjuda, ändra roll och inaktivera användare. */
 export function canAdministerUsers(role: AppRole): boolean {
-  return role === "administrator";
+  return role === "vd" || role === "administrator";
 }
 
 export function canReadOnly(role: AppRole): boolean {

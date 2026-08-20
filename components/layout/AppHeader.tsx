@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { getCurrentUser } from "@/lib/auth/require-user";
+import { canAdministerUsers } from "@/lib/auth/roles";
 import { fetchProfileByUserId } from "@/lib/supabase/profiles";
 import { signOutAction } from "@/app/login/actions";
 
@@ -12,6 +13,7 @@ export type AppNavKey =
   | "activities"
   | "decisions"
   | "kpis"
+  | "users"
   | "assistant";
 
 type AppHeaderProps = {
@@ -25,6 +27,7 @@ const navItems: { key: AppNavKey; href: string; label: string }[] = [
   { key: "activities", href: "/admin/activities", label: "Aktiviteter" },
   { key: "decisions", href: "/admin/decisions", label: "Beslut" },
   { key: "kpis", href: "/report/kpis", label: "KPI" },
+  { key: "users", href: "/admin/users", label: "Användare" },
   { key: "assistant", href: "/assistant", label: "AI-assistent" },
 ];
 
@@ -45,14 +48,21 @@ export async function AppHeader({ current = "home" }: AppHeaderProps) {
   const profile = user
     ? await fetchProfileByUserId(user.id).catch(() => null)
     : null;
-  const label = user?.email ?? "Ej inloggad";
+  const label =
+    profile?.display_name.trim() || user?.email || "Ej inloggad";
   const initials = initialsFromEmail(user?.email ?? null);
-  const visibleNavItems = navItems.filter(
-    (item) =>
-      item.key !== "assistant" ||
-      profile?.role === "vd" ||
-      (profile?.role === "ao_chef" && Boolean(profile.business_area_id)),
-  );
+  const visibleNavItems = navItems.filter((item) => {
+    if (item.key === "assistant") {
+      return (
+        profile?.role === "vd" ||
+        (profile?.role === "ao_chef" && Boolean(profile.business_area_id))
+      );
+    }
+    if (item.key === "users") {
+      return Boolean(profile && canAdministerUsers(profile.role));
+    }
+    return true;
+  });
 
   return (
     <header className="sticky top-0 z-30 border-b border-[#1f2430] bg-[#111827] text-white">

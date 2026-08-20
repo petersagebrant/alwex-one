@@ -32,12 +32,45 @@ export function VdDailyReportingPanel({
   businessAreaId,
   areas,
 }: VdDailyReportingPanelProps) {
+  if (!businessAreaId) {
+    return (
+      <div className="space-y-5">
+        <InfoPanel
+          title="Dagens KPI-rapportering"
+          showLabel={false}
+          compact
+          className="!border-slate-200/80 !bg-white"
+        >
+          <p className="text-sm text-slate-700">
+            Välj affärsområde för att visa dagens KPI-rapportering.
+          </p>
+        </InfoPanel>
+      </div>
+    );
+  }
+
+  return (
+    <VdAreaReportingPanel
+      key={businessAreaId}
+      businessAreaId={businessAreaId}
+      areas={areas}
+    />
+  );
+}
+
+function VdAreaReportingPanel({
+  businessAreaId,
+  areas,
+}: {
+  businessAreaId: string;
+  areas: AreaOption[];
+}) {
   const router = useRouter();
   const [reporting, setReporting] = useState<MyKpisForTodayReporting | null>(
     null,
   );
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const areaName =
     areas.find((a) => a.id === businessAreaId)?.name ?? businessAreaId;
@@ -70,20 +103,9 @@ export function VdDailyReportingPanel({
   );
 
   useEffect(() => {
-    if (!businessAreaId) {
-      setReporting(null);
-      setError(null);
-      setLoading(false);
-      return;
-    }
-
     let cancelled = false;
 
     void (async () => {
-      setLoading(true);
-      setError(null);
-      setReporting(null);
-
       try {
         const result = await loadVdAreaReportingAction(businessAreaId);
         if (cancelled) return;
@@ -118,48 +140,28 @@ export function VdDailyReportingPanel({
 
   return (
     <div className="space-y-5">
-      {!businessAreaId ? (
+      <p className="text-sm text-slate-700">Valt område: {areaName}</p>
+
+      {error ? (
         <InfoPanel
           title="Dagens KPI-rapportering"
           showLabel={false}
           compact
           className="!border-slate-200/80 !bg-white"
         >
-          <p className="text-sm text-slate-700">
-            Välj affärsområde för att visa dagens KPI-rapportering.
-          </p>
+          <p className="text-sm text-slate-700">{error}</p>
+        </InfoPanel>
+      ) : loading || !reporting ? (
+        <InfoPanel
+          title="Dagens KPI-rapportering"
+          showLabel={false}
+          compact
+          className="!border-slate-200/80 !bg-white"
+        >
+          <p className="text-sm text-slate-600">Hämtar KPI:er…</p>
         </InfoPanel>
       ) : (
-        <>
-          <p className="text-sm text-slate-700">
-            Valt område: {areaName}
-          </p>
-
-          {error ? (
-            <InfoPanel
-              title="Dagens KPI-rapportering"
-              showLabel={false}
-              compact
-              className="!border-slate-200/80 !bg-white"
-            >
-              <p className="text-sm text-slate-700">{error}</p>
-            </InfoPanel>
-          ) : loading || !reporting ? (
-            <InfoPanel
-              title="Dagens KPI-rapportering"
-              showLabel={false}
-              compact
-              className="!border-slate-200/80 !bg-white"
-            >
-              <p className="text-sm text-slate-600">Hämtar KPI:er…</p>
-            </InfoPanel>
-          ) : (
-            <ReportingBody
-              reporting={reporting}
-              onReported={handleReported}
-            />
-          )}
-        </>
+        <ReportingBody reporting={reporting} onReported={handleReported} />
       )}
     </div>
   );

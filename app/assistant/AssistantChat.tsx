@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { askAssistant } from "./actions";
 
 type ChatMessage = {
@@ -19,6 +19,7 @@ const SUGGESTIONS = [
 ];
 
 export function AssistantChat() {
+  const messageSequence = useRef(0);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: "welcome",
@@ -30,6 +31,11 @@ export function AssistantChat() {
   const [draft, setDraft] = useState("");
   const [isPending, startTransition] = useTransition();
 
+  function nextMessageId(prefix: string) {
+    messageSequence.current += 1;
+    return `${prefix}-${messageSequence.current}`;
+  }
+
   function sendQuestion(question: string) {
     const trimmed = question.trim();
     if (!trimmed || isPending) {
@@ -37,7 +43,7 @@ export function AssistantChat() {
     }
 
     const userMessage: ChatMessage = {
-      id: `user-${Date.now()}`,
+      id: nextMessageId("user"),
       role: "user",
       content: trimmed,
     };
@@ -51,7 +57,7 @@ export function AssistantChat() {
         setMessages((prev) => [
           ...prev,
           {
-            id: `assistant-${Date.now()}`,
+            id: nextMessageId("assistant"),
             role: "assistant",
             content: answer,
           },
@@ -64,7 +70,7 @@ export function AssistantChat() {
         setMessages((prev) => [
           ...prev,
           {
-            id: `assistant-error-${Date.now()}`,
+            id: nextMessageId("assistant-error"),
             role: "assistant",
             content: message,
           },

@@ -83,7 +83,7 @@ export async function GET(request: NextRequest) {
 
   const { url, publishableKey } = getSupabaseEnv();
   const redirectTarget = buildRedirectUrl(request, origin, next);
-  let response = NextResponse.redirect(redirectTarget);
+  const response = NextResponse.redirect(redirectTarget);
 
   const supabase = createServerClient(url, publishableKey, {
     cookies: {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useTransition, type FormEvent } from "react";
+import { useState, useTransition, type FormEvent } from "react";
 import { StatistikTypeBadge } from "@/components/kpis/StatistikTypeBadge";
 import { StatusBadge } from "@/components/ui";
 import { computeKpiStatus } from "@/lib/kpi/computeStatus";
@@ -24,11 +24,38 @@ export function AoChefKpiReportBlock({
   item,
   onReported,
 }: AoChefKpiReportBlockProps) {
+  const formVersion = JSON.stringify([
+    item.kpi.id,
+    item.kpi.status,
+    item.todayReport?.value,
+    item.todayReport?.status,
+    item.todayReport?.comment,
+    item.todayReport?.updatedAt,
+    item.previousStatus,
+  ]);
+
+  return (
+    <AoChefKpiReportForm
+      key={formVersion}
+      item={item}
+      onReported={onReported}
+    />
+  );
+}
+
+function AoChefKpiReportForm({
+  item,
+  onReported,
+}: AoChefKpiReportBlockProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [value, setValue] = useState("");
-  const [manualStatus, setManualStatus] = useState<StatusTone>("Gul");
-  const [comment, setComment] = useState("");
+  const [value, setValue] = useState(item.todayReport?.value ?? "");
+  const [manualStatus, setManualStatus] = useState<StatusTone>(() => {
+    const seed =
+      item.todayReport?.status ?? item.previousStatus ?? item.kpi.status;
+    return isStatusTone(seed) ? seed : "Gul";
+  });
+  const [comment, setComment] = useState(item.todayReport?.comment ?? "");
   const [error, setError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
 
@@ -44,22 +71,6 @@ export function AoChefKpiReportBlock({
     ? item.todayReport?.status ?? item.previousStatus
     : item.previousStatus;
   const lastTone = isStatusTone(lastStatus) ? lastStatus : null;
-
-  useEffect(() => {
-    setValue(item.todayReport?.value ?? "");
-    setComment(item.todayReport?.comment ?? "");
-    const seed =
-      item.todayReport?.status ?? item.previousStatus ?? item.kpi.status;
-    setManualStatus(isStatusTone(seed) ? seed : "Gul");
-  }, [
-    item.kpi.id,
-    item.kpi.status,
-    item.todayReport?.value,
-    item.todayReport?.status,
-    item.todayReport?.comment,
-    item.todayReport?.updatedAt,
-    item.previousStatus,
-  ]);
 
   const liveComputedStatus = autoStatusEnabled
     ? computeKpiStatus({

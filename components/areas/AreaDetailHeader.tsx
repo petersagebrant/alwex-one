@@ -1,10 +1,11 @@
 import Link from "next/link";
 import type { BusinessArea } from "@/types";
 import { formatDateSv } from "@/lib/format/date";
-import { StatusPill } from "@/components/common/StatusPill";
+import { AreaOperationalStatusBadge } from "@/components/areas/AreaOperationalStatusBadge";
+import type { AreaOperationalStatus } from "@/lib/kpi/areaOperationalStatus";
 
 type AreaDetailHeaderProps = {
-  area: BusinessArea;
+  area: Omit<BusinessArea, "status"> & { status: AreaOperationalStatus };
 };
 
 export function AreaDetailHeader({ area }: AreaDetailHeaderProps) {
@@ -24,7 +25,7 @@ export function AreaDetailHeader({ area }: AreaDetailHeaderProps) {
             <h1 className="text-2xl font-semibold tracking-tight text-neutral-900">
               {area.name}
             </h1>
-            <StatusPill status={area.status} />
+            <AreaOperationalStatusBadge status={area.status} variant="pill" />
           </div>
           <p className="mt-3 max-w-3xl text-sm leading-relaxed text-neutral-600 sm:text-[15px]">
             {area.description}

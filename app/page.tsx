@@ -5,6 +5,7 @@ import { KpiOverviewSection } from "@/components/dashboard/KpiOverviewSection";
 import { VdAttentionList } from "@/components/dashboard/VdAttentionList";
 import { VdBriefingPanel } from "@/components/dashboard/VdBriefingPanel";
 import { VdDiaryTimeline } from "../components/dashboard/VdDiaryTimeline";
+import { AreaOperationalStatusBadge } from "@/components/areas/AreaOperationalStatusBadge";
 import {
   InfoPanel,
   SectionHeader,
@@ -619,7 +620,7 @@ export default async function Home() {
                     <h3 className="text-lg font-semibold tracking-tight text-slate-900">
                       {area.name}
                     </h3>
-                    <StatusBadge status={toUiStatus(area.status)} />
+                    <AreaOperationalStatusBadge status={area.status} />
                   </div>
 
                   <dl className="mt-4 space-y-2 text-sm">

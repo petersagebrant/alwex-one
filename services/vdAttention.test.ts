@@ -148,4 +148,62 @@ describe("buildVdAttentionItems sjukfrånvaro filter", () => {
     assert.equal(items[0]?.title, "Kolli per arbetad timme");
     assert.match(items[0]?.metrics ?? "", /20 kolli\/timme mot mål 100/);
   });
+
+  it("does not treat unreported TARGET or stored area Gul/Röd as attention", () => {
+    const items = buildVdAttentionItems({
+      kpis: [
+        kpi({
+          id: "stale-red",
+          name: "Beläggning",
+          status: "Röd",
+          currentValue: null,
+        }),
+      ],
+      delayedActivities: [],
+      openDecisions: [],
+      areas: [
+        {
+          id: "area-1",
+          name: "Kyl & Frys",
+          slug: "kyl-frys",
+          manager: "Anna",
+          status: "Röd",
+        },
+      ],
+      areaManagers: new Map([["area-1", "Anna"]]),
+      limit: 10,
+    });
+    assert.equal(items.length, 0);
+  });
+
+  it("flags a red area from reported TARGET even when stored area status is Gul", () => {
+    const items = buildVdAttentionItems({
+      kpis: [
+        kpi({
+          id: "sick",
+          name: "Sjukfrånvaro",
+          status: "Röd",
+          currentValue: "8,2",
+          calcOperator: "RATIO_PERCENT",
+        }),
+      ],
+      delayedActivities: [],
+      openDecisions: [],
+      areas: [
+        {
+          id: "area-1",
+          name: "Kyl & Frys",
+          slug: "kyl-frys",
+          manager: "Anna",
+          status: "Gul",
+        },
+      ],
+      areaManagers: new Map([["area-1", "Anna"]]),
+      limit: 10,
+    });
+    const areaItem = items.find((item) => item.type === "Affärsområde");
+    assert.equal(areaItem?.title, "Kyl & Frys");
+    assert.equal(areaItem?.statusLabel, "Röd");
+    assert.ok(!items.some((item) => item.type === "KPI"));
+  });
 });

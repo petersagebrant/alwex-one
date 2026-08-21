@@ -5,7 +5,10 @@ import {
   computeAreaOperationalStatus,
   groupKpisByBusinessAreaId,
 } from "@/lib/kpi/areaOperationalStatus";
-import { classifyDashboardTargetKpis } from "@/lib/kpi/reportedTargetKpis";
+import {
+  classifyDashboardTargetKpis,
+  countUnreportedTargetKpis,
+} from "@/lib/kpi/reportedTargetKpis";
 import {
   formatMonthlyEconomicSummary,
   isMonthlyEconomicResultKpi,
@@ -133,7 +136,7 @@ export type DashboardVdFocus = {
   priorityItems: VdAttentionItem[];
 };
 
-export type DashboardVdAssistantRisk = "Låg" | "Medel" | "Hög";
+export type DashboardVdAssistantRisk = "Låg" | "Medel" | "Hög" | "Ej bedömd";
 
 export type DashboardVdAssistant = {
   greeting: string;
@@ -245,7 +248,7 @@ function formatKpiStatusCounts(
   }
 
   if (parts.length === 0) {
-    return "Inga KPI:er är registrerade ännu.";
+    return "Inga TARGET-KPI:er är rapporterade.";
   }
 
   if (green > 0 && (yellow > 0 || red > 0)) {
@@ -295,12 +298,13 @@ function kpiObservation(kpi: KPIListItem): string {
   return `${area}: KPI:n ${kpi.name} är gul.`;
 }
 
-function buildVdAssistant(input: {
+export function buildVdAssistant(input: {
   firstName: string | null;
   areaCount: number;
   greenKpiCount: number;
   yellowKpiCount: number;
   redKpiCount: number;
+  unreportedTargetCount?: number;
   delayedCount: number;
   openDecisionCount: number;
   greenAreaCount: number;
@@ -318,7 +322,6 @@ function buildVdAssistant(input: {
   const yellowAreaNames = input.yellowAreaNames ?? [];
   const redAreaNames = input.redAreaNames ?? [];
   const followUpKpis = input.followUpKpis ?? [];
-  const yellowGoals = input.yellowGoals ?? [];
 
   const greeting = input.firstName
     ? `God morgon ${input.firstName}.`
@@ -346,7 +349,18 @@ function buildVdAssistant(input: {
     ),
   );
 
-  if (input.topFollowUpKpi?.status === "Röd") {
+  const reportedTargetCount =
+    input.greenKpiCount + input.yellowKpiCount + input.redKpiCount;
+  const noReportedTargets = reportedTargetCount <= 0;
+  const unreportedTargetCount = input.unreportedTargetCount ?? 0;
+
+  if (noReportedTargets) {
+    situationParts.push(
+      unreportedTargetCount > 0
+        ? `${unreportedTargetCount} TARGET-KPI:er är ej rapporterade.`
+        : "Ingen TARGET-KPI är rapporterad.",
+    );
+  } else if (input.topFollowUpKpi?.status === "Röd") {
     situationParts.push(
       `${input.topFollowUpKpi.areaName} har den viktigaste negativa avvikelsen.`,
     );
@@ -369,18 +383,23 @@ function buildVdAssistant(input: {
   let priority: string;
   if (input.topFollowUpKpi) {
     priority = `Prioritet idag:\nFölj upp KPI:n ${input.topFollowUpKpi.name} tillsammans med ${input.topFollowUpKpi.owner}.`;
+  } else if (noReportedTargets) {
+    priority =
+      "Inga rapporterade TARGET-KPI:er att följa upp. Saknad rapportering är en rapporteringsbrist, inte en verksamhetsavvikelse.";
   } else {
     priority = "Inga kritiska avvikelser finns.";
   }
 
   const observationCandidates: string[] = [];
+  if (noReportedTargets || unreportedTargetCount > 0) {
+    observationCandidates.push(
+      unreportedTargetCount > 0
+        ? `${unreportedTargetCount} TARGET-KPI:er saknar rapporterat värde (rapporteringsbrist, inte verksamhetsavvikelse).`
+        : "Ingen TARGET-KPI är rapporterad (rapporteringsbrist, inte verksamhetsavvikelse).",
+    );
+  }
   for (const kpi of followUpKpis) {
     observationCandidates.push(kpiObservation(kpi));
-  }
-  for (const goal of yellowGoals) {
-    observationCandidates.push(
-      `Målet "${goal.title}" i ${goal.area} kräver uppföljning.`,
-    );
   }
   if (input.delayedCount > 0) {
     observationCandidates.push(
@@ -406,7 +425,7 @@ function buildVdAssistant(input: {
       ),
     );
   }
-  if (input.greenAreaCount > 0 && input.areaCount > 0) {
+  if (!noReportedTargets && input.greenAreaCount > 0 && input.areaCount > 0) {
     observationCandidates.push(
       input.greenAreaCount === input.areaCount
         ? "Alla affärsområden har grön status."
@@ -427,6 +446,16 @@ function buildVdAssistant(input: {
     }
   }
   while (observations.length < 3) {
+    if (noReportedTargets) {
+      if (!seen.has("insufficient")) {
+        seen.add("insufficient");
+        observations.push(
+          "Tillräckligt underlag saknas för att bedöma verksamhetsläget.",
+        );
+        continue;
+      }
+      break;
+    }
     if (input.greenKpiCount > 0 && !seen.has("kpi-green")) {
       seen.add("kpi-green");
       observations.push(
@@ -446,11 +475,13 @@ function buildVdAssistant(input: {
 
   let positiveSummary: string;
   const greenKpiShare =
-    input.greenKpiCount + input.yellowKpiCount + input.redKpiCount > 0
-      ? input.greenKpiCount /
-        (input.greenKpiCount + input.yellowKpiCount + input.redKpiCount)
-      : 1;
-  if (input.redKpiCount === 0 && input.yellowKpiCount === 0) {
+    reportedTargetCount > 0
+      ? input.greenKpiCount / reportedTargetCount
+      : 0;
+  if (noReportedTargets) {
+    positiveSummary =
+      "Tillräckligt underlag saknas — ingen TARGET-KPI är rapporterad.";
+  } else if (input.redKpiCount === 0 && input.yellowKpiCount === 0) {
     positiveSummary = "Inga kritiska avvikelser — verksamheten ligger enligt plan.";
   } else if (greenKpiShare >= 0.6 || input.greenAreaCount >= input.areaCount / 2) {
     positiveSummary = "De flesta affärsområden utvecklas enligt plan.";
@@ -461,7 +492,9 @@ function buildVdAssistant(input: {
   }
 
   let riskLevel: DashboardVdAssistantRisk = "Låg";
-  if (
+  if (noReportedTargets && input.delayedCount === 0 && redAreaNames.length === 0) {
+    riskLevel = "Ej bedömd";
+  } else if (
     redAreaNames.length > 0 ||
     input.delayedCount >= 2 ||
     input.topFollowUpKpi?.status === "Röd"
@@ -671,6 +704,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     greenKpiCount: greenKpis.length,
     yellowKpiCount: yellowKpis.length,
     redKpiCount: redKpis.length,
+    unreportedTargetCount: countUnreportedTargetKpis(allKpis ?? []),
     delayedCount,
     openDecisionCount: waitingDecisionCount,
     greenAreaCount: greenAreaRows.length,

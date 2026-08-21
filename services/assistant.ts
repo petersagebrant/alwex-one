@@ -14,6 +14,7 @@ import {
 import { formatDateTimeSv } from "@/lib/format/date";
 import {
   countTargetKpiStatuses,
+  hasValidKpiCurrentValue,
   type KpiStoredStatus,
 } from "@/lib/kpi/kind";
 import {
@@ -23,8 +24,24 @@ import {
   groupKpisByBusinessAreaId,
   reportedTargetStatusTone,
 } from "@/lib/kpi/areaOperationalStatus";
-import { isFollowUpTargetTone } from "@/lib/kpi/reportedTargetKpis";
+import {
+  briefingTargetStatusLabel,
+  countUnreportedTargetKpis,
+  isBriefingOpenKpiDeviation,
+  isFollowUpTargetTone,
+  isUsableBriefingTargetKpi,
+} from "@/lib/kpi/reportedTargetKpis";
+import {
+  briefingTrendDirection,
+  canUseAuditAsKpiTrendSource,
+  canUseKpiHistoryAsTrend,
+} from "@/lib/kpi/vdBriefingSignals";
+import {
+  buildLocalVdBriefing,
+  type LocalVdBriefingInput,
+} from "@/lib/kpi/vdBriefingLocal";
 import { isExcludedFromVdAttention } from "@/lib/kpi/vdAttentionFilter";
+import { parseNumeric } from "@/lib/kpi/parseNumeric";
 import {
   buildMonthlyResultState,
   formatMonthlyEconomicSummary,
@@ -208,6 +225,8 @@ export type AssistantTrends = {
   lastWeek: AssistantTrendWindow;
   sinceMonday: AssistantTrendWindow;
 };
+
+export { buildLocalVdBriefing, type LocalVdBriefingInput };
 
 export type AssistantContext = {
   summary: {
@@ -1401,28 +1420,6 @@ function mondayCutoffStockholm(): Date {
   return new Date(todayNoon.getTime() - daysSinceMonday * 24 * 60 * 60 * 1000);
 }
 
-function statusRank(
-  status: StatusTone | "Statistik" | null | undefined,
-): number {
-  if (status === "Grön") return 2;
-  if (status === "Gul") return 1;
-  if (status === "Röd") return 0;
-  return 1;
-}
-
-function directionFromStatuses(
-  previous: KpiStoredStatus | null,
-  current: KpiStoredStatus,
-): AssistantTrendDirection {
-  if (!previous) {
-    return "okänd";
-  }
-  const delta = statusRank(current) - statusRank(previous);
-  if (delta > 0) return "bättre";
-  if (delta < 0) return "sämre";
-  return "oförändrad";
-}
-
 function emptyTrendWindow(
   key: AssistantTrendWindow["key"],
   label: string,
@@ -1554,6 +1551,9 @@ function buildAssistantTrends(input: {
     const kpiTrends: AssistantKpiTrend[] = [];
 
     for (const kpi of input.kpis ?? []) {
+      if (!canUseKpiHistoryAsTrend(kpi, kpiById)) {
+        continue;
+      }
       const history = historyByKpi.get(kpi.id) ?? [];
       if (history.length === 0) {
         continue;
@@ -1609,7 +1609,15 @@ function buildAssistantTrends(input: {
         continue;
       }
 
-      const direction = directionFromStatuses(previous.status, latest.status);
+      const direction = briefingTrendDirection({
+        liveCurrentValue: kpi.currentValue,
+        isPeriodPending: kpi.isPeriodPending,
+        previousValue: previous.value,
+        currentValue: latest.value,
+        previousStatus: previous.status,
+        currentStatus: latest.status,
+        source: "kpi_history",
+      });
       kpiTrends.push({
         kpiId: kpi.id,
         name: kpi.name,
@@ -1639,11 +1647,12 @@ function buildAssistantTrends(input: {
 
       if (entityType === "kpi" && entry.entityId) {
         const kpi = kpiById.get(entry.entityId);
-        if (kpi) {
-          title = kpi.name;
-          areaId = kpi.businessAreaId;
-          areaName = kpi.businessAreaName;
+        if (!kpi || !canUseKpiHistoryAsTrend(kpi, kpiById)) {
+          continue;
         }
+        title = kpi.name;
+        areaId = kpi.businessAreaId;
+        areaName = kpi.businessAreaName;
       } else if (entityType === "goal" && entry.entityId) {
         title = goalTitleById.get(entry.entityId) ?? entry.description;
       } else if (entityType === "activity" && entry.entityId) {
@@ -1669,51 +1678,46 @@ function buildAssistantTrends(input: {
       });
     }
 
-    // Supplement KPI trends from structured audit diffs when kpi_history is thin.
-    const coveredKpiIds = new Set(kpiTrends.map((item) => item.kpiId));
-    for (const change of entityChanges) {
-      if (change.entityType !== "kpi" || !change.entityId) {
-        continue;
+    // Audit log is never a KPI trend source (stale Gul→Grön after cleanup).
+    if (canUseAuditAsKpiTrendSource()) {
+      const coveredKpiIds = new Set(kpiTrends.map((item) => item.kpiId));
+      for (const change of entityChanges) {
+        if (change.entityType !== "kpi" || !change.entityId) {
+          continue;
+        }
+        if (coveredKpiIds.has(change.entityId)) {
+          continue;
+        }
+        const kpi = kpiById.get(change.entityId);
+        if (!kpi) {
+          continue;
+        }
+        const valueChange = change.fields.find(
+          (field) => field.field === "current_value",
+        );
+        const statusChange = change.fields.find(
+          (field) => field.field === "status",
+        );
+        if (!valueChange && !statusChange) {
+          continue;
+        }
+        kpiTrends.push({
+          kpiId: kpi.id,
+          name: kpi.name,
+          areaId: kpi.businessAreaId,
+          areaName: kpi.businessAreaName,
+          previousValue: valueChange?.from ?? null,
+          currentValue: valueChange?.to ?? kpi.currentValue,
+          previousStatus: toStatusToneOrNull(statusChange?.from ?? null),
+          currentStatus:
+            toStatusToneOrNull(statusChange?.to ?? null) ?? kpi.status,
+          unit: kpi.unit,
+          direction: "okänd",
+          previousRecordedAt: null,
+          currentRecordedAt: change.at,
+        });
+        coveredKpiIds.add(kpi.id);
       }
-      if (coveredKpiIds.has(change.entityId)) {
-        continue;
-      }
-
-      const kpi = kpiById.get(change.entityId);
-      if (!kpi) {
-        continue;
-      }
-
-      const valueChange = change.fields.find(
-        (field) => field.field === "current_value",
-      );
-      const statusChange = change.fields.find(
-        (field) => field.field === "status",
-      );
-      if (!valueChange && !statusChange) {
-        continue;
-      }
-
-      const previousStatus = toStatusToneOrNull(statusChange?.from ?? null);
-      const currentStatus =
-        toStatusToneOrNull(statusChange?.to ?? null) ?? kpi.status;
-      const direction = directionFromStatuses(previousStatus, currentStatus);
-
-      kpiTrends.push({
-        kpiId: kpi.id,
-        name: kpi.name,
-        areaId: kpi.businessAreaId,
-        areaName: kpi.businessAreaName,
-        previousValue: valueChange?.from ?? null,
-        currentValue: valueChange?.to ?? kpi.currentValue,
-        previousStatus,
-        currentStatus,
-        unit: kpi.unit,
-        direction,
-        previousRecordedAt: null,
-        currentRecordedAt: change.at,
-      });
-      coveredKpiIds.add(kpi.id);
     }
 
     const worsenedKpis = kpiTrends.filter((item) => item.direction === "sämre");
@@ -1742,7 +1746,10 @@ function buildAssistantTrends(input: {
         }
 
         const areaAudit = entityChanges
-          .filter((change) => change.areaId === area.id)
+          .filter(
+            (change) =>
+              change.areaId === area.id && change.entityType !== "kpi",
+          )
           .slice(0, 2);
         for (const change of areaAudit) {
           if (highlights.length >= 3) break;
@@ -1769,13 +1776,12 @@ function buildAssistantTrends(input: {
       },
     );
 
-    const hasEnoughHistory =
-      worsenedKpis.length > 0 ||
-      improvedKpis.length > 0 ||
-      entityChanges.length > 0 ||
-      kpiTrends.some(
-        (item) => item.previousValue !== null || item.previousStatus !== null,
-      );
+    const hasEnoughHistory = kpiTrends.some(
+      (item) =>
+        item.direction === "sämre" ||
+        item.direction === "bättre" ||
+        item.direction === "oförändrad",
+    );
 
     return {
       key,
@@ -1883,8 +1889,9 @@ function buildKpiLastChanges(input: {
     const latest = history[0] ?? null;
     const previous = history[1] ?? null;
     const audit = latestAuditByKpi.get(kpi.id) ?? null;
+    const liveReported = hasValidKpiCurrentValue(kpi.currentValue);
 
-    if (latest) {
+    if (liveReported && latest) {
       return {
         kpiId: kpi.id,
         name: kpi.name,
@@ -1900,7 +1907,7 @@ function buildKpiLastChanges(input: {
       };
     }
 
-    if (audit) {
+    if (liveReported && audit && canUseAuditAsKpiTrendSource()) {
       const valueChange = audit.changes?.fields?.find(
         (field) => field.field === "current_value",
       );
@@ -1947,11 +1954,6 @@ function buildKpiLastChanges(input: {
       lastChangedAt: null,
       previousValue: null,
       currentValue: kpi.currentValue,
-      actualResult: kpi.latestActualValue ?? undefined,
-      budgetResult: kpi.latestBudgetValue ?? undefined,
-      deviation: kpi.reportingFrequency === "MONTHLY"
-        ? kpi.currentValue
-        : undefined,
       previousStatus: null,
       currentStatus: kpi.status,
       unit: kpi.unit,
@@ -2237,13 +2239,18 @@ function toCompactOpenAiContext(
       status: area.status,
       manager: area.manager,
     })),
-    kpis: (context.kpis ?? []).map((kpi) => {
+    kpis: (() => {
+      const kpisById = new Map(
+        (context.kpis ?? []).map((item) => [item.id, item]),
+      );
+      return (context.kpis ?? []).map((kpi) => {
       const monthlyEconomic = buildMonthlyResultAiContext(kpi);
+      const usable = isUsableBriefingTargetKpi(kpi, kpisById);
       return {
         name: kpi.name,
         area: kpi.businessAreaName,
         kind: kpi.kind,
-        status: kpi.status,
+        status: briefingTargetStatusLabel(kpi),
         currentValue: monthlyEconomic ? null : kpi.currentValue,
         targetValue: monthlyEconomic
           ? null
@@ -2251,14 +2258,16 @@ function toCompactOpenAiContext(
             ? kpi.targetValue
             : null,
         unit: kpi.unit,
-        trend: kpi.trend,
+        trend: usable ? kpi.trend : null,
+        reported: usable,
         semanticRole:
           kpi.name === "Omsättning månad hittills"
             ? "current_month_to_date_revenue"
             : monthlyEconomic?.semanticRole,
         monthlyEconomic: monthlyEconomic ?? undefined,
       };
-    }),
+      });
+    })(),
     goals: (context.goals ?? []).map((goal) => ({
       title: goal.title,
       area: goal.businessAreaName,
@@ -2350,10 +2359,9 @@ function buildVdBriefingOpenAiPayload(full: AssistantContext) {
   const kpiChanges = (compact.kpiLastChanges ?? [])
     .filter(
       (item) =>
-        item.previousValue !== null ||
-        item.previousStatus !== null ||
-        item.source === "kpi_history" ||
-        item.source === "audit_log",
+        item.source === "kpi_history" &&
+        parseNumeric(item.previousValue) !== null &&
+        parseNumeric(item.currentValue) !== null,
     )
     .slice(0, 10)
     .map((item) => ({
@@ -2366,6 +2374,12 @@ function buildVdBriefingOpenAiPayload(full: AssistantContext) {
       unit: item.unit,
       lastChangedAt: item.lastChangedAt,
     }));
+
+  const reportedTargetCount =
+    (full.summary.kpiCounts?.Grön ?? 0) +
+    (full.summary.kpiCounts?.Gul ?? 0) +
+    (full.summary.kpiCounts?.Röd ?? 0);
+  const unreportedTargetCount = countUnreportedTargetKpis(full.kpis ?? []);
 
   return {
     scope: "vd-briefing" as const,
@@ -2396,6 +2410,12 @@ function buildVdBriefingOpenAiPayload(full: AssistantContext) {
       yesterdayChanges: compact.yesterdayChanges,
       kpiChanges,
       trends: trendFocus,
+      reportingGap: {
+        reportedTargetCount,
+        unreportedTargetCount,
+        note:
+          "Saknad TARGET-rapportering är rapporteringsbrist, inte verksamhetsavvikelse eller KPI-risk. Mål är inte KPI.",
+      },
     },
     counts: {
       areas: full.businessAreas?.length ?? compact.summary.areaCount,
@@ -2425,12 +2445,18 @@ Regler:
 1. Börja med hälsning och därefter 2–3 korta meningar. Inga långa stycken.
 2. Varje punkt = en kort mening (max ca 12 ord).
 3. Om ansvarig finns: skriv på egen rad under punkten, exakt "Ansvarig: Namn".
-4. Prioritera affärsrisk. Gruppera när flera KPI hör ihop.
+4. Prioritera affärsrisk från rapporterade TARGET-KPI:er. Gruppera när flera KPI hör ihop.
 5. Inga upprepningar.
 6. Använd exakt rubrikerna nedan (inklusive emoji).
 7. Håll maxgränserna strikt.
 8. Skilj aktuell dags-/MTD-omsättning från senaste fastställda månadsresultat.
 9. För monthlyEconomic, skriv uttryckligen resultatmånad, faktiskt resultat, budgeterat resultat, avvikelse och status. Avvikelse är aldrig faktiskt resultat. Skriv aldrig mål 0 för denna KPI.
+10. TARGET utan rapporterat currentValue är "Ej rapporterat", aldrig Grön/Gul/Röd, även om lagrad status är Gul.
+11. Använd endast faktiskt rapporterade TARGET-KPI:er för avvikelse, risk, trend och rekommendation. Beräknad KPI utan komplett underlag används inte.
+12. Positiv eller negativ trend kräver två parsebara rapporterade värden (current + previous från kpi_history). Audit-logg och testhistorik är inte trendunderlag.
+13. Saknad rapportering får nämnas som rapporteringsbrist, aldrig som verksamhetsrisk eller verksamhetsavvikelse.
+14. Mål är inte KPI. Seedade mål får inte beskrivas som KPI-risk.
+15. Hitta inte på G/Y/R, trender eller slutsatser. Om underlag saknas: skriv uttryckligen att tillräckligt underlag saknas. Fyll aldrig obligatoriska sektioner med påhitt.
 
 Använd exakt denna struktur (markdown):
 
@@ -2467,7 +2493,7 @@ const VD_BRIEFING_OPENAI_MODEL = "gpt-5";
 const VD_BRIEFING_MAX_COMPLETION_TOKENS = 1200;
 const VD_BRIEFING_REASONING_EFFORT = "minimal" as const;
 /** Bump when briefing format/payload changes so stale AI cache is not shown. */
-const VD_BRIEFING_CACHE_VERSION = 5;
+const VD_BRIEFING_CACHE_VERSION = 6;
 
 const vdBriefingCache = new ScopedSingleflightCache<string>();
 
@@ -2484,330 +2510,6 @@ function vdBriefingCacheKey(principal: AiPrincipal): string {
 /** Sync read of a still-valid AI briefing cache entry. */
 export function getCachedVdBriefing(principal: AiPrincipal): string | null {
   return vdBriefingCache.get(vdBriefingCacheKey(principal));
-}
-
-export type LocalVdBriefingInput = {
-  firstName?: string | null;
-  /** Kort sammanfattning (2–3 meningar), redan byggd från dashboarddata. */
-  summaryText?: string | null;
-  followUpKpis?: Array<{
-    name?: string | null;
-    area?: string | null;
-    status?: StatusTone | null;
-    owner?: string | null;
-    monthlyEconomicSummary?: string | null;
-  }> | null;
-  greenAreaNames?: Array<string | null> | null;
-  delayedActivities?: Array<{
-    title?: string | null;
-    area?: string | null;
-    owner?: string | null;
-    deadline?: string | null;
-  }> | null;
-  openDecisions?: Array<{
-    title?: string | null;
-    area?: string | null;
-    owner?: string | null;
-    dueDate?: string | null;
-  }> | null;
-  actionGoals?: Array<{
-    goal?: string | null;
-    area?: string | null;
-    owner?: string | null;
-    status?: StatusTone | null;
-  }> | null;
-  delayedActivityCount?: number | null;
-  openDecisionCount?: number | null;
-  priorityText?: string | null;
-  positiveSummary?: string | null;
-  counts?: {
-    areas?: number | null;
-    kpis?: number | null;
-    goals?: number | null;
-    activities?: number | null;
-    decisions?: number | null;
-  } | null;
-  analyzedAtLabel?: string | null;
-};
-
-function cleanOwner(owner: string | null | undefined): string | null {
-  const name = owner?.trim();
-  if (!name || name === "Ej angiven") {
-    return null;
-  }
-  return name;
-}
-
-/** Formats a bullet; optional owner becomes its own markdown line. */
-function formatBriefingBullet(
-  text: string,
-  owner?: string | null,
-): string {
-  const line = text?.trim() || "Punkt saknas.";
-  const name = cleanOwner(owner);
-  if (name) {
-    return `- ${line}\n  Ansvarig: ${name}`;
-  }
-  return `- ${line}`;
-}
-
-function toShortSummary(raw: string | null | undefined): string {
-  const text = raw?.trim() ?? "";
-  if (!text) {
-    return "Läget följs upp via KPI, mål och aktiviteter. Fokusera på avvikelser först.";
-  }
-  const sentences = text
-    .split(/(?<=[.!?])\s+/)
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .slice(0, 3)
-    .map((sentence) => {
-      if (sentence.length <= 110) {
-        return sentence;
-      }
-      return `${sentence.slice(0, 107).trim()}…`;
-    });
-  return sentences.join(" ");
-}
-
-/**
- * Instant, rule-based briefing from data already on the dashboard.
- * No OpenAI. Safe to render in the initial HTML response.
- */
-export function buildLocalVdBriefing(
-  input?: LocalVdBriefingInput | null,
-): string {
-  const data = input ?? {};
-  const firstName = data.firstName?.trim() || "Peter";
-  const followUp = (data.followUpKpis ?? []).filter(Boolean);
-  const redKpis = followUp.filter((kpi) => kpi?.status === "Röd");
-  const yellowKpis = followUp.filter((kpi) => kpi?.status === "Gul");
-  const delayed = (data.delayedActivities ?? []).filter(Boolean);
-  const decisions = (data.openDecisions ?? []).filter(Boolean);
-  const goals = (data.actionGoals ?? []).filter(Boolean);
-  const delayedCount = data.delayedActivityCount ?? 0;
-  const openDecisionCount = data.openDecisionCount ?? 0;
-
-  const summary = toShortSummary(data.summaryText);
-
-  type Bullet = { text: string; owner?: string | null };
-  const important: Bullet[] = [];
-
-  if (redKpis[0]) {
-    important.push({
-      text: redKpis[0].monthlyEconomicSummary
-        ? `${redKpis[0].area ?? "Område"}: ${redKpis[0].monthlyEconomicSummary}.`
-        : `${redKpis[0].area ?? "Område"}: negativ avvikelse i ${redKpis[0].name ?? "KPI"}.`,
-      owner: redKpis[0].owner,
-    });
-  }
-
-  const yellowByArea = new Map<string, typeof yellowKpis>();
-  for (const kpi of yellowKpis) {
-    const area = kpi?.area?.trim() || "Okänt område";
-    const list = yellowByArea.get(area) ?? [];
-    list.push(kpi);
-    yellowByArea.set(area, list);
-  }
-
-  for (const [area, areaKpis] of yellowByArea) {
-    if (important.length >= 3) {
-      break;
-    }
-    if (redKpis.some((kpi) => (kpi?.area?.trim() || "") === area)) {
-      continue;
-    }
-    const names = areaKpis.map((kpi) => (kpi?.name ?? "").toLowerCase());
-    const hasResultat = names.some((name) => name.includes("resultat"));
-    const owner = areaKpis[0]?.owner;
-    if (areaKpis.length >= 2) {
-      important.push({
-        text: `${area}: flera gula KPI kräver uppföljning.`,
-        owner,
-      });
-    } else if (hasResultat) {
-      important.push({
-        text: areaKpis[0]?.monthlyEconomicSummary
-          ? `${area}: ${areaKpis[0].monthlyEconomicSummary}.`
-          : `${area} ligger under budget.`,
-        owner,
-      });
-    } else {
-      important.push({
-        text: `${area}: ${areaKpis[0]?.name ?? "KPI"} behöver följas upp.`,
-        owner,
-      });
-    }
-  }
-
-  if (important.length < 3 && delayed[0]) {
-    important.push({
-      text: `Försenad aktivitet: ${delayed[0].title ?? "utan titel"}.`,
-      owner: delayed[0].owner,
-    });
-  } else if (important.length < 3 && delayedCount > 0) {
-    important.push({
-      text:
-        delayedCount === 1
-          ? "1 aktivitet är försenad."
-          : `${delayedCount} aktiviteter är försenade.`,
-    });
-  }
-
-  if (important.length < 3 && decisions[0]) {
-    important.push({
-      text: `Öppet beslut: ${decisions[0].title ?? "utan titel"}.`,
-      owner: decisions[0].owner,
-    });
-  } else if (important.length < 3 && openDecisionCount > 0) {
-    important.push({
-      text:
-        openDecisionCount === 1
-          ? "1 öppet beslut kräver uppföljning."
-          : `${openDecisionCount} öppna beslut kräver uppföljning.`,
-    });
-  }
-
-  if (important.length === 0) {
-    important.push({ text: "Inga kritiska avvikelser i dagens underlag." });
-  }
-
-  const positives: Bullet[] = [];
-  for (const name of (data.greenAreaNames ?? []).filter(Boolean).slice(0, 3)) {
-    positives.push({ text: `${name} utvecklas enligt plan.` });
-  }
-  if (positives.length === 0) {
-    const fallback = data.positiveSummary?.trim();
-    positives.push({
-      text: fallback
-        ? toShortSummary(fallback).split(/(?<=[.!?])\s+/)[0] ?? fallback
-        : "Stabil utveckling i gröna områden.",
-    });
-  }
-
-  const risks: Bullet[] = [];
-  if (delayed[0]) {
-    risks.push({
-      text:
-        delayed.length === 1
-          ? `Försenad aktivitet kan eskalera: ${delayed[0].title ?? "aktivitet"}.`
-          : `${delayed.length} försenade aktiviteter kan eskalera.`,
-      owner: delayed[0].owner,
-    });
-  }
-  if (risks.length < 2 && decisions[0]) {
-    const due =
-      decisions[0].dueDate && decisions[0].dueDate !== "—"
-        ? ` Förfaller ${decisions[0].dueDate}.`
-        : "";
-    risks.push({
-      text: `Öppet beslut kan bromsa: ${decisions[0].title ?? "beslut"}.${due}`,
-      owner: decisions[0].owner,
-    });
-  }
-  if (risks.length < 2) {
-    const redOrYellowGoal = goals.find(
-      (goal) => goal?.status === "Röd" || goal?.status === "Gul",
-    );
-    if (redOrYellowGoal) {
-      risks.push({
-        text: `Målrisk i ${redOrYellowGoal.area ?? "område"}: ${redOrYellowGoal.goal ?? "mål"}.`,
-        owner: redOrYellowGoal.owner,
-      });
-    }
-  }
-  if (risks.length === 0) {
-    risks.push({ text: "Inga tydliga tvåveckorsrisker just nu." });
-  }
-
-  const recommendations: Bullet[] = [];
-  const topKpi = redKpis[0] ?? yellowKpis[0];
-  if (topKpi) {
-    recommendations.push({
-      text: `Följ upp ${topKpi.name ?? "KPI"} i ${topKpi.area ?? "området"}.`,
-      owner: topKpi.owner,
-    });
-  }
-  if (recommendations.length < 3 && delayed[0]) {
-    recommendations.push({
-      text: `Lås nästa steg för ${delayed[0].title ?? "försenad aktivitet"}.`,
-      owner: delayed[0].owner,
-    });
-  }
-  if (recommendations.length < 3 && decisions[0]) {
-    recommendations.push({
-      text: `Stäng beslutet ${decisions[0].title ?? "öppet beslut"}.`,
-      owner: decisions[0].owner,
-    });
-  }
-  if (recommendations.length < 3 && goals[0]) {
-    recommendations.push({
-      text: `Följ upp målet ${goals[0].goal ?? "prioriterat mål"}.`,
-      owner: goals[0].owner,
-    });
-  }
-  if (recommendations.length === 0) {
-    const fromPriority = data.priorityText
-      ?.replace(/^Prioritet idag:\s*/i, "")
-      ?.trim();
-    if (fromPriority) {
-      recommendations.push({
-        text:
-          toShortSummary(fromPriority).split(/(?<=[.!?])\s+/)[0] ??
-          fromPriority,
-      });
-    }
-  }
-  const fallbackRecs = [
-    "Behåll översikten på gula och röda signaler.",
-    "Bekräfta ansvar och deadline för öppna beslut.",
-    "Stäm av gröna områden kort.",
-  ];
-  while (recommendations.length < 3) {
-    recommendations.push({ text: fallbackRecs[recommendations.length]! });
-  }
-
-  const counts = data.counts ?? {};
-  const areas = counts.areas ?? 0;
-  const kpis = counts.kpis ?? 0;
-  const goalCount = counts.goals ?? 0;
-  const activities = counts.activities ?? 0;
-  const decisionCount = counts.decisions ?? 0;
-
-  return [
-    `God morgon ${firstName}.`,
-    "",
-    summary,
-    "",
-    "## 🔴 Viktigaste idag",
-    ...important
-      .slice(0, 3)
-      .map((item) => formatBriefingBullet(item.text, item.owner)),
-    "",
-    "## 🟢 Positiv utveckling",
-    ...positives
-      .slice(0, 3)
-      .map((item) => formatBriefingBullet(item.text, item.owner)),
-    "",
-    "## ⚠ Risk kommande två veckor",
-    ...risks
-      .slice(0, 2)
-      .map((item) => formatBriefingBullet(item.text, item.owner)),
-    "",
-    "## ✅ Mina tre rekommendationer idag",
-    ...recommendations
-      .slice(0, 3)
-      .map((item) => formatBriefingBullet(item.text, item.owner)),
-    "",
-    "## Analysen bygger på",
-    `- ${areas} affärsområden`,
-    `- ${kpis} KPI`,
-    `- ${goalCount} mål`,
-    `- ${activities} aktiviteter`,
-    `- ${decisionCount} beslut`,
-    "",
-    `Skapad: ${data.analyzedAtLabel?.trim() || "nyss"}`,
-  ].join("\n");
 }
 
 /**
@@ -2896,7 +2598,7 @@ async function generateVdBriefingFromOpenAI(
           },
           {
             role: "user",
-            content: `Context (prioriterat beslutsunderlag — avvikelser och förändringar först):\n${payloadJson}\n\nUppgift:\nSkriv morgonbriefingen för dashboarden.\nPrioritera röda/gula KPI, risker, försenade aktiviteter, öppna beslut och tydliga förändringar.\nAnvänd positiva gröna signaler kortfattat under Positiv utveckling.\nAnvänd exakt denna tidstämpel i foten: Skapad: ${createdAtLabel}\nRäkna antal från context.counts: affärsområden, KPI, mål, aktiviteter, beslut.`,
+            content: `Context (prioriterat beslutsunderlag — rapporterade avvikelser och förändringar först):\n${payloadJson}\n\nUppgift:\nSkriv morgonbriefingen för dashboarden.\nAnvänd endast rapporterade TARGET-KPI:er (giltigt currentValue, status Grön/Gul/Röd i context) för avvikelse, risk, trend och rekommendation.\nTARGET med status "Ej rapporterat" eller currentValue null är rapporteringsbrist, inte verksamhetsavvikelse.\nMål är inte KPI-risk.\nPositiv utveckling kräver två verkliga rapporterade värden att jämföra; annars skriv att tillräckligt underlag saknas.\nOm kpiCounts är 0/0/0: påstå inte att verksamheten ligger enligt plan och fyll inte sektioner med påhittade gula/gröna slutsatser.\nAnvänd exakt denna tidstämpel i foten: Skapad: ${createdAtLabel}\nRäkna antal från context.counts: affärsområden, KPI, mål, aktiviteter, beslut.`,
           },
         ],
       },
@@ -3004,7 +2706,7 @@ function isDelayedActivity(activity: ActivityListItem): boolean {
   return activity.deadline.slice(0, 10) < todayDateKey();
 }
 
-function buildOpenDeviations(input: {
+export function buildOpenDeviations(input: {
   areas: BusinessAreaRow[];
   kpis: KPIListItem[];
   goals: GoalListItem[];
@@ -3013,17 +2715,19 @@ function buildOpenDeviations(input: {
   areaManagers: Map<string, string>;
 }): AssistantDeviation[] {
   const deviations: AssistantDeviation[] = [];
+  const kpisById = new Map(input.kpis.map((kpi) => [kpi.id, kpi]));
 
   for (const kpi of input.kpis) {
-    if (kpi.isPeriodPending) {
+    if (!isBriefingOpenKpiDeviation(kpi, kpisById)) {
       continue;
     }
-    if (kpi.status !== "Gul" && kpi.status !== "Röd") {
+    const tone = reportedTargetStatusTone(kpi);
+    if (tone !== "Gul" && tone !== "Röd") {
       continue;
     }
     deviations.push({
       type: "kpi",
-      status: kpi.status,
+      status: tone,
       title: kpi.name,
       areaName: kpi.businessAreaName,
       owner: input.areaManagers.get(kpi.businessAreaId) ?? "Ej angiven",
@@ -3271,15 +2975,13 @@ function buildAnalysisInsights(input: {
     let causeUnknown = true;
 
     const occupancyOff =
-      occupancy && isFollowUpStatus(occupancy.status) ? occupancy : null;
+      occupancy && isReportedFollowUpKpi(occupancy) ? occupancy : null;
     const resultOff =
-      resultKpi && !resultKpi.isPeriodPending && isFollowUpStatus(resultKpi.status)
-        ? resultKpi
-        : null;
+      resultKpi && isReportedFollowUpKpi(resultKpi) ? resultKpi : null;
     const volumeOff =
-      volume && isFollowUpStatus(volume.status) ? volume : null;
+      volume && isReportedFollowUpKpi(volume) ? volume : null;
     const revenueOff =
-      revenue && isFollowUpStatus(revenue.status) ? revenue : null;
+      revenue && isReportedFollowUpKpi(revenue) ? revenue : null;
 
     if (occupancyOff && resultOff) {
       linkedSignals.push(formatKpiFact(occupancyOff), formatKpiFact(resultOff));

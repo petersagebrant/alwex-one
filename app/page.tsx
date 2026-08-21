@@ -23,6 +23,7 @@ import { getKPIs } from "@/services/kpis";
 import { getKpiOverviewData } from "@/services/kpiOverview";
 import { getDashboardReportingContext } from "@/services/kpiReporting";
 import { countTargetKpiStatuses } from "@/lib/kpi/kind";
+import { countUnreportedTargetKpis } from "@/lib/kpi/reportedTargetKpis";
 import { getCurrentUser } from "@/lib/auth/require-user";
 import { fetchProfileByUserId } from "@/lib/supabase/profiles";
 import { formatDateTimeSv } from "@/lib/format/date";
@@ -166,6 +167,7 @@ export default async function Home() {
     Hög: "!border-rose-200/80 !bg-rose-50/40",
     Medel: "!border-amber-200/80 !bg-amber-50/40",
     Låg: "!border-emerald-200/80 !bg-emerald-50/40",
+    "Ej bedömd": "!border-slate-200/80 !bg-white",
   };
 
   const cachedAiBriefing = vdPrincipal
@@ -176,6 +178,10 @@ export default async function Home() {
   )?.[1]?.trim();
   const summaryKpiValue = (id: string) =>
     Number(kpis.find((kpi) => kpi.id === id)?.value ?? 0) || 0;
+  const targetStatusCounts = countTargetKpiStatuses(kpiDetails ?? []);
+  const reportedTargetCount =
+    targetStatusCounts.Grön + targetStatusCounts.Gul + targetStatusCounts.Röd;
+  const unreportedTargetCount = countUnreportedTargetKpis(kpiDetails ?? []);
   const localBriefing = buildLocalVdBriefing({
     firstName: firstNameFromGreeting ?? null,
     summaryText: vdAssistant.situation?.trim() ?? "",
@@ -215,6 +221,8 @@ export default async function Home() {
       vdAssistant.recommendation?.trim() ||
       "",
     positiveSummary: vdAssistant.positiveSummary?.trim() ?? "",
+    reportedTargetCount,
+    unreportedTargetCount,
     counts: {
       areas: businessAreas?.length ?? 0,
       kpis: kpiDetails?.length ?? 0,
@@ -232,7 +240,6 @@ export default async function Home() {
   });
   const initialBriefing = cachedAiBriefing ?? localBriefing;
 
-  const targetStatusCounts = countTargetKpiStatuses(kpiDetails ?? []);
   const briefingStats = {
     areas: businessAreas?.length ?? 0,
     greenKpis: targetStatusCounts.Grön,

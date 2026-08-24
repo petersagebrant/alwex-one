@@ -481,4 +481,38 @@ describe("countKpiSetReportingProgress", () => {
     );
     assert.deepEqual(allDaily, { reportedCount: 6, totalCount: 6 });
   });
+
+  it("excludes MONTHLY STATISTIC from daily progress like TARGET MONTHLY", () => {
+    const kpis = [
+      {
+        id: "daily-stat",
+        kind: "STATISTIC" as const,
+        calcOperator: null,
+        reportingFrequency: "DAILY" as const,
+      },
+      {
+        id: "monthly-stat",
+        kind: "STATISTIC" as const,
+        calcOperator: null,
+        reportingFrequency: "MONTHLY" as const,
+      },
+      {
+        id: "monthly-target",
+        kind: "TARGET" as const,
+        calcOperator: null,
+        reportingFrequency: "MONTHLY" as const,
+      },
+      {
+        id: "daily-target",
+        kind: "TARGET" as const,
+        calcOperator: null,
+        reportingFrequency: "DAILY" as const,
+      },
+    ];
+    const result = countKpiSetReportingProgress(
+      kpis,
+      new Set(["daily-stat", "monthly-stat", "monthly-target", "daily-target"]),
+    );
+    assert.deepEqual(result, { reportedCount: 2, totalCount: 2 });
+  });
 });

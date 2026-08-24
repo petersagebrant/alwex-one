@@ -7,6 +7,7 @@ import {
 } from "@/lib/auth/require-user";
 import { computeKpiStatus } from "@/lib/kpi/computeStatus";
 import { computeEconomicDeviation } from "@/lib/kpi/economics";
+import { parseNumeric } from "@/lib/kpi/parseNumeric";
 import {
   fetchBusinessAreaById,
   fetchBusinessAreaBySlug,
@@ -18,6 +19,7 @@ import { getKpisForTodayReporting } from "@/services/kpiReporting";
 import {
   upsertDailyKpiReport,
   upsertMonthlyKpiReport,
+  upsertMonthlyStatisticReport,
   toStockholmReportDate,
 } from "@/services/kpiHistory";
 import type { MyKpisForTodayReporting, StatusTone } from "@/types";
@@ -30,6 +32,7 @@ export type ReportMonthlyKpiResult = ReportDailyKpiResult;
 export type LoadMonthlyKpiResult =
   | {
       ok: true;
+      value: string | null;
       actualValue: string | null;
       budgetValue: string | null;
       deviationValue: string | null;
@@ -123,6 +126,13 @@ export async function reportDailyKpiAction(input: {
     return {
       ok: false,
       error: "Beräknade KPI:er rapporteras inte manuellt.",
+    };
+  }
+
+  if (kpi.reporting_frequency === "MONTHLY") {
+    return {
+      ok: false,
+      error: "Månads-KPI:er rapporteras i månadsvyn, inte som daglig rapport.",
     };
   }
 
@@ -290,6 +300,65 @@ export async function reportMonthlyKpiAction(input: {
   return { ok: true };
 }
 
+export async function reportMonthlyStatisticKpiAction(input: {
+  kpiId: string;
+  periodMonth: string;
+  value: string;
+  comment?: string;
+}): Promise<ReportMonthlyKpiResult> {
+  const profile = await requireOperationalWriter();
+  const kpi = await fetchKpiById(input.kpiId.trim()).catch(() => null);
+  if (!kpi || kpi.archived_at) {
+    return { ok: false, error: "KPI:n hittades inte eller är arkiverad." };
+  }
+  if (
+    kpi.kpi_kind !== "STATISTIC" ||
+    kpi.reporting_frequency !== "MONTHLY" ||
+    kpi.calc_operator
+  ) {
+    return { ok: false, error: "KPI:n är inte en manuell månadsstatistik." };
+  }
+  if (
+    profile.role === "ao_chef" &&
+    (!profile.businessAreaId || kpi.business_area_id !== profile.businessAreaId)
+  ) {
+    return { ok: false, error: "Du kan bara rapportera för ditt eget affärsområde." };
+  }
+  if (
+    profile.role !== "ao_chef" &&
+    profile.role !== "vd" &&
+    profile.role !== "administrator"
+  ) {
+    return { ok: false, error: "Du saknar behörighet." };
+  }
+  if (!/^\d{4}-\d{2}-01$/.test(input.periodMonth)) {
+    return { ok: false, error: "Välj en giltig månad." };
+  }
+  const value = input.value.trim();
+  if (parseNumeric(value) === null) {
+    return { ok: false, error: "Ange ett giltigt värde." };
+  }
+
+  try {
+    await upsertMonthlyStatisticReport({
+      kpiId: kpi.id,
+      periodMonth: input.periodMonth,
+      value,
+      comment: input.comment?.trim() || undefined,
+      recordedBy: profile.id,
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      error:
+        error instanceof Error ? error.message : "Kunde inte spara månadsstatistiken.",
+    };
+  }
+  revalidatePath("/report/kpis");
+  revalidatePath("/");
+  return { ok: true };
+}
+
 export async function loadMonthlyKpiValueAction(input: {
   kpiId: string;
   periodMonth: string;
@@ -316,6 +385,7 @@ export async function loadMonthlyKpiValueAction(input: {
   return row
     ? {
         ok: true,
+        value: row.value,
         actualValue: row.actual_value,
         budgetValue: row.budget_value,
         deviationValue: row.value,
@@ -324,6 +394,7 @@ export async function loadMonthlyKpiValueAction(input: {
       }
     : {
         ok: true,
+        value: null,
         actualValue: null,
         budgetValue: null,
         deviationValue: null,

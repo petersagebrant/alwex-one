@@ -102,6 +102,24 @@ export function isDailyManualReportableKpi(kpi: {
   return isManualReportableKpi(kpi) && !isMonthlyReportingKpi(kpi);
 }
 
+/** Manual STATISTIC reported by calendar month, excluded from daily reporting. */
+export function isMonthlyStatisticKpi(kpi: {
+  kind: KpiKind;
+  calcOperator?: KpiCalcOperator | null;
+  reportingFrequency?: KpiReportingFrequency | null;
+}): boolean {
+  return kpi.kind === "STATISTIC" && isManualReportableKpi(kpi) && isMonthlyReportingKpi(kpi);
+}
+
+/** Manual TARGET reported by accounting month (e.g. Resultat mot budget). */
+export function isMonthlyEconomicTargetKpi(kpi: {
+  kind: KpiKind;
+  calcOperator?: KpiCalcOperator | null;
+  reportingFrequency?: KpiReportingFrequency | null;
+}): boolean {
+  return kpi.kind === "TARGET" && isManualReportableKpi(kpi) && isMonthlyReportingKpi(kpi);
+}
+
 export function isStatusTone(value: string | null | undefined): value is StatusTone {
   return value === "Grön" || value === "Gul" || value === "Röd";
 }

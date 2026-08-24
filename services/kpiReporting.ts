@@ -10,21 +10,16 @@ import { fetchSumNumeratorsForParents } from "@/lib/supabase/kpi-calc-sum-numera
 import { fetchBusinessAreas } from "@/lib/supabase/business-areas";
 import { fetchAllKpis } from "@/lib/supabase/kpis";
 import { parseKpiCalcOperator } from "@/lib/kpi/calculated";
-import {
-  buildMonthlyResultState,
-  expectedResultPeriodMonth,
-  formatPeriodMonthSv,
-} from "@/lib/kpi/economics";
+import { expectedResultPeriodMonth } from "@/lib/kpi/economics";
 import {
   hasValidKpiCurrentValue,
-  isManualReportableKpi,
-  isMonthlyReportingKpi,
   isSystemComputedKpi,
   parseKpiKind,
   parseKpiRatioReportingMode,
   parseKpiReportingFrequency,
   parseKpiStoredStatus,
 } from "@/lib/kpi/kind";
+import { toMonthlyReportItem, splitManualReportableKpis } from "@/lib/kpi/monthlyReporting";
 import {
   collectRatioGroupMemberIds,
   countDailyReportingProgress,
@@ -156,69 +151,6 @@ function sortReportItems(items: DailyKpiReportItem[]): DailyKpiReportItem[] {
 }
 
 /**
- * MONTHLY KPIs are keyed by accounting period, not submission date.
- */
-function toMonthlyReportItem(
-  kpi: KPI,
-  periodMonth: string,
-  monthByKpi: Map<string, KPIHistory>,
-  historyByKpi: Map<string, KPIHistory[]>,
-): DailyKpiReportItem {
-  const monthReport = monthByKpi.get(kpi.id) ?? null;
-  const history = historyByKpi.get(kpi.id) ?? [];
-  const previousEntry =
-    history.find(
-      (entry) => entry.periodMonth != null && entry.periodMonth !== periodMonth,
-    ) ??
-    history.find(
-      (entry) => entry.periodMonth == null,
-    ) ??
-    null;
-
-  const isReported =
-    hasValidKpiCurrentValue(monthReport?.value) &&
-    hasValidKpiCurrentValue(monthReport?.actualValue) &&
-    hasValidKpiCurrentValue(monthReport?.budgetValue);
-
-  if (monthReport && isReported) {
-    return {
-      kpi,
-      previousValue: previousEntry?.value ?? null,
-      previousStatus: previousEntry?.status ?? null,
-      todayReport: monthReport,
-      isReported: true,
-      periodMonth,
-      periodLabel: formatPeriodMonthSv(periodMonth),
-      pendingLabel: null,
-      expectedFinalizationLabel: null,
-      actualValue: monthReport.actualValue,
-      budgetValue: monthReport.budgetValue,
-      deviationValue: monthReport.value,
-      isLegacyDeviation: monthReport.isLegacyDeviation,
-    };
-  }
-
-  const state = buildMonthlyResultState({
-    latestFinalizedPeriodMonth: previousEntry?.periodMonth,
-  });
-  return {
-    kpi,
-    previousValue: kpi.currentValue ?? previousEntry?.value ?? null,
-    previousStatus: kpi.status ?? previousEntry?.status ?? null,
-    todayReport: null,
-    isReported: false,
-    periodMonth,
-    periodLabel: formatPeriodMonthSv(periodMonth),
-    pendingLabel: "Inväntar bokslut",
-    expectedFinalizationLabel: `Förväntas omkring ${state.expectedFinalizationLabel}`,
-    actualValue: monthReport?.actualValue ?? null,
-    budgetValue: monthReport?.budgetValue ?? null,
-    deviationValue: monthReport?.value ?? null,
-    isLegacyDeviation: monthReport?.isLegacyDeviation ?? false,
-  };
-}
-
-/**
  * KPIs for a business area with today's reporting state.
  * Unreported first, then reported (name ascending within each group).
  * System-computed KPIs (CALCULATED + TARGET ratio) go in `calculatedItems`.
@@ -246,11 +178,9 @@ export async function getKpisForTodayReporting(
       return emptyReporting(businessAreaId, businessAreaName, reportDate);
     }
 
-    const reportableKpis = kpis.filter(isManualReportableKpi);
-    const dailyReportableKpis = reportableKpis.filter(
-      (kpi) => !isMonthlyReportingKpi(kpi),
-    );
-    const monthlyReportableKpis = reportableKpis.filter(isMonthlyReportingKpi);
+    const { daily: dailyReportableKpis, monthly: monthlyReportableKpis } =
+      splitManualReportableKpis(kpis);
+    const reportableKpis = [...dailyReportableKpis, ...monthlyReportableKpis];
     const calculatedKpis = kpis.filter(isSystemComputedKpi);
 
     if (

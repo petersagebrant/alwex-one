@@ -7,6 +7,7 @@ import {
   insertKpiHistory,
   upsertDailyKpiReportRow,
   upsertMonthlyKpiReportRow,
+  upsertMonthlyStatisticReportRow,
   type KpiHistoryRow,
 } from "@/lib/supabase/kpi-history";
 import { fetchKpiById, updateKpiCurrentSnapshot } from "@/lib/supabase/kpis";
@@ -23,6 +24,7 @@ import type {
   KpiStoredStatus,
   UpsertDailyKpiReportInput,
   UpsertMonthlyKpiReportInput,
+  UpsertMonthlyStatisticReportInput,
 } from "@/types";
 
 function mapKpiHistoryRow(row: KpiHistoryRow): KPIHistory {
@@ -339,6 +341,53 @@ export async function upsertMonthlyKpiReport(
     p_period_month: periodMonth,
     p_actual_value: actualValue,
     p_budget_value: budgetValue,
+    p_comment: input.comment?.trim() || null,
+    p_recorded_by: recordedBy,
+  });
+
+  if (!options?.skipAudit) {
+    try {
+      const actorName = await resolveActorName("System");
+      await recordAuditLog({
+        entityType: "kpi",
+        entityId: kpiId,
+        action: "history_recorded",
+        description: `${kpi?.name ?? "KPI"} rapporterades för ${periodMonth.slice(0, 7)}.`,
+        actorName,
+        businessAreaId: kpi?.business_area_id ?? null,
+        changes: null,
+      });
+    } catch {
+      // Audit får inte blockera månadsrapporteringen.
+    }
+  }
+  return mapKpiHistoryRow(row);
+}
+
+/** Upsert a monthly STATISTIC value by calendar month; recorded_at is now. */
+export async function upsertMonthlyStatisticReport(
+  input: UpsertMonthlyStatisticReportInput,
+  options?: { skipAudit?: boolean },
+): Promise<KPIHistory> {
+  const kpiId = input.kpiId.trim();
+  const periodMonth = input.periodMonth.trim();
+  const value = input.value.trim();
+  if (!kpiId) throw new Error("kpiId är obligatoriskt.");
+  if (!/^\d{4}-\d{2}-01$/.test(periodMonth)) {
+    throw new Error("periodMonth måste vara YYYY-MM-01.");
+  }
+  if (!value) {
+    throw new Error("Värde är obligatoriskt.");
+  }
+
+  const kpi = await fetchKpiById(kpiId).catch(() => null);
+  const currentUser = await getCurrentUser().catch(() => null);
+  const recordedBy =
+    input.recordedBy !== undefined ? input.recordedBy : (currentUser?.id ?? null);
+  const row = await upsertMonthlyStatisticReportRow({
+    p_kpi_id: kpiId,
+    p_period_month: periodMonth,
+    p_value: value,
     p_comment: input.comment?.trim() || null,
     p_recorded_by: recordedBy,
   });

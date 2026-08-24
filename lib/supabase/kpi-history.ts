@@ -45,6 +45,14 @@ export type UpsertMonthlyKpiReportRpcInput = {
   p_recorded_by: string | null;
 };
 
+export type UpsertMonthlyStatisticReportRpcInput = {
+  p_kpi_id: string;
+  p_period_month: string;
+  p_value: string;
+  p_comment: string | null;
+  p_recorded_by: string | null;
+};
+
 const kpiHistorySelect =
   "id, kpi_id, value, status, comment, recorded_at, created_at, updated_at, report_date, period_month, actual_value, budget_value, recorded_by";
 
@@ -113,6 +121,23 @@ export async function upsertMonthlyKpiReportRow(
   }
   if (!data) {
     throw new Error("Kunde inte spara månadsresultat: tomt svar.");
+  }
+  return data as KpiHistoryRow;
+}
+
+export async function upsertMonthlyStatisticReportRow(
+  input: UpsertMonthlyStatisticReportRpcInput,
+): Promise<KpiHistoryRow> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc(
+    "upsert_monthly_statistic_report",
+    input,
+  );
+  if (error) {
+    throw new Error(`Kunde inte spara månadsstatistik: ${error.message}`);
+  }
+  if (!data) {
+    throw new Error("Kunde inte spara månadsstatistik: tomt svar.");
   }
   return data as KpiHistoryRow;
 }

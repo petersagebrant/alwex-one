@@ -83,6 +83,8 @@ export default async function KpiVdDetailPage({
   ]);
   const historyNewestFirst = [...history].reverse();
   const isMonthlyEconomic = isMonthlyEconomicResultKpi(kpi);
+  const isMonthlyStatistic =
+    isStatisticKpi(kpi) && kpi.reportingFrequency === "MONTHLY";
   const monthlyPeriodMonth =
     (kpi.isPeriodPending ? kpi.expectedPeriodMonth : kpi.latestPeriodMonth) ??
     kpi.latestPeriodMonth ??
@@ -310,7 +312,9 @@ export default async function KpiVdDetailPage({
           <SectionHeader
             title="Värde över tid"
             description={
-              isNonTargetKpi(kpi)
+              isMonthlyStatistic
+                ? "Månadsvis historik baserat på kpi_history"
+                : isNonTargetKpi(kpi)
                 ? "Historik baserat på kpi_history"
                 : isMonthlyEconomic
                   ? "Månadsvis avvikelse mellan faktiskt och budgeterat resultat"
@@ -355,7 +359,11 @@ export default async function KpiVdDetailPage({
                 <thead>
                   <tr className="bg-slate-50 text-slate-600">
                     <th className="rounded-l-lg px-3 py-2.5 font-semibold">
-                      {isMonthlyEconomic ? "Resultatmånad" : "Datum"}
+                      {isMonthlyEconomic
+                        ? "Resultatmånad"
+                        : isMonthlyStatistic
+                          ? "Månad"
+                          : "Datum"}
                     </th>
                     <th className="px-3 py-2.5 font-semibold">
                       {isMonthlyEconomic ? "Resultat / Budget / Avvikelse" : "Värde"}

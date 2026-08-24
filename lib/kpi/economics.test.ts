@@ -50,6 +50,14 @@ describe("shared economic KPI semantics", () => {
     );
   });
 
+  it("formats Swedish month names with optional year", () => {
+    assert.equal(formatPeriodMonthSv("2026-08-01"), "Augusti");
+    assert.equal(
+      formatPeriodMonthSv("2026-08-01", { includeYear: true }),
+      "Augusti 2026",
+    );
+  });
+
   it("expresses expected closing around day 22 of following month", () => {
     assert.equal(expectedResultFinalizationDate("2026-07-01"), "2026-08-22");
     assert.equal(formatExpectedFinalizationSv("2026-07-01"), "22 augusti");

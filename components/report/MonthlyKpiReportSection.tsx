@@ -1,4 +1,6 @@
 import { MonthlyKpiReportBlock } from "@/components/report/MonthlyKpiReportBlock";
+import { MonthlyStatisticReportBlock } from "@/components/report/MonthlyStatisticReportBlock";
+import { isMonthlyStatisticKpi } from "@/lib/kpi/kind";
 import type { DailyKpiReportItem } from "@/types";
 
 type MonthlyKpiReportSectionProps = {
@@ -6,7 +8,7 @@ type MonthlyKpiReportSectionProps = {
   onReported?: () => void;
 };
 
-/** MONTHLY manual KPIs — separate from daily progress (e.g. Resultat mot budget). */
+/** MONTHLY manual KPIs — separate from daily progress. */
 export function MonthlyKpiReportSection({
   items,
   onReported,
@@ -21,17 +23,25 @@ export function MonthlyKpiReportSection({
         Månadsvisa KPI:er
       </h2>
       <p className="text-xs text-slate-500">
-        Räknas inte in i dagens rapporteringsprogress. Status och historik
-        kopplas till vald resultatmånad, oberoende av rapporteringsdatum.
+        Räknas inte in i dagens rapporteringsprogress. Värde och historik
+        kopplas till vald månad, oberoende av rapporteringsdatum.
       </p>
       <div className="space-y-3">
-        {items.map((item) => (
-          <MonthlyKpiReportBlock
-            key={`${item.kpi.id}-${item.periodMonth}-${item.todayReport?.updatedAt ?? "pending"}`}
-            item={item}
-            onReported={onReported}
-          />
-        ))}
+        {items.map((item) =>
+          isMonthlyStatisticKpi(item.kpi) ? (
+            <MonthlyStatisticReportBlock
+              key={`${item.kpi.id}-${item.periodMonth}-${item.todayReport?.updatedAt ?? "pending"}`}
+              item={item}
+              onReported={onReported}
+            />
+          ) : (
+            <MonthlyKpiReportBlock
+              key={`${item.kpi.id}-${item.periodMonth}-${item.todayReport?.updatedAt ?? "pending"}`}
+              item={item}
+              onReported={onReported}
+            />
+          ),
+        )}
       </div>
     </section>
   );

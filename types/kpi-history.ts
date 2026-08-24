@@ -53,3 +53,12 @@ export type UpsertMonthlyKpiReportInput = {
   comment?: string;
   recordedBy?: string | null;
 };
+
+export type UpsertMonthlyStatisticReportInput = {
+  kpiId: string;
+  /** Calendar month, normalized to YYYY-MM-01. */
+  periodMonth: string;
+  value: string;
+  comment?: string;
+  recordedBy?: string | null;
+};

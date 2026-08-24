@@ -7,7 +7,9 @@ import {
   isCalculatedKpi,
   isDailyManualReportableKpi,
   isManualReportableKpi,
+  isMonthlyEconomicTargetKpi,
   isMonthlyReportingKpi,
+  isMonthlyStatisticKpi,
   isNonTargetKpi,
   isStatisticKpi,
   isSystemComputedKpi,
@@ -128,10 +130,27 @@ describe("kpi kind helpers", () => {
       calcOperator: null,
       reportingFrequency: "DAILY" as const,
     };
+    const monthlyStatistic = {
+      kind: "STATISTIC" as const,
+      calcOperator: null,
+      reportingFrequency: "MONTHLY" as const,
+    };
+    const dailyStatistic = {
+      kind: "STATISTIC" as const,
+      calcOperator: null,
+      reportingFrequency: "DAILY" as const,
+    };
     assert.equal(isMonthlyReportingKpi(monthly), true);
     assert.equal(isManualReportableKpi(monthly), true);
     assert.equal(isDailyManualReportableKpi(monthly), false);
     assert.equal(isDailyManualReportableKpi(daily), true);
+    assert.equal(isMonthlyStatisticKpi(monthlyStatistic), true);
+    assert.equal(isMonthlyStatisticKpi(dailyStatistic), false);
+    assert.equal(isMonthlyStatisticKpi(monthly), false);
+    assert.equal(isDailyManualReportableKpi(monthlyStatistic), false);
+    assert.equal(isDailyManualReportableKpi(dailyStatistic), true);
+    assert.equal(isMonthlyEconomicTargetKpi(monthly), true);
+    assert.equal(isMonthlyEconomicTargetKpi(monthlyStatistic), false);
   });
 
   it("keeps ratio reporting grouped unless explicitly separated", () => {

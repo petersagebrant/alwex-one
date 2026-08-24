@@ -55,7 +55,7 @@ export type MyKpisForTodayReporting = {
    */
   ratioGroups: RatioPercentReportGroup[];
   /**
-   * Manual MONTHLY KPIs (e.g. Resultat mot budget) — shown separately,
+   * Manual MONTHLY KPIs (economic TARGET and STATISTIC) — shown separately,
    * excluded from daily progress counts.
    */
   monthlyItems: DailyKpiReportItem[];

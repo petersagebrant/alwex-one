@@ -81,6 +81,49 @@ export async function fetchAllProfilesForAdmin(): Promise<ProfileRow[]> {
     .filter((row): row is ProfileRow => row !== null);
 }
 
+/** Active profiles visible to operational writers (goal owner picker). */
+export async function fetchActiveProfilesForAssignment(): Promise<
+  ProfileRow[]
+> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select(PROFILE_COLUMNS)
+    .is("disabled_at", null)
+    .order("display_name", { ascending: true });
+
+  if (error) {
+    throw new Error(`Kunde inte hämta användare: ${error.message}`);
+  }
+
+  return (data ?? [])
+    .map((row) => mapProfileRow(row))
+    .filter((row): row is ProfileRow => row !== null);
+}
+
+export async function fetchProfileById(
+  userId: string,
+): Promise<ProfileRow | null> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select(PROFILE_COLUMNS)
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Kunde inte hämta profil: ${error.message}`);
+  }
+
+  if (!data || data.disabled_at) {
+    return null;
+  }
+
+  return mapProfileRow(data);
+}
+
 export async function insertProfile(input: {
   id: string;
   role: AppRole;

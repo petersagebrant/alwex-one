@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { GoalArchiveControls } from "@/components/admin/GoalArchiveControls";
 import { AppHeader } from "@/components/layout/AppHeader";
 import {
   InfoPanel,
@@ -8,7 +9,10 @@ import {
   StatusBadge,
   SummaryCard,
 } from "@/components/ui";
+import { requireProfile } from "@/lib/auth/require-user";
 import { formatDateSv, formatDateTimeSv } from "@/lib/format/date";
+import { isGoalArchived } from "@/lib/goals/archive";
+import { canWriteGoals } from "@/lib/goals/permissions";
 import { getGoalById } from "@/services/goals";
 
 type GoalDetailPageProps = {
@@ -30,12 +34,15 @@ export async function generateMetadata({
 
 export default async function GoalDetailPage({ params }: GoalDetailPageProps) {
   const { id } = await params;
+  const profile = await requireProfile();
+  const canWrite = canWriteGoals(profile.role);
   const goal = await getGoalById(id).catch(() => null);
 
   if (!goal) {
     notFound();
   }
 
+  const archived = isGoalArchived(goal);
   const progressLabel =
     goal.progress === null || goal.progress === undefined
       ? "—"
@@ -66,13 +73,28 @@ export default async function GoalDetailPage({ params }: GoalDetailPageProps) {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              {archived ? (
+                <span className="inline-flex rounded-md bg-neutral-100 px-2 py-1 text-xs font-semibold text-neutral-600">
+                  Arkiverad
+                </span>
+              ) : null}
               <StatusBadge status={goal.status} />
-              <Link
-                href={`/admin/goals?edit=${goal.id}`}
-                className="text-sm font-medium text-neutral-700 underline-offset-4 hover:underline"
-              >
-                Ändra mål
-              </Link>
+              {canWrite ? (
+                <>
+                  <Link
+                    href={`/admin/goals?edit=${goal.id}`}
+                    className="text-sm font-medium text-neutral-700 underline-offset-4 hover:underline"
+                  >
+                    Ändra mål
+                  </Link>
+                  <GoalArchiveControls
+                    goalId={goal.id}
+                    goalTitle={goal.title}
+                    businessAreaName={goal.businessAreaName}
+                    archived={archived}
+                  />
+                </>
+              ) : null}
             </div>
           </div>
         </div>

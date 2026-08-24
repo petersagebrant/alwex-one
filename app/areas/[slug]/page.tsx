@@ -13,6 +13,8 @@ import {
   SummaryCard,
 } from "@/components/ui";
 import { formatDateSv, formatDateTimeSv } from "@/lib/format/date";
+import { requireProfile } from "@/lib/auth/require-user";
+import { canWriteGoalsForArea } from "@/lib/goals/permissions";
 import { computeAreaOperationalStatus } from "@/lib/kpi/areaOperationalStatus";
 import { fetchBusinessAreaBySlug } from "@/lib/supabase/business-areas";
 import { getActivitiesByBusinessAreaId } from "@/services/activities";
@@ -45,6 +47,13 @@ export default async function AreaDetailPage({ params }: AreaDetailPageProps) {
   if (!dbArea) {
     notFound();
   }
+
+  const profile = await requireProfile();
+  const canCreateGoal = canWriteGoalsForArea(
+    profile.role,
+    profile.businessAreaId,
+    dbArea.id,
+  );
 
   const [areaGoals, areaActivities, areaKpis, decisions, areaHistory] =
     await Promise.all([
@@ -156,7 +165,11 @@ export default async function AreaDetailPage({ params }: AreaDetailPageProps) {
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
           <div className="space-y-4 xl:col-span-2">
-            <AreaGoalsList goals={areaGoals} />
+            <AreaGoalsList
+              goals={areaGoals}
+              canCreate={canCreateGoal}
+              newGoalHref={`/admin/goals?new=1&area=${encodeURIComponent(dbArea.id)}`}
+            />
             <AreaActivitiesList activities={areaActivities} />
           </div>
           <div className="space-y-4">

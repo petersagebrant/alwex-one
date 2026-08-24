@@ -5,16 +5,32 @@ import { StatusBadge } from "@/components/ui";
 
 type AreaGoalsListProps = {
   goals: Goal[];
+  canCreate?: boolean;
+  newGoalHref?: string;
 };
 
-export function AreaGoalsList({ goals }: AreaGoalsListProps) {
+export function AreaGoalsList({
+  goals,
+  canCreate = false,
+  newGoalHref,
+}: AreaGoalsListProps) {
   return (
     <section className="rounded-xl border border-neutral-200 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-      <div className="border-b border-neutral-200 px-5 py-4">
-        <h2 className="text-sm font-semibold text-neutral-900">Mål</h2>
-        <p className="mt-0.5 text-xs text-neutral-500">
-          Målbild och uppföljning för affärsområdet
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-neutral-200 px-5 py-4">
+        <div>
+          <h2 className="text-sm font-semibold text-neutral-900">Mål</h2>
+          <p className="mt-0.5 text-xs text-neutral-500">
+            Målbild och uppföljning för affärsområdet
+          </p>
+        </div>
+        {canCreate && newGoalHref ? (
+          <Link
+            href={newGoalHref}
+            className="inline-flex items-center justify-center rounded-xl bg-[#111827] px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800"
+          >
+            Nytt mål
+          </Link>
+        ) : null}
       </div>
 
       {goals.length === 0 ? (

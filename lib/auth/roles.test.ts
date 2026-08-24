@@ -18,6 +18,12 @@ describe("canAdministerUsers", () => {
     assert.equal(canAdministerUsers("lasbehorighet"), false);
   });
 
+  it("lets lasbehorighet read but not write operational data", () => {
+    assert.equal(canWriteOperational("lasbehorighet"), false);
+    assert.equal(canWriteOperational("vd"), true);
+    assert.equal(canWriteOperational("administrator"), true);
+  });
+
   it("does not widen other write helpers to ao_chef for decisions or areas", () => {
     assert.equal(canWriteDecisions("ao_chef"), false);
     assert.equal(canManageBusinessAreas("ao_chef"), false);

@@ -1,42 +1,74 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireOperationalWriter } from "@/lib/auth/require-user";
-import { createGoal, updateGoal } from "@/services/goals";
+import {
+  archiveGoal,
+  createGoal,
+  unarchiveGoal,
+  updateGoal,
+} from "@/services/goals";
 import type { StatusTone } from "@/types";
 
 function isStatusTone(value: string): value is StatusTone {
   return value === "Grön" || value === "Gul" || value === "Röd";
 }
 
+function firstParam(value: FormDataEntryValue | null): string {
+  return String(value ?? "");
+}
+
+function goalsNewPath(areaId: string | null, error?: string): string {
+  const params = new URLSearchParams();
+  params.set("new", "1");
+  if (areaId) {
+    params.set("area", areaId);
+  }
+  if (error) {
+    params.set("error", error);
+  }
+  return `/admin/goals?${params.toString()}`;
+}
+
+function goalsEditPath(id: string, error?: string): string {
+  const params = new URLSearchParams();
+  params.set("edit", id);
+  if (error) {
+    params.set("error", error);
+  }
+  return `/admin/goals?${params.toString()}`;
+}
+
 function readGoalFields(formData: FormData) {
   return {
-    businessAreaId: String(formData.get("businessAreaId") ?? ""),
-    title: String(formData.get("title") ?? ""),
-    description: String(formData.get("description") ?? ""),
-    owner: String(formData.get("owner") ?? ""),
-    deadline: String(formData.get("deadline") ?? ""),
-    targetValue: String(formData.get("targetValue") ?? ""),
-    currentValue: String(formData.get("currentValue") ?? ""),
-    progressValue: String(formData.get("progress") ?? ""),
-    statusValue: String(formData.get("status") ?? ""),
+    businessAreaId: firstParam(formData.get("businessAreaId")),
+    title: firstParam(formData.get("title")),
+    description: firstParam(formData.get("description")),
+    ownerId: firstParam(formData.get("ownerId")),
+    deadline: firstParam(formData.get("deadline")),
+    targetValue: firstParam(formData.get("targetValue")),
+    currentValue: firstParam(formData.get("currentValue")),
+    progressValue: firstParam(formData.get("progress")),
+    statusValue: firstParam(formData.get("status")),
   };
 }
 
 export async function createGoalAction(formData: FormData) {
   await requireOperationalWriter();
   const fields = readGoalFields(formData);
+  const areaId = fields.businessAreaId.trim() || null;
 
   if (!fields.businessAreaId.trim()) {
-    redirect("/admin/goals?new=1&error=V%C3%A4lj%20ett%20aff%C3%A4rsomr%C3%A5de.");
+    redirect(goalsNewPath(null, "Välj ett affärsområde."));
   }
 
   if (!fields.title.trim()) {
-    redirect("/admin/goals?new=1&error=Titel%20%C3%A4r%20obligatorisk.");
+    redirect(goalsNewPath(areaId, "Titel är obligatorisk."));
   }
 
   if (!isStatusTone(fields.statusValue)) {
-    redirect("/admin/goals?new=1&error=Ogiltig%20status.");
+    redirect(goalsNewPath(areaId, "Ogiltig status."));
   }
 
   const progress =
@@ -49,7 +81,7 @@ export async function createGoalAction(formData: FormData) {
       businessAreaId: fields.businessAreaId,
       title: fields.title,
       description: fields.description,
-      owner: fields.owner,
+      ownerId: fields.ownerId,
       deadline: fields.deadline || undefined,
       targetValue: fields.targetValue,
       currentValue: fields.currentValue,
@@ -59,15 +91,18 @@ export async function createGoalAction(formData: FormData) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Kunde inte spara målet.";
-    redirect(`/admin/goals?new=1&error=${encodeURIComponent(message)}`);
+    redirect(goalsNewPath(areaId, message));
   }
 
+  revalidatePath("/admin/goals");
+  revalidatePath("/");
+  revalidatePath("/areas");
   redirect("/admin/goals");
 }
 
 export async function updateGoalAction(formData: FormData) {
   await requireOperationalWriter();
-  const id = String(formData.get("id") ?? "");
+  const id = firstParam(formData.get("id"));
   const fields = readGoalFields(formData);
 
   if (!id) {
@@ -75,21 +110,15 @@ export async function updateGoalAction(formData: FormData) {
   }
 
   if (!fields.businessAreaId.trim()) {
-    redirect(
-      `/admin/goals?edit=${encodeURIComponent(id)}&error=V%C3%A4lj%20ett%20aff%C3%A4rsomr%C3%A5de.`,
-    );
+    redirect(goalsEditPath(id, "Välj ett affärsområde."));
   }
 
   if (!fields.title.trim()) {
-    redirect(
-      `/admin/goals?edit=${encodeURIComponent(id)}&error=Titel%20%C3%A4r%20obligatorisk.`,
-    );
+    redirect(goalsEditPath(id, "Titel är obligatorisk."));
   }
 
   if (!isStatusTone(fields.statusValue)) {
-    redirect(
-      `/admin/goals?edit=${encodeURIComponent(id)}&error=Ogiltig%20status.`,
-    );
+    redirect(goalsEditPath(id, "Ogiltig status."));
   }
 
   const progress =
@@ -103,7 +132,7 @@ export async function updateGoalAction(formData: FormData) {
       businessAreaId: fields.businessAreaId,
       title: fields.title,
       description: fields.description,
-      owner: fields.owner,
+      ownerId: fields.ownerId,
       deadline: fields.deadline || undefined,
       targetValue: fields.targetValue,
       currentValue: fields.currentValue,
@@ -113,10 +142,66 @@ export async function updateGoalAction(formData: FormData) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Kunde inte uppdatera målet.";
-    redirect(
-      `/admin/goals?edit=${encodeURIComponent(id)}&error=${encodeURIComponent(message)}`,
-    );
+    redirect(goalsEditPath(id, message));
   }
 
+  revalidatePath("/admin/goals");
+  revalidatePath(`/admin/goals/${id}`);
+  revalidatePath("/");
+  revalidatePath("/areas");
   redirect(`/admin/goals/${encodeURIComponent(id)}`);
+}
+
+export type ArchiveGoalResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+/** VD/admin all areas; AO-chef own area — same as create/edit. */
+export async function archiveGoalAction(
+  goalId: string,
+): Promise<ArchiveGoalResult> {
+  await requireOperationalWriter();
+  const id = goalId.trim();
+  if (!id) {
+    return { ok: false, error: "Saknar mål-id." };
+  }
+
+  try {
+    await archiveGoal(id);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Kunde inte arkivera målet.";
+    return { ok: false, error: message };
+  }
+
+  revalidatePath("/admin/goals");
+  revalidatePath(`/admin/goals/${id}`);
+  revalidatePath("/");
+  revalidatePath("/areas");
+  return { ok: true };
+}
+
+/** Same writers as archive. */
+export async function unarchiveGoalAction(
+  goalId: string,
+): Promise<ArchiveGoalResult> {
+  await requireOperationalWriter();
+  const id = goalId.trim();
+  if (!id) {
+    return { ok: false, error: "Saknar mål-id." };
+  }
+
+  try {
+    await unarchiveGoal(id);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Kunde inte återaktivera målet.";
+    return { ok: false, error: message };
+  }
+
+  revalidatePath("/admin/goals");
+  revalidatePath(`/admin/goals/${id}`);
+  revalidatePath("/");
+  revalidatePath("/areas");
+  return { ok: true };
 }

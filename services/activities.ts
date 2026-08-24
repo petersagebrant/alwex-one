@@ -111,8 +111,10 @@ export async function getActivities(options?: {
         )
       : fetchBusinessAreas(),
     options?.businessAreaId
-      ? fetchGoalsByBusinessAreaId(options.businessAreaId)
-      : fetchAllGoals(),
+      ? fetchGoalsByBusinessAreaId(options.businessAreaId, {
+          includeArchived: true,
+        })
+      : fetchAllGoals({ includeArchived: true }),
   ]);
 
   const areaNames = new Map(areas.map((area) => [area.id, area.name]));
@@ -195,7 +197,7 @@ export async function getActivityById(
 
   const [areas, goals] = await Promise.all([
     fetchBusinessAreas(),
-    fetchAllGoals(),
+    fetchAllGoals({ includeArchived: true }),
   ]);
 
   const areaNames = new Map(areas.map((area) => [area.id, area.name]));

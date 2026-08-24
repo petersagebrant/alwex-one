@@ -6,11 +6,13 @@ export type Goal = {
   title: string;
   description: string | null;
   owner: string | null;
+  ownerId: string | null;
   status: StatusTone;
   targetValue: string | null;
   currentValue: string | null;
   deadline: string | null;
   progress: number | null;
+  archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -19,6 +21,7 @@ export type CreateGoalInput = {
   businessAreaId: string;
   title: string;
   description?: string;
+  ownerId?: string;
   owner?: string;
   status: StatusTone;
   targetValue?: string;
@@ -32,6 +35,7 @@ export type UpdateGoalInput = {
   businessAreaId: string;
   title: string;
   description?: string;
+  ownerId?: string;
   owner?: string;
   status: StatusTone;
   targetValue?: string;

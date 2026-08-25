@@ -28,7 +28,11 @@ import {
 import { countKpiSetReportingProgress } from "@/lib/kpi/reportingProgress";
 import { getKPIsByBusinessArea } from "@/services/kpis";
 import { resolveDailyReportDate } from "@/lib/kpi/dailyReportDate";
-import { getRecentKpiHistoryForKpis } from "@/services/kpiHistory";
+import { selectPreviousDailyHistoryEntry } from "@/lib/kpi/dailyKpiReport";
+import {
+  getPreviousKpiHistoryBeforeDateForKpis,
+  getRecentKpiHistoryForKpis,
+} from "@/services/kpiHistory";
 import type {
   DailyKpiComputationMeta,
   DailyKpiReportItem,
@@ -101,40 +105,24 @@ function toReportItem(
   kpi: KPI,
   reportDate: string,
   todayByKpi: Map<string, KPIHistory>,
+  previousByKpi: Map<string, KPIHistory>,
   historyByKpi: Map<string, KPIHistory[]>,
   computation?: DailyKpiComputationMeta,
 ): DailyKpiReportItem {
   const todayReport = todayByKpi.get(kpi.id) ?? null;
-  const history = historyByKpi.get(kpi.id) ?? [];
-  // Prefer dated daily rows (report_date) for trends; fall back to any prior entry.
   const previousEntry =
-    history.find(
-      (entry) => entry.reportDate != null && entry.reportDate !== reportDate,
-    ) ??
-    history.find((entry) => entry.reportDate !== reportDate) ??
-    null;
+    previousByKpi.get(kpi.id) ??
+    selectPreviousDailyHistoryEntry(historyByKpi.get(kpi.id) ?? [], reportDate);
 
   // Single SoT for badge + progress: valid numeric value on today's report_date row.
   const isReported = hasValidKpiCurrentValue(todayReport?.value);
 
-  if (todayReport && isReported) {
-    return {
-      kpi,
-      previousValue: previousEntry?.value ?? null,
-      previousStatus: previousEntry?.status ?? null,
-      todayReport,
-      isReported: true,
-      computation,
-    };
-  }
-
   return {
     kpi,
-    previousValue: kpi.currentValue ?? previousEntry?.value ?? null,
-    previousStatus: kpi.status ?? previousEntry?.status ?? null,
-    // Placeholder / empty today's row must not count as reported.
+    previousValue: previousEntry?.value ?? null,
+    previousStatus: previousEntry?.status ?? null,
     todayReport: isReported ? todayReport : null,
-    isReported: false,
+    isReported,
     computation,
   };
 }
@@ -233,7 +221,7 @@ export async function getKpisForTodayReporting(
     const monthlyKpiIds = monthlyReportableKpis.map((kpi) => kpi.id);
     const resultPeriodMonth = expectedResultPeriodMonth();
 
-    const [todayRows, recentHistory, monthRows] = await Promise.all([
+    const [todayRows, recentHistory, monthRows, previousRows] = await Promise.all([
       fetchKpiHistoryByReportDateForKpis(kpiIds, reportDate).catch(() => []),
       getRecentKpiHistoryForKpis(kpiIds, 8).catch(() => []),
       monthlyKpiIds.length > 0
@@ -242,6 +230,7 @@ export async function getKpisForTodayReporting(
             [resultPeriodMonth],
           ).catch(() => [])
         : Promise.resolve([]),
+      getPreviousKpiHistoryBeforeDateForKpis(kpiIds, reportDate).catch(() => []),
     ]);
 
     const todayByKpi = new Map(
@@ -254,6 +243,10 @@ export async function getKpisForTodayReporting(
       list.push(entry);
       historyByKpi.set(entry.kpiId, list);
     }
+
+    const previousByKpi = new Map(
+      previousRows.map((entry) => [entry.kpiId, entry]),
+    );
 
     // Newest row per monthly KPI (query ordered by report_date desc).
     const monthByKpi = new Map<string, KPIHistory>();
@@ -277,7 +270,8 @@ export async function getKpisForTodayReporting(
     }
 
     const allDailyReportableItems: DailyKpiReportItem[] = dailyReportableKpis.map(
-      (kpi) => toReportItem(kpi, reportDate, todayByKpi, historyByKpi),
+      (kpi) =>
+        toReportItem(kpi, reportDate, todayByKpi, previousByKpi, historyByKpi),
     );
 
     const monthlyItems = sortReportItems(
@@ -341,6 +335,7 @@ export async function getKpisForTodayReporting(
           kpi,
           reportDate,
           todayByKpi,
+          previousByKpi,
           historyByKpi,
           computation,
         );

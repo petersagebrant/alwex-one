@@ -53,6 +53,17 @@ export type UpsertMonthlyStatisticReportRpcInput = {
   p_recorded_by: string | null;
 };
 
+export type UpsertDailyKpiReportsRpcInput = {
+  p_reports: Array<{
+    kpi_id: string;
+    report_date: string;
+    value: string;
+    status: string;
+    comment: string | null;
+  }>;
+  p_recorded_by: string | null;
+};
+
 const kpiHistorySelect =
   "id, kpi_id, value, status, comment, recorded_at, created_at, updated_at, report_date, period_month, actual_value, budget_value, recorded_by";
 
@@ -109,6 +120,18 @@ export async function upsertDailyKpiReportRow(
   }
 
   return data as KpiHistoryRow;
+}
+
+export async function upsertDailyKpiReportsRows(
+  input: UpsertDailyKpiReportsRpcInput,
+): Promise<void> {
+  const supabase = await createClient();
+
+  const { error } = await supabase.rpc("upsert_daily_kpi_reports", input);
+
+  if (error) {
+    throw new Error(`Kunde inte spara dagliga KPI-rapporter: ${error.message}`);
+  }
 }
 
 export async function upsertMonthlyKpiReportRow(
@@ -212,6 +235,45 @@ export async function fetchKpiHistoryByReportDateForKpis(
   }
 
   return data ?? [];
+}
+
+/**
+ * Latest active daily history row per KPI with report_date strictly before
+ * `beforeReportDate`. Used for "Föregående" when backdating.
+ */
+export async function fetchLatestKpiHistoryBeforeReportDateForKpis(
+  kpiIds: string[],
+  beforeReportDate: string,
+): Promise<KpiHistoryRow[]> {
+  if (kpiIds.length === 0) {
+    return [];
+  }
+
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("kpi_history")
+    .select(kpiHistorySelect)
+    .in("kpi_id", kpiIds)
+    .is("archived_at", null)
+    .not("report_date", "is", null)
+    .lt("report_date", beforeReportDate)
+    .order("report_date", { ascending: false })
+    .order("recorded_at", { ascending: false });
+
+  if (error) {
+    throw new Error(
+      `Kunde inte hämta föregående KPI-rapporter: ${error.message}`,
+    );
+  }
+
+  const latestByKpi = new Map<string, KpiHistoryRow>();
+  for (const row of data ?? []) {
+    if (!latestByKpi.has(row.kpi_id)) {
+      latestByKpi.set(row.kpi_id, row);
+    }
+  }
+  return [...latestByKpi.values()];
 }
 
 /**

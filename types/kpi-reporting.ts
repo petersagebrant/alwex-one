@@ -11,7 +11,7 @@ export type DailyKpiComputationMeta = {
 
 export type DailyKpiReportItem = {
   kpi: KPI;
-  /** Senaste värde före dagens rapport (eller aktuellt om ej rapporterat idag). */
+  /** Latest kpi_history.value with report_date < selected date. Null → "—". */
   previousValue: string | null;
   previousStatus: KpiStoredStatus | null;
   todayReport: KPIHistory | null;

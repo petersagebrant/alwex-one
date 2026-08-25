@@ -2,10 +2,12 @@ import { getCurrentUser } from "@/lib/auth/require-user";
 import {
   fetchKpiHistoryByKpiId,
   fetchKpiHistorySince,
+  fetchLatestKpiHistoryBeforeReportDateForKpis,
   fetchRecentKpiHistory,
   fetchRecentKpiHistoryForKpis,
   insertKpiHistory,
   upsertDailyKpiReportRow,
+  upsertDailyKpiReportsRows,
   upsertMonthlyKpiReportRow,
   upsertMonthlyStatisticReportRow,
   type KpiHistoryRow,
@@ -309,6 +311,52 @@ export async function upsertDailyKpiReport(
   }
 
   return mapKpiHistoryRow(row);
+}
+
+/** Atomic batch of daily reports via upsert_daily_kpi_reports. */
+export async function upsertDailyKpiReports(
+  reports: UpsertDailyKpiReportInput[],
+): Promise<void> {
+  if (reports.length === 0) {
+    return;
+  }
+
+  const currentUser = await getCurrentUser().catch(() => null);
+  const recordedBy = reports[0]?.recordedBy ?? currentUser?.id ?? null;
+
+  await upsertDailyKpiReportsRows({
+    p_reports: reports.map((report) => ({
+      kpi_id: report.kpiId,
+      report_date: report.reportDate,
+      value: report.value,
+      status: report.status,
+      comment: report.comment?.trim() || null,
+    })),
+    p_recorded_by: recordedBy,
+  });
+}
+
+export async function getPreviousKpiHistoryBeforeDateForKpis(
+  kpiIds: string[],
+  beforeReportDate: string,
+): Promise<KPIHistory[]> {
+  if (kpiIds.length === 0) {
+    return [];
+  }
+
+  try {
+    const rows = await fetchLatestKpiHistoryBeforeReportDateForKpis(
+      kpiIds,
+      beforeReportDate,
+    );
+    return rows.map(mapKpiHistoryRow);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("kpi_history") || message.includes("schema cache")) {
+      return [];
+    }
+    throw error;
+  }
 }
 
 /** Upsert a finalized monthly result by accounting period; recorded_at is now. */

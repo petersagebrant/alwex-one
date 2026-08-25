@@ -9,12 +9,22 @@ import { computeKpiStatus } from "@/lib/kpi/computeStatus";
 import { computeEconomicDeviation } from "@/lib/kpi/economics";
 import { parseNumeric } from "@/lib/kpi/parseNumeric";
 import {
+  authorizeDailyKpiReport,
+  collectBatchDailyReports,
+  dailyKpiValidationKpiFromKpi,
+  dailyKpiValidationKpiFromRow,
+  EMPTY_DAILY_BATCH_MESSAGE,
+  formatBatchDailyReportError,
+  prepareDailyKpiReport,
+} from "@/lib/kpi/dailyKpiReport";
+import {
   fetchBusinessAreaById,
   fetchBusinessAreaBySlug,
   fetchBusinessAreas,
 } from "@/lib/supabase/business-areas";
 import { fetchKpiById } from "@/lib/supabase/kpis";
 import { fetchKpiHistoryByPeriodMonthsForKpis } from "@/lib/supabase/kpi-history";
+import { getKPIsByBusinessArea } from "@/services/kpis";
 import { getKpisForTodayReporting } from "@/services/kpiReporting";
 import {
   dailyReportDateRejectedReason,
@@ -22,13 +32,14 @@ import {
 } from "@/lib/kpi/dailyReportDate";
 import {
   upsertDailyKpiReport,
+  upsertDailyKpiReports,
   upsertMonthlyKpiReport,
   upsertMonthlyStatisticReport,
 } from "@/services/kpiHistory";
-import type { MyKpisForTodayReporting, StatusTone } from "@/types";
+import type { MyKpisForTodayReporting } from "@/types";
 
 export type ReportDailyKpiResult =
-  | { ok: true }
+  | { ok: true; message?: string }
   | { ok: false; error: string };
 
 export type ReportMonthlyKpiResult = ReportDailyKpiResult;
@@ -88,8 +99,31 @@ export async function loadVdAreaReportingAction(
   return { ok: true, reporting };
 }
 
-function isStatus(value: string): value is StatusTone {
-  return value === "Grön" || value === "Gul" || value === "Röd";
+async function resolveWriterBusinessAreaId(
+  profile: { role: string; businessAreaId: string | null },
+  requestedAreaId?: string,
+): Promise<{ ok: true; businessAreaId: string } | { ok: false; error: string }> {
+  if (profile.role === "ao_chef") {
+    if (!profile.businessAreaId) {
+      return { ok: false, error: "Inget affärsområde är kopplat till ditt konto." };
+    }
+    if (
+      requestedAreaId?.trim() &&
+      requestedAreaId.trim() !== profile.businessAreaId
+    ) {
+      return {
+        ok: false,
+        error: "Du kan bara rapportera KPI:er för ditt eget affärsområde.",
+      };
+    }
+    return { ok: true, businessAreaId: profile.businessAreaId };
+  }
+
+  const raw = requestedAreaId?.trim() ?? "";
+  if (!raw) {
+    return { ok: false, error: "Inget affärsområde valt." };
+  }
+  return { ok: true, businessAreaId: raw };
 }
 
 /**
@@ -123,107 +157,118 @@ export async function reportDailyKpiAction(input: {
     return { ok: false, error: dateError };
   }
 
-  const kpi = await fetchKpiById(kpiId).catch(() => null);
-  if (!kpi) {
+  const kpiRow = await fetchKpiById(kpiId).catch(() => null);
+  if (!kpiRow) {
     return { ok: false, error: "KPI hittades inte." };
   }
 
-  if (kpi.archived_at) {
-    return {
-      ok: false,
-      error: "Arkiverade KPI:er kan inte rapporteras. Återaktivera först.",
-    };
+  const kpi = dailyKpiValidationKpiFromRow(kpiRow);
+  const authorized = authorizeDailyKpiReport(profile, kpi);
+  if (!authorized.ok) {
+    return authorized;
   }
 
-  if (kpi.kpi_kind === "CALCULATED" || kpi.calc_operator) {
-    return {
-      ok: false,
-      error: "Beräknade KPI:er rapporteras inte manuellt.",
-    };
-  }
-
-  if (kpi.reporting_frequency === "MONTHLY") {
-    return {
-      ok: false,
-      error: "Månads-KPI:er rapporteras i månadsvyn, inte som daglig rapport.",
-    };
-  }
-
-  // AO-chef may only report KPIs for their business_area_id.
-  // VD/admin may report for any area (validated via requireOperationalWriter).
-  if (profile.role === "ao_chef") {
-    if (!profile.businessAreaId) {
-      return { ok: false, error: "Inget affärsområde är kopplat till ditt konto." };
-    }
-    if (kpi.business_area_id !== profile.businessAreaId) {
-      return {
-        ok: false,
-        error: "Du kan bara rapportera KPI:er för ditt eget affärsområde.",
-      };
-    }
-  } else if (profile.role !== "vd" && profile.role !== "administrator") {
-    return { ok: false, error: "Du saknar behörighet att rapportera KPI." };
-  }
-
-  // Statistics KPIs never use Grön/Gul/Röd — store Statistik and skip comment gate.
-  if (kpi.kpi_kind === "STATISTIC") {
-    try {
-      await upsertDailyKpiReport({
-        kpiId,
-        reportDate,
-        value,
-        status: "Statistik",
-        comment: (input.comment?.trim() || undefined),
-        recordedBy: profile.id,
-      });
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Kunde inte spara rapporten.";
-      return { ok: false, error: message };
-    }
-
-    revalidatePath("/report/kpis");
-    revalidatePath("/");
-    return { ok: true };
-  }
-
-  // When direction is set and computable, use server-side status (ignore client).
-  // Otherwise fall back to manual client status.
-  const computedStatus = computeKpiStatus({
-    direction: kpi.direction,
-    toleranceType: kpi.tolerance_type,
-    greenTolerance: kpi.green_tolerance,
-    yellowTolerance: kpi.yellow_tolerance,
+  const prepared = prepareDailyKpiReport(kpi, {
     value,
-    target: kpi.target_value,
+    status: input.status,
+    comment: input.comment,
+    reportDate,
   });
-
-  let status: StatusTone;
-  if (computedStatus) {
-    status = computedStatus;
-  } else if (isStatus(input.status)) {
-    status = input.status;
-  } else {
-    return { ok: false, error: "Ogiltig status." };
-  }
-
-  const comment = input.comment?.trim() ?? "";
-  if ((status === "Gul" || status === "Röd") && !comment) {
-    return {
-      ok: false,
-      error: "Beskriv kort varför KPI:n avviker.",
-    };
+  if (!prepared.ok) {
+    return prepared;
   }
 
   try {
     await upsertDailyKpiReport({
-      kpiId,
-      reportDate,
-      value,
-      status,
-      comment: comment || undefined,
+      kpiId: prepared.value.kpiId,
+      reportDate: prepared.value.reportDate,
+      value: prepared.value.value,
+      status: prepared.value.status,
+      comment: prepared.value.comment,
       recordedBy: profile.id,
     });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Kunde inte spara rapporten.";
+    return { ok: false, error: message };
+  }
+
+  revalidatePath("/report/kpis");
+  revalidatePath("/");
+  return { ok: true };
+}
+
+/**
+ * Save all filled daily KPIs for one AO + date in one RPC transaction.
+ * Empty fields are skipped. Invalid mix aborts the entire save.
+ */
+export async function reportDailyKpisBatchAction(input: {
+  businessAreaId?: string;
+  reportDate?: string;
+  reports: Array<{
+    kpiId: string;
+    value: string;
+    status: string;
+    comment?: string;
+  }>;
+}): Promise<ReportDailyKpiResult> {
+  const profile = await requireOperationalWriter();
+
+  const reportDate =
+    input.reportDate?.trim() || resolveDailyReportDate(undefined);
+  const dateError = dailyReportDateRejectedReason(reportDate);
+  if (dateError) {
+    return { ok: false, error: dateError };
+  }
+
+  const area = await resolveWriterBusinessAreaId(profile, input.businessAreaId);
+  if (!area.ok) {
+    return area;
+  }
+
+  const areaKpis = await getKPIsByBusinessArea(area.businessAreaId).catch(
+    () => [],
+  );
+  if (areaKpis.length === 0) {
+    return { ok: false, error: "KPI hittades inte." };
+  }
+
+  for (const kpi of areaKpis) {
+    const authorized = authorizeDailyKpiReport(profile, {
+      businessAreaId: kpi.businessAreaId,
+    });
+    if (!authorized.ok) {
+      return authorized;
+    }
+  }
+
+  const collected = collectBatchDailyReports({
+    reportDate,
+    kpis: areaKpis.map(dailyKpiValidationKpiFromKpi),
+    drafts: input.reports ?? [],
+  });
+  if (!collected.ok) {
+    return {
+      ok: false,
+      error: formatBatchDailyReportError(collected.kpiNames),
+    };
+  }
+
+  if (collected.reports.length === 0) {
+    return { ok: true, message: EMPTY_DAILY_BATCH_MESSAGE };
+  }
+
+  try {
+    await upsertDailyKpiReports(
+      collected.reports.map((report) => ({
+        kpiId: report.kpiId,
+        reportDate: report.reportDate,
+        value: report.value,
+        status: report.status,
+        comment: report.comment,
+        recordedBy: profile.id,
+      })),
+    );
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Kunde inte spara rapporten.";

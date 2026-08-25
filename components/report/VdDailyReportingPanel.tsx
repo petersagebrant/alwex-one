@@ -4,9 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { InfoPanel } from "@/components/ui";
 import { CalculatedKpiReportSection } from "@/components/report/CalculatedKpiReportSection";
-import { DailyKpiReportList } from "@/components/report/DailyKpiReportList";
+import { DailyKpiBatchReportForm } from "@/components/report/DailyKpiBatchReportForm";
 import { MonthlyKpiReportSection } from "@/components/report/MonthlyKpiReportSection";
-import { RatioPercentReportSection } from "@/components/report/RatioPercentReportSection";
 import { loadVdAreaReportingAction } from "@/app/report/kpis/actions";
 import { formatDateSv } from "@/lib/format/date";
 import type { MyKpisForTodayReporting } from "@/types";
@@ -37,7 +36,7 @@ export function VdDailyReportingPanel({
 }: VdDailyReportingPanelProps) {
   if (!businessAreaId) {
     return (
-      <div className="space-y-5">
+      <div className="space-y-4">
         <InfoPanel
           title="KPI-rapportering"
           showLabel={false}
@@ -150,7 +149,7 @@ function VdAreaReportingPanel({
   }, [businessAreaId, loadReporting, router]);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <p className="text-sm text-slate-700">
         Valt område: {areaName} · {dateLabel}
       </p>
@@ -193,54 +192,46 @@ function ReportingBody({
 
   return (
     <>
-      <InfoPanel
-        title={`KPI-rapportering ${formatDateSv(reporting.reportDate)}`}
-        showLabel={false}
-        compact
-        className="!border-slate-200/80 !bg-white"
-      >
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <p className="text-sm font-medium text-slate-900">
-              {reported} av {total} rapporterade
-            </p>
-            <p className="text-xs text-slate-500">{progressPct} %</p>
-          </div>
-          <div
-            className="h-2 overflow-hidden rounded-full bg-slate-100"
-            role="progressbar"
-            aria-valuenow={reported}
-            aria-valuemin={0}
-            aria-valuemax={total}
-            aria-label="Andel rapporterade KPI:er"
+      <DailyKpiBatchReportForm
+        businessAreaId={reporting.businessAreaId}
+        reportDate={reporting.reportDate}
+        items={reporting.items}
+        ratioGroups={reporting.ratioGroups}
+        onReported={onReported}
+        header={
+          <InfoPanel
+            title={`KPI-rapportering ${formatDateSv(reporting.reportDate)}`}
+            showLabel={false}
+            compact
+            className="!border-slate-200/80 !bg-white !p-3"
           >
-            <div
-              className="h-full rounded-full bg-slate-800 transition-[width] duration-300"
-              style={{ width: `${progressPct}%` }}
-            />
-          </div>
-          <p className="text-xs text-slate-500">
-            Status beräknas automatiskt när KPI:n har riktning och toleranser.
-            Kommentar krävs vid Gul eller Röd.
-          </p>
-        </div>
-      </InfoPanel>
-
-      {reporting.ratioGroups.length > 0 ? (
-        <RatioPercentReportSection
-          groups={reporting.ratioGroups}
-          onReported={onReported}
-          reportDate={reporting.reportDate}
-        />
-      ) : null}
-
-      {reporting.items.length > 0 ? (
-        <DailyKpiReportList
-          items={reporting.items}
-          onReported={onReported}
-          reportDate={reporting.reportDate}
-        />
-      ) : null}
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <p className="text-sm font-medium text-slate-900">
+                  {reported} av {total} rapporterade
+                </p>
+                <p className="text-xs text-slate-500">{progressPct} %</p>
+              </div>
+              <div
+                className="h-1.5 overflow-hidden rounded-full bg-slate-100"
+                role="progressbar"
+                aria-valuenow={reported}
+                aria-valuemin={0}
+                aria-valuemax={total}
+                aria-label="Andel rapporterade KPI:er"
+              >
+                <div
+                  className="h-full rounded-full bg-slate-800 transition-[width] duration-300"
+                  style={{ width: `${progressPct}%` }}
+                />
+              </div>
+              <p className="text-xs text-slate-500">
+                Tomt fält hoppas över. Kommentar krävs vid Gul eller Röd.
+              </p>
+            </div>
+          </InfoPanel>
+        }
+      />
 
       <MonthlyKpiReportSection
         items={reporting.monthlyItems}

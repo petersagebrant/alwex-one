@@ -2,11 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppHeader } from "@/components/layout/AppHeader";
-import { AoChefKpiReportList } from "@/components/report/AoChefKpiReportList";
 import { AoDailyReportDatePicker } from "@/components/report/AoDailyReportDatePicker";
 import { CalculatedKpiReportSection } from "@/components/report/CalculatedKpiReportSection";
+import { DailyKpiBatchReportForm } from "@/components/report/DailyKpiBatchReportForm";
 import { MonthlyKpiReportSection } from "@/components/report/MonthlyKpiReportSection";
-import { RatioPercentReportSection } from "@/components/report/RatioPercentReportSection";
 import { VdKpiReportingView } from "@/components/report/VdKpiReportingView";
 import { InfoPanel, SectionHeader } from "@/components/ui";
 import { requireProfile } from "@/lib/auth/require-user";
@@ -49,52 +48,45 @@ function AoChefReportingProgress({
 
   return (
     <>
-      <InfoPanel
-        title={`KPI-rapportering ${dateLabel}`}
-        showLabel={false}
-        compact
-        className="!border-slate-200/80 !bg-white"
-      >
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <p className="text-sm font-medium text-slate-900">
-              {reported} av {total} rapporterade
-            </p>
-            <p className="text-xs text-slate-500">{progressPct} %</p>
-          </div>
-          <div
-            className="h-2 overflow-hidden rounded-full bg-slate-100"
-            role="progressbar"
-            aria-valuenow={reported}
-            aria-valuemin={0}
-            aria-valuemax={total}
-            aria-label="Andel rapporterade KPI:er"
+      <DailyKpiBatchReportForm
+        businessAreaId={reporting.businessAreaId}
+        reportDate={reporting.reportDate}
+        items={reporting.items}
+        ratioGroups={reporting.ratioGroups}
+        header={
+          <InfoPanel
+            title={`KPI-rapportering ${dateLabel}`}
+            showLabel={false}
+            compact
+            className="!border-slate-200/80 !bg-white !p-3"
           >
-            <div
-              className="h-full rounded-full bg-slate-800 transition-[width] duration-300"
-              style={{ width: `${progressPct}%` }}
-            />
-          </div>
-          <p className="text-xs text-slate-500">
-            Ange nytt värde och spara. Status beräknas automatiskt. Kommentar
-            krävs vid Gul eller Röd.
-          </p>
-        </div>
-      </InfoPanel>
-
-      {reporting.ratioGroups.length > 0 ? (
-        <RatioPercentReportSection
-          groups={reporting.ratioGroups}
-          reportDate={reporting.reportDate}
-        />
-      ) : null}
-
-      {reporting.items.length > 0 ? (
-        <AoChefKpiReportList
-          items={reporting.items}
-          reportDate={reporting.reportDate}
-        />
-      ) : null}
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <p className="text-sm font-medium text-slate-900">
+                  {reported} av {total} rapporterade
+                </p>
+                <p className="text-xs text-slate-500">{progressPct} %</p>
+              </div>
+              <div
+                className="h-1.5 overflow-hidden rounded-full bg-slate-100"
+                role="progressbar"
+                aria-valuenow={reported}
+                aria-valuemin={0}
+                aria-valuemax={total}
+                aria-label="Andel rapporterade KPI:er"
+              >
+                <div
+                  className="h-full rounded-full bg-slate-800 transition-[width] duration-300"
+                  style={{ width: `${progressPct}%` }}
+                />
+              </div>
+              <p className="text-xs text-slate-500">
+                Tomt fält hoppas över. Kommentar krävs vid Gul eller Röd.
+              </p>
+            </div>
+          </InfoPanel>
+        }
+      />
 
       <MonthlyKpiReportSection items={reporting.monthlyItems} />
 
@@ -158,7 +150,7 @@ export default async function ReportKpisPage({
       return (
         <div className="flex min-h-full flex-1 flex-col bg-[#eef2f6] font-sans text-slate-800">
           <AppHeader current="kpis" />
-          <main className="mx-auto w-full max-w-3xl flex-1 space-y-6 px-4 py-6 sm:px-6 sm:py-8">
+          <main className="mx-auto w-full max-w-4xl flex-1 space-y-6 px-4 py-6 sm:px-6 sm:py-8">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <SectionHeader title="KPI-rapportering" />
               <ReportPageActions showManageKpis={false} />
@@ -180,7 +172,7 @@ export default async function ReportKpisPage({
       <div className="flex min-h-full flex-1 flex-col bg-[#eef2f6] font-sans text-slate-800">
         <AppHeader current="kpis" />
 
-        <main className="mx-auto w-full max-w-3xl flex-1 space-y-5 px-4 py-6 sm:px-6 sm:py-8">
+        <main className="mx-auto w-full max-w-4xl flex-1 space-y-4 px-4 py-6 sm:px-6 sm:py-8">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <SectionHeader
               title="KPI-rapportering"
@@ -204,7 +196,7 @@ export default async function ReportKpisPage({
     <div className="flex min-h-full flex-1 flex-col bg-[#eef2f6] font-sans text-slate-800">
       <AppHeader current="kpis" />
 
-      <main className="mx-auto w-full max-w-3xl flex-1 space-y-5 px-4 py-6 sm:px-6 sm:py-8">
+      <main className="mx-auto w-full max-w-4xl flex-1 space-y-4 px-4 py-6 sm:px-6 sm:py-8">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <SectionHeader
             title="KPI-rapportering"

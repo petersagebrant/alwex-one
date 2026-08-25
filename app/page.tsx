@@ -11,7 +11,6 @@ import {
   InfoPanel,
   SectionHeader,
   StatusBadge,
-  SummaryCard,
   type UiStatus,
 } from "@/components/ui";
 import {
@@ -30,16 +29,6 @@ import { getCurrentUser } from "@/lib/auth/require-user";
 import { fetchProfileByUserId } from "@/lib/supabase/profiles";
 import { formatDateTimeSv } from "@/lib/format/date";
 import type { StatusTone } from "@/types";
-
-const kpiHref: Record<string, string> = {
-  "business-areas": "/areas",
-  goals: "/admin/goals",
-  activities: "/admin/activities",
-  "delayed-activities": "/admin/activities",
-  "completed-goals": "/admin/goals",
-  "ongoing-activities": "/admin/activities",
-  "areas-with-red-goals": "/areas",
-};
 
 function toUiStatus(status: StatusTone): UiStatus {
   return status;
@@ -130,7 +119,6 @@ export default async function Home() {
   const attentionItems = data?.attentionItems ?? [];
   const actionGoals = data?.actionGoals ?? [];
   const upcomingDecisions = data?.upcomingDecisions ?? [];
-  const recentEvents = data?.recentEvents ?? [];
   const vdFocus = data?.vdFocus ?? {
     cardTone: "green" as const,
     summary: {
@@ -144,7 +132,6 @@ export default async function Home() {
     openDecisions: [],
     priorityItems: [],
   };
-  const sinceLoginChanges = data?.sinceLoginChanges ?? [];
   const vdAssistant = data?.vdAssistant ?? {
     greeting: "",
     situation: "",
@@ -161,21 +148,34 @@ export default async function Home() {
   const yesterdayChanges = data?.yesterdayChanges ?? [];
   const historyEvents = data?.historyEvents ?? [];
   const focusKpis = vdFocus.kpis ?? [];
-
-  const sinceLoginDot: Record<string, string> = {
-    red: "bg-rose-500",
-    yellow: "bg-amber-400",
-    blue: "bg-sky-500",
-    green: "bg-emerald-500",
-    slate: "bg-slate-400",
-  };
-
-  const assistantToneClass: Record<string, string> = {
-    Hög: "!border-rose-200/80 !bg-rose-50/40",
-    Medel: "!border-amber-200/80 !bg-amber-50/40",
-    Låg: "!border-emerald-200/80 !bg-emerald-50/40",
-    "Ej bedömd": "!border-slate-200/80 !bg-white",
-  };
+  const attentionCounters = [
+    {
+      id: "kpi",
+      label: "KPI att följa upp",
+      value: vdFocus.summary.kpiFollowUpCount,
+    },
+    {
+      id: "delayed",
+      label: "Försenade aktiviteter",
+      value: vdFocus.summary.delayedActivityCount,
+    },
+    {
+      id: "decisions",
+      label: "Öppna beslut",
+      value: vdFocus.summary.openDecisionCount,
+    },
+    {
+      id: "red",
+      label: "Affärsområden med röd status",
+      value: vdFocus.summary.redAreaCount,
+    },
+  ].filter((row) => row.value > 0);
+  const orgReporting =
+    reportingContext.kind === "leadership" ? reportingContext.orgStats : null;
+  const reportingIncomplete =
+    orgReporting != null &&
+    orgReporting.total > 0 &&
+    orgReporting.reported < orgReporting.total;
 
   const cachedAiBriefing = vdPrincipal
     ? getCachedVdBriefing(vdPrincipal)
@@ -302,59 +302,50 @@ export default async function Home() {
           />
         ) : null}
 
+        <InfoPanel
+          title="Kräver din uppmärksamhet"
+          variant="info"
+          showLabel={false}
+          compact
+          className="!border-slate-200/80 !bg-white"
+        >
+          {attentionCounters.length > 0 ? (
+            <dl className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {attentionCounters.map((row) => (
+                <div
+                  key={row.id}
+                  className="rounded-lg border border-slate-200/70 bg-white/80 px-3 py-2"
+                >
+                  <dt className="text-[11px] text-slate-500">{row.label}</dt>
+                  <dd className="mt-0.5 text-lg font-semibold text-slate-900">
+                    {row.value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
+
+          <VdAttentionList items={vdFocus.priorityItems ?? []} maxItems={5} />
+        </InfoPanel>
+
         <OrgNoticesFeed notices={orgNotices} />
 
-        <KpiOverviewSection data={kpiOverview} />
-
-        {reportingContext.kind === "ao_chef" &&
-        reportingContext.myReporting ? (
-          <InfoPanel
-            title="Mina KPI:er idag"
-            showLabel={false}
-            compact
-            className="!border-slate-200/80 !bg-white"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-slate-900">
-                  {reportingContext.myReporting.reportedCount} av{" "}
-                  {reportingContext.myReporting.totalCount} rapporterade
-                </p>
-                <p className="text-sm text-slate-500">
-                  {reportingContext.myReporting.businessAreaName}
-                </p>
-              </div>
-              <Link
-                href="/report/kpis"
-                className="inline-flex items-center rounded-xl bg-[#0b1220] px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-              >
-                {reportingContext.myReporting.reportedCount <
-                reportingContext.myReporting.totalCount
-                  ? "Rapportera KPI"
-                  : "Visa rapporter"}
-              </Link>
-            </div>
-          </InfoPanel>
-        ) : null}
-
-        {reportingContext.kind === "leadership" &&
-        reportingContext.orgStats ? (
+        {reportingIncomplete && orgReporting ? (
           <Link
             href="/report/kpis"
             className="group block rounded-2xl outline-none transition hover:brightness-[0.99] focus-visible:ring-2 focus-visible:ring-slate-300"
           >
             <InfoPanel
-              title="KPI-rapportering idag"
+              title="Rapporteringsläge"
               showLabel={false}
               compact
-              className="!border-slate-200/80 !bg-white"
+              className="!border-amber-200/80 !bg-amber-50/50"
             >
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-sm text-slate-700">
                   KPI rapporterade idag:{" "}
                   <span className="font-semibold text-slate-900">
-                    {reportingContext.orgStats.reported} av{" "}
-                    {reportingContext.orgStats.total}
+                    {orgReporting.reported} av {orgReporting.total}
                   </span>
                 </p>
                 <span className="inline-flex items-center rounded-xl bg-[#0b1220] px-3.5 py-2 text-sm font-semibold text-white transition group-hover:bg-slate-800">
@@ -365,46 +356,10 @@ export default async function Home() {
           </Link>
         ) : null}
 
-        {vdPrincipal ? (
-          <InfoPanel
-            title="VD-assistent"
-            variant="ai-summary"
-            showLabel={false}
-            compact
-            className={assistantToneClass[vdAssistant.riskLevel ?? "Låg"]}
-            footer={
-              <p className="text-xs text-slate-500">
-                Senast analyserad{" "}
-                <span className="font-medium text-slate-700">
-                  {vdAssistant.analyzedAtLabel ?? "—"}
-                </span>
-              </p>
-            }
-          >
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="space-y-1">
-                <p className="text-sm text-slate-600">
-                  Risknivå:{" "}
-                  <span className="font-semibold text-slate-900">
-                    {vdAssistant.riskLabel ?? vdAssistant.riskLevel ?? "Låg"}
-                  </span>
-                </p>
-                <p className="text-sm text-slate-500">
-                  Sammanfattningen finns i VD Briefing ovan.
-                </p>
-              </div>
-              <Link
-                href="/assistant"
-                className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
-              >
-                Ställ en fråga
-              </Link>
-            </div>
-          </InfoPanel>
-        ) : null}
+        <KpiOverviewSection data={kpiOverview} exceptionDriven />
 
         <InfoPanel
-          title="Vad har förändrats sedan igår?"
+          title="Förändrat sedan föregående period"
           variant="info"
           showLabel={false}
           compact
@@ -479,137 +434,152 @@ export default async function Home() {
         </InfoPanel>
 
         <InfoPanel
-          title="Historik"
+          title="Försenade aktiviteter, öppna beslut och mål"
           variant="info"
           showLabel={false}
           compact
           className="!border-slate-200/80 !bg-white"
         >
-          <VdDiaryTimeline events={historyEvents} />
-        </InfoPanel>
-
-        <InfoPanel
-          title="VD:s uppmärksamhet idag"
-          variant="info"
-          showLabel={false}
-          compact
-          className="!border-slate-200/80 !bg-white"
-        >
-          <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <div className="rounded-lg border border-slate-200/70 bg-white/80 px-3 py-2">
-              <dt className="text-[11px] text-slate-500">KPI att följa upp</dt>
-              <dd className="mt-0.5 text-lg font-semibold text-slate-900">
-                {vdFocus.summary.kpiFollowUpCount}
-              </dd>
-            </div>
-            <div className="rounded-lg border border-slate-200/70 bg-white/80 px-3 py-2">
-              <dt className="text-[11px] text-slate-500">
+          <div className="space-y-6">
+            <section>
+              <h3 className="text-sm font-semibold tracking-tight text-slate-900">
                 Försenade aktiviteter
-              </dt>
-              <dd className="mt-0.5 text-lg font-semibold text-slate-900">
-                {vdFocus.summary.delayedActivityCount}
-              </dd>
-            </div>
-            <div className="rounded-lg border border-slate-200/70 bg-white/80 px-3 py-2">
-              <dt className="text-[11px] text-slate-500">Öppna beslut</dt>
-              <dd className="mt-0.5 text-lg font-semibold text-slate-900">
-                {vdFocus.summary.openDecisionCount}
-              </dd>
-            </div>
-            <div className="rounded-lg border border-slate-200/70 bg-white/80 px-3 py-2">
-              <dt className="text-[11px] text-slate-500">
-                Affärsområden med röd status
-              </dt>
-              <dd className="mt-0.5 text-lg font-semibold text-slate-900">
-                {vdFocus.summary.redAreaCount}
-              </dd>
-            </div>
-          </dl>
+              </h3>
+              {(vdFocus.delayedActivities ?? []).length === 0 ? (
+                <p className="mt-2 text-sm text-slate-600">
+                  Inga försenade aktiviteter just nu.
+                </p>
+              ) : (
+                <ul className="mt-2 divide-y divide-slate-100">
+                  {(vdFocus.delayedActivities ?? []).map((activity) => (
+                    <li
+                      key={activity.id}
+                      className="flex items-start gap-3 py-2.5 first:pt-0 last:pb-0"
+                    >
+                      <span
+                        aria-hidden
+                        className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-rose-500"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-slate-900">
+                          {activity.title}
+                        </p>
+                        <p className="mt-0.5 text-sm text-slate-600">
+                          {activity.area}
+                          {activity.owner ? ` · ${activity.owner}` : ""}
+                          {activity.deadline ? ` · ${activity.deadline}` : ""}
+                        </p>
+                      </div>
+                      <Link
+                        href={activity.href}
+                        className="shrink-0 text-sm font-medium text-slate-700 underline-offset-4 hover:underline"
+                      >
+                        Öppna
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
 
-          <VdAttentionList items={vdFocus.priorityItems ?? []} />
-
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Link
-              href="/admin/activities?new=1"
-              className="inline-flex items-center justify-center rounded-xl bg-[#0b1220] px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-            >
-              Ny aktivitet
-            </Link>
-            <Link
-              href="/admin/kpis?new=1"
-              className="inline-flex items-center justify-center rounded-xl bg-[#0b1220] px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-            >
-              Ny KPI
-            </Link>
-            <Link
-              href="/admin/decisions?new=1"
-              className="inline-flex items-center justify-center rounded-xl bg-[#0b1220] px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-            >
-              Nytt beslut
-            </Link>
-          </div>
-        </InfoPanel>
-
-        <InfoPanel
-          title="Sedan du loggade in"
-          variant="info"
-          showLabel={false}
-          className="!border-slate-200/80 !bg-white"
-        >
-          {(sinceLoginChanges ?? []).length === 0 ? (
-            <p>Inga viktiga förändringar sedan senaste inloggningen.</p>
-          ) : (
-            <ul className="divide-y divide-slate-100">
-              {(sinceLoginChanges ?? []).map((item) => (
-                <li
-                  key={item.id}
-                  className="flex flex-col gap-3 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between"
-                >
-                  <div className="flex min-w-0 items-start gap-3">
-                    <span
-                      aria-hidden
-                      className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${sinceLoginDot[item.tone] ?? "bg-slate-400"}`}
-                    />
-                    <div className="min-w-0">
-                      <p className="font-medium text-slate-900">{item.title}</p>
-                      {item.detail ? (
+            <section>
+              <h3 className="text-sm font-semibold tracking-tight text-slate-900">
+                Öppna beslut
+              </h3>
+              {(upcomingDecisions ?? []).length === 0 ? (
+                <p className="mt-2 text-sm text-slate-600">
+                  Inga beslutspunkter registrerade ännu.
+                </p>
+              ) : (
+                <ul className="mt-2 divide-y divide-slate-100">
+                  {(upcomingDecisions ?? []).map((item) => (
+                    <li
+                      key={item.id}
+                      className="flex items-start gap-3 py-2.5 first:pt-0 last:pb-0"
+                    >
+                      <span
+                        aria-hidden
+                        className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-sky-500"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-slate-900">{item.title}</p>
                         <p className="mt-0.5 text-sm text-slate-600">
                           {item.detail}
                         </p>
-                      ) : null}
-                      <p className="mt-1 text-xs text-slate-500">
-                        {item.occurredAtLabel}
-                      </p>
-                    </div>
-                  </div>
-                  <Link
-                    href={item.href}
-                    className="shrink-0 self-start text-sm font-medium text-slate-700 underline-offset-4 hover:underline sm:mt-0.5"
-                  >
-                    {item.linkLabel}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </InfoPanel>
+                      </div>
+                      <Link
+                        href={`/admin/decisions/${item.id}`}
+                        className="shrink-0 text-sm font-medium text-slate-700 underline-offset-4 hover:underline"
+                      >
+                        Öppna
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
 
-        <section aria-labelledby="kpi-heading">
-          <h2 id="kpi-heading" className="sr-only">
-            Organisationsnyckeltal
-          </h2>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {(kpis ?? []).map((kpi) => (
-              <SummaryCard
-                key={kpi.id}
-                title={kpi.label}
-                value={kpi.value}
-                status={toUiStatus(kpi.status)}
-                href={kpiHref[kpi.id] ?? "/"}
-              />
-            ))}
+            <section>
+              <h3 className="text-sm font-semibold tracking-tight text-slate-900">
+                Mål som kräver åtgärd
+              </h3>
+              <div className="mt-2 overflow-x-auto">
+                {(actionGoals ?? []).length === 0 ? (
+                  <p className="text-sm text-slate-600">
+                    Inga mål kräver åtgärd just nu.
+                  </p>
+                ) : (
+                  <table className="min-w-full border-separate border-spacing-0 text-left text-sm">
+                    <thead>
+                      <tr className="bg-slate-50 text-slate-600">
+                        <th className="rounded-l-lg px-3 py-2.5 font-semibold">
+                          Mål
+                        </th>
+                        <th className="px-3 py-2.5 font-semibold">
+                          Affärsområde
+                        </th>
+                        <th className="px-3 py-2.5 font-semibold">Ansvarig</th>
+                        <th className="px-3 py-2.5 font-semibold">Deadline</th>
+                        <th className="rounded-r-lg px-3 py-2.5 font-semibold">
+                          Status
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(actionGoals ?? []).map((row) => (
+                        <tr
+                          key={row.id}
+                          className="border-b border-slate-100 last:border-b-0"
+                        >
+                          <td className="border-b border-slate-100 px-3 py-3 font-medium text-slate-900">
+                            <Link
+                              href={`/admin/goals/${row.id}`}
+                              className="hover:underline"
+                            >
+                              {row.goal}
+                            </Link>
+                          </td>
+                          <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
+                            {row.area}
+                          </td>
+                          <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
+                            {row.owner}
+                          </td>
+                          <td className="whitespace-nowrap border-b border-slate-100 px-3 py-3 text-slate-700">
+                            {row.deadline}
+                          </td>
+                          <td className="border-b border-slate-100 px-3 py-3">
+                            <StatusBadge status={toUiStatus(row.status)} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </section>
           </div>
-        </section>
+        </InfoPanel>
 
         <section aria-labelledby="areas-heading" className="space-y-4">
           <SectionHeader
@@ -679,177 +649,15 @@ export default async function Home() {
           </ul>
         </section>
 
-        <section
-          aria-label="Ledningsfokus"
-          className="grid grid-cols-1 gap-4 lg:grid-cols-2"
+        <InfoPanel
+          title="Historik"
+          variant="info"
+          showLabel={false}
+          compact
+          className="!border-slate-200/80 !bg-white"
         >
-          <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_6px_18px_rgba(15,23,42,0.05)] sm:p-6">
-            <SectionHeader title="Kräver ledningens uppmärksamhet" />
-            {(attentionItems ?? []).length === 0 ? (
-              <p className="mt-4 text-sm text-slate-600">
-                Inga affärsområden kräver uppmärksamhet just nu.
-              </p>
-            ) : (
-              <ul className="mt-4 divide-y divide-slate-100">
-                {(attentionItems ?? []).map((item) => (
-                  <li
-                    key={item.id}
-                    className="flex items-start gap-3 py-3 first:pt-0 last:pb-0"
-                  >
-                    <span
-                      aria-hidden
-                      className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-rose-500"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-slate-900">{item.title}</p>
-                      <p className="mt-0.5 text-sm text-slate-600">
-                        {item.detail}
-                      </p>
-                    </div>
-                    <Link
-                      href={`/areas/${item.slug}`}
-                      className="shrink-0 text-sm font-medium text-slate-700 underline-offset-4 hover:underline"
-                    >
-                      Öppna
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </article>
-
-          <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_6px_18px_rgba(15,23,42,0.05)] sm:p-6">
-            <SectionHeader title="Kommande beslut" />
-            {(upcomingDecisions ?? []).length === 0 ? (
-              <p className="mt-4 text-sm text-slate-600">
-                Inga beslutspunkter registrerade ännu.
-              </p>
-            ) : (
-              <ul className="mt-4 divide-y divide-slate-100">
-                {(upcomingDecisions ?? []).map((item) => (
-                  <li
-                    key={item.id}
-                    className="flex items-start gap-3 py-3 first:pt-0 last:pb-0"
-                  >
-                    <span
-                      aria-hidden
-                      className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-sky-500"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-slate-900">{item.title}</p>
-                      <p className="mt-0.5 text-sm text-slate-600">
-                        {item.detail}
-                      </p>
-                    </div>
-                    <Link
-                      href={`/admin/decisions/${item.id}`}
-                      className="shrink-0 text-sm font-medium text-slate-700 underline-offset-4 hover:underline"
-                    >
-                      Öppna
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </article>
-        </section>
-
-        <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_6px_18px_rgba(15,23,42,0.05)] sm:p-6">
-          <SectionHeader title="Mål som kräver åtgärd" />
-
-          <div className="mt-4 overflow-x-auto">
-            {(actionGoals ?? []).length === 0 ? (
-              <p className="text-sm text-slate-600">
-                Inga mål kräver åtgärd just nu.
-              </p>
-            ) : (
-              <table className="min-w-full border-separate border-spacing-0 text-left text-sm">
-                <thead>
-                  <tr className="bg-slate-50 text-slate-600">
-                    <th className="rounded-l-lg px-3 py-2.5 font-semibold">
-                      Mål
-                    </th>
-                    <th className="px-3 py-2.5 font-semibold">Affärsområde</th>
-                    <th className="px-3 py-2.5 font-semibold">Ansvarig</th>
-                    <th className="px-3 py-2.5 font-semibold">Deadline</th>
-                    <th className="rounded-r-lg px-3 py-2.5 font-semibold">
-                      Status
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(actionGoals ?? []).map((row) => (
-                    <tr
-                      key={row.id}
-                      className="border-b border-slate-100 last:border-b-0"
-                    >
-                      <td className="border-b border-slate-100 px-3 py-3 font-medium text-slate-900">
-                        <Link
-                          href={`/admin/goals/${row.id}`}
-                          className="hover:underline"
-                        >
-                          {row.goal}
-                        </Link>
-                      </td>
-                      <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
-                        {row.area}
-                      </td>
-                      <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
-                        {row.owner}
-                      </td>
-                      <td className="whitespace-nowrap border-b border-slate-100 px-3 py-3 text-slate-700">
-                        {row.deadline}
-                      </td>
-                      <td className="border-b border-slate-100 px-3 py-3">
-                        <StatusBadge status={toUiStatus(row.status)} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_6px_18px_rgba(15,23,42,0.05)] sm:p-6">
-          <SectionHeader title="Senaste händelser" />
-
-          {(recentEvents ?? []).length === 0 ? (
-            <p className="mt-4 text-sm text-slate-600">
-              Inga händelser registrerade ännu.
-            </p>
-          ) : (
-            <ul className="mt-4 divide-y divide-slate-100">
-              {(recentEvents ?? []).map((event) => (
-                <li
-                  key={event.id}
-                  className="flex items-start gap-3 py-3 first:pt-0 last:pb-0"
-                >
-                  <span
-                    aria-hidden
-                    className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-slate-400"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs text-slate-500">
-                      {formatDateTimeSv(event.createdAt)} · {event.actorName}
-                    </p>
-                    <p className="mt-0.5 text-sm text-slate-800">
-                      {event.description}
-                    </p>
-                  </div>
-                  {event.href ? (
-                    <Link
-                      href={event.href}
-                      className="shrink-0 text-sm font-medium text-slate-700 underline-offset-4 hover:underline"
-                    >
-                      Öppna
-                    </Link>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+          <VdDiaryTimeline events={historyEvents} />
+        </InfoPanel>
       </main>
     </div>
   );

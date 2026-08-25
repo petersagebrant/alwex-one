@@ -250,10 +250,29 @@ describe("aktuellt module wiring", () => {
     assert.match(feed, /Se alla/);
 
     const briefingIdx = page.indexOf("<VdBriefingPanel");
+    const attentionIdx = page.indexOf("<VdAttentionList");
     const orgFeedIdx = page.indexOf("<OrgNoticesFeed");
+    const reportingIdx = page.indexOf('title="Rapporteringsläge"');
     const kpiOverviewIdx = page.indexOf("<KpiOverviewSection");
-    assert.ok(briefingIdx >= 0 && orgFeedIdx > briefingIdx);
-    assert.ok(kpiOverviewIdx > orgFeedIdx);
+    const yesterdayIdx = page.indexOf('title="Förändrat sedan föregående period"');
+    const foldIdx = page.indexOf(
+      'title="Försenade aktiviteter, öppna beslut och mål"',
+    );
+    const catalogIdx = page.indexOf('aria-labelledby="areas-heading"');
+    const timelineIdx = page.indexOf("<VdDiaryTimeline");
+    assert.ok(briefingIdx >= 0 && attentionIdx > briefingIdx);
+    assert.ok(orgFeedIdx > attentionIdx);
+    assert.ok(reportingIdx > orgFeedIdx);
+    assert.ok(kpiOverviewIdx > reportingIdx);
+    assert.ok(yesterdayIdx > kpiOverviewIdx);
+    assert.ok(foldIdx > yesterdayIdx);
+    assert.ok(catalogIdx > foldIdx);
+    assert.ok(timelineIdx > catalogIdx);
+    assert.match(page, /exceptionDriven/);
+    assert.doesNotMatch(page, /Sedan du loggade in/);
+    assert.doesNotMatch(page, /Kräver ledningens uppmärksamhet/);
+    assert.doesNotMatch(page, /title="Senaste händelser"/);
+    assert.doesNotMatch(page, /title="VD-assistent"/);
 
     const aoFeedIdx = aoChef.indexOf("<OrgNoticesFeed");
     const aoGreetingIdx = aoChef.indexOf("{greeting}");

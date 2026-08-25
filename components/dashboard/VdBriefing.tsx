@@ -58,7 +58,7 @@ export function VdBriefing({
   const displayStats = stats ?? footerMeta.stats;
 
   const cards: Array<{
-    kind: Exclude<SectionKind, "analysis" | "other">;
+    kind: Exclude<SectionKind, "analysis" | "other" | "positive">;
     title: string;
     icon: string;
     titleClass: string;
@@ -74,15 +74,6 @@ export function VdBriefing({
       accentBar: "bg-rose-500",
       items: itemsForKind(sections, "attention", linkHints).slice(0, 3),
       empty: "Inga kritiska avvikelser just nu.",
-    },
-    {
-      kind: "positive",
-      title: "Positiv utveckling",
-      icon: "🟢",
-      titleClass: "text-emerald-700",
-      accentBar: "bg-emerald-500",
-      items: itemsForKind(sections, "positive", linkHints).slice(0, 3),
-      empty: "Inga positiva signaler i dagens underlag.",
     },
     {
       kind: "risks",
@@ -103,6 +94,10 @@ export function VdBriefing({
       empty: "Inga rekommendationer just nu.",
     },
   ];
+  const positiveItems = itemsForKind(sections, "positive", linkHints).slice(
+    0,
+    3,
+  );
 
   return (
     <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,0.05)] sm:p-5">
@@ -187,6 +182,32 @@ export function VdBriefing({
           </article>
         ))}
       </div>
+
+      {positiveItems.length > 0 ? (
+        <details className="mt-3 rounded-2xl border border-slate-200/80 bg-slate-50/60 p-4 sm:p-5">
+          <summary className="flex cursor-pointer items-center gap-2.5 text-sm font-semibold tracking-tight text-emerald-700">
+            <span
+              aria-hidden
+              className="h-5 w-1 shrink-0 rounded-full bg-emerald-500"
+            />
+            <span aria-hidden className="text-[13px] leading-none">
+              🟢
+            </span>
+            <span>Positiv utveckling</span>
+            <span className="text-xs font-medium text-slate-500">
+              {positiveItems.length}{" "}
+              {positiveItems.length === 1 ? "punkt" : "punkter"} · visa
+            </span>
+          </summary>
+          <ul className="mt-3.5 space-y-3.5">
+            {positiveItems.map((item, index) => (
+              <li key={`positive-${index}`}>
+                <BriefingItemRow item={item} />
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
 
       <p className="mt-3.5 text-[11px] leading-relaxed text-slate-400">
         {footerMeta.basisLine}

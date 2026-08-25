@@ -8,6 +8,7 @@ import { BeraknadTypeBadge } from "@/components/kpis/BeraknadTypeBadge";
 import { ReportingStatusBadge } from "@/components/kpis/ReportingStatusBadge";
 import { formatKpiDisplayValue } from "@/lib/format/kpi";
 import { formatDateSv } from "@/lib/format/date";
+import { computeAreaOperationalStatus } from "@/lib/kpi/areaOperationalStatus";
 import {
   formatExpectedFinalizationSv,
   formatPeriodMonthSv,
@@ -23,7 +24,21 @@ import type {
 
 type KpiOverviewSectionProps = {
   data: KpiOverviewData;
+  /** Full cards for Röd/Gul AO; Grön AO summarized as “övriga enligt plan”. */
+  exceptionDriven?: boolean;
 };
+
+function areaExceptionTone(
+  section: KpiOverviewAreaSection,
+): "Röd" | "Gul" | null {
+  const status = computeAreaOperationalStatus(
+    section.allKpis.map((row) => row.kpi),
+  );
+  if (status === "Röd" || status === "Gul") {
+    return status;
+  }
+  return null;
+}
 
 function StatusCountPills({
   counts,
@@ -187,22 +202,29 @@ function MonthlyResultValues({ item }: { item: KpiOverviewDisplayItem }) {
 function AreaOverviewCard({
   section,
   emphasize,
+  exceptionTone = null,
 }: {
   section: KpiOverviewAreaSection;
   emphasize?: boolean;
+  exceptionTone?: "Röd" | "Gul" | null;
 }) {
   const areaHref =
     !section.isAlwexTotalt && section.areaSlug
       ? `/areas/${section.areaSlug}`
       : null;
 
+  const frameClass =
+    exceptionTone === "Röd"
+      ? "border-rose-300/90 bg-rose-50/50 ring-1 ring-rose-200/80"
+      : exceptionTone === "Gul"
+        ? "border-amber-300/90 bg-amber-50/45 ring-1 ring-amber-200/80"
+        : emphasize
+          ? "border-slate-300/90 bg-white ring-1 ring-slate-200/80"
+          : "border-slate-200/80 bg-white";
+
   return (
     <article
-      className={`rounded-2xl border bg-white p-5 shadow-[0_6px_18px_rgba(15,23,42,0.05)] sm:p-6 ${
-        emphasize
-          ? "border-slate-300/90 ring-1 ring-slate-200/80"
-          : "border-slate-200/80"
-      }`}
+      className={`rounded-2xl border p-5 shadow-[0_6px_18px_rgba(15,23,42,0.05)] sm:p-6 ${frameClass}`}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
@@ -248,14 +270,72 @@ function AreaOverviewCard({
   );
 }
 
+function OnTrackAreasSummary({
+  sections,
+}: {
+  sections: KpiOverviewAreaSection[];
+}) {
+  if (sections.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-xl border border-slate-200/80 bg-white px-4 py-3 shadow-[0_6px_18px_rgba(15,23,42,0.05)]">
+      <p className="text-sm font-semibold text-slate-800">Övriga enligt plan</p>
+      <p className="mt-0.5 text-xs text-slate-500">
+        {sections.length === 1
+          ? "1 affärsområde med grön status"
+          : `${sections.length} affärsområden med grön status`}
+      </p>
+      <ul className="mt-2 flex flex-wrap gap-2">
+        {sections.map((section) => {
+          const href = section.areaSlug ? `/areas/${section.areaSlug}` : "/areas";
+          return (
+            <li key={section.areaId}>
+              <Link
+                href={href}
+                className="inline-flex items-center rounded-full border border-emerald-200/80 bg-emerald-50/70 px-2.5 py-1 text-xs font-medium text-emerald-800 transition hover:border-emerald-300 hover:bg-emerald-50"
+              >
+                {section.areaName}
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 /** VD KPI-översikt: Alwex totalt + AO sections with key KPIs. */
-export function KpiOverviewSection({ data }: KpiOverviewSectionProps) {
+export function KpiOverviewSection({
+  data,
+  exceptionDriven = false,
+}: KpiOverviewSectionProps) {
   const hasContent = data.alwexTotalt != null || data.areas.length > 0;
+  const exceptionAreas = exceptionDriven
+    ? data.areas
+        .filter((section) => areaExceptionTone(section) != null)
+        .sort((a, b) => {
+          const toneA = areaExceptionTone(a);
+          const toneB = areaExceptionTone(b);
+          if (toneA === toneB) {
+            return a.areaName.localeCompare(b.areaName, "sv");
+          }
+          if (toneA === "Röd") return -1;
+          if (toneB === "Röd") return 1;
+          return 0;
+        })
+    : data.areas;
+  const onTrackAreas = exceptionDriven
+    ? data.areas.filter((section) => areaExceptionTone(section) == null)
+    : [];
 
   return (
     <section aria-labelledby="kpi-overview-heading" className="space-y-4">
       <SectionHeader
-        title="KPI-översikt"
+        title={
+          exceptionDriven ? "KPI-läge per affärsområde" : "KPI-översikt"
+        }
         description="Nyckel-KPI:er per affärsområde. Grön/Gul/Röd räknas endast för KPI:er med mål."
         className="scroll-mt-6"
         action={
@@ -280,17 +360,32 @@ export function KpiOverviewSection({ data }: KpiOverviewSectionProps) {
       ) : (
         <div className="space-y-4">
           {data.alwexTotalt ? (
-            <AreaOverviewCard section={data.alwexTotalt} emphasize />
+            <AreaOverviewCard
+              section={data.alwexTotalt}
+              emphasize
+              exceptionTone={
+                exceptionDriven ? areaExceptionTone(data.alwexTotalt) : null
+              }
+            />
           ) : null}
 
-          {data.areas.length > 0 ? (
+          {exceptionAreas.length > 0 ? (
             <ul className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-              {data.areas.map((section) => (
+              {exceptionAreas.map((section) => (
                 <li key={section.areaId}>
-                  <AreaOverviewCard section={section} />
+                  <AreaOverviewCard
+                    section={section}
+                    exceptionTone={
+                      exceptionDriven ? areaExceptionTone(section) : null
+                    }
+                  />
                 </li>
               ))}
             </ul>
+          ) : null}
+
+          {exceptionDriven ? (
+            <OnTrackAreasSummary sections={onTrackAreas} />
           ) : null}
         </div>
       )}

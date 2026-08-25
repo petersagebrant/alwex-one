@@ -3,6 +3,8 @@ import type { VdAttentionItem } from "@/services/vdAttention";
 
 type VdAttentionListProps = {
   items: VdAttentionItem[];
+  /** Daily VD queue is capped at 5. */
+  maxItems?: number;
 };
 
 const toneDot: Record<string, string> = {
@@ -17,8 +19,11 @@ const toneBadge: Record<string, string> = {
   slate: "border-slate-200/80 bg-slate-50 text-slate-700",
 };
 
-export function VdAttentionList({ items }: VdAttentionListProps) {
-  const rows = items ?? [];
+export function VdAttentionList({
+  items,
+  maxItems = 5,
+}: VdAttentionListProps) {
+  const rows = (items ?? []).slice(0, maxItems);
 
   if (rows.length === 0) {
     return (

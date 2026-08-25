@@ -1,12 +1,19 @@
 import Link from "next/link";
 import { AreaNoticeKindBadge } from "@/components/notices/AreaNoticeKindBadge";
 import { InfoPanel } from "@/components/ui";
+import {
+  areaNoticesHref,
+  noticeSeeAllHref,
+} from "@/lib/notices/dashboardLinks";
 import { truncateNoticeBody } from "@/lib/notices/rank";
 import type { AreaNoticeKind } from "@/types/area-notice";
 import type { AreaNoticeListItem } from "@/services/areaNotices";
 
 type OrgNoticesFeedProps = {
   notices: AreaNoticeListItem[];
+  /** AO-chef own area — heading/Se alla only for this slug. */
+  ownAreaSlug?: string;
+  newNoticeHref?: string;
 };
 
 /**
@@ -21,21 +28,37 @@ const noticeItemTone: Record<AreaNoticeKind, string> = {
   Behov: "border-l-teal-600 bg-teal-50/55",
 };
 
-export function OrgNoticesFeed({ notices }: OrgNoticesFeedProps) {
+export function OrgNoticesFeed({
+  notices,
+  ownAreaSlug,
+  newNoticeHref,
+}: OrgNoticesFeedProps) {
   return (
     <InfoPanel
       title="Aktuellt i verksamheten"
+      titleHref={ownAreaSlug ? areaNoticesHref(ownAreaSlug) : undefined}
       showLabel={false}
       className="!border-2 !border-slate-300 !bg-white !shadow-[0_10px_28px_rgba(15,23,42,0.08)]"
+      action={
+        newNoticeHref ? (
+          <Link
+            href={newNoticeHref}
+            className="inline-flex items-center rounded-xl bg-[#0b1220] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+          >
+            Nytt inlägg
+          </Link>
+        ) : undefined
+      }
     >
       {notices.length === 0 ? (
         <p className="text-sm text-slate-600">Inget aktuellt just nu.</p>
       ) : (
         <ul className="space-y-2.5">
           {notices.map((notice) => {
-            const href = notice.businessAreaSlug
-              ? `/areas/${notice.businessAreaSlug}`
-              : "/areas";
+            const seeAllHref = noticeSeeAllHref(
+              notice.businessAreaSlug,
+              ownAreaSlug,
+            );
             return (
               <li
                 key={notice.id}
@@ -56,12 +79,14 @@ export function OrgNoticesFeed({ notices }: OrgNoticesFeedProps) {
                       {truncateNoticeBody(notice.body)}
                     </p>
                   </div>
-                  <Link
-                    href={href}
-                    className="shrink-0 text-sm font-medium text-slate-700 underline-offset-4 hover:underline"
-                  >
-                    Se alla
-                  </Link>
+                  {seeAllHref ? (
+                    <Link
+                      href={seeAllHref}
+                      className="shrink-0 text-sm font-medium text-slate-700 underline-offset-4 hover:underline"
+                    >
+                      Se alla
+                    </Link>
+                  ) : null}
                 </div>
               </li>
             );

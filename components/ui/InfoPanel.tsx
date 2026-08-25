@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
 import type { InfoPanelVariant } from "./types";
 
@@ -9,6 +10,8 @@ export type InfoPanelProps = {
   showLabel?: boolean;
   compact?: boolean;
   className?: string;
+  titleHref?: string;
+  action?: ReactNode;
 };
 
 const variantClass: Record<InfoPanelVariant, string> = {
@@ -33,8 +36,24 @@ export function InfoPanel({
   showLabel = true,
   compact = false,
   className = "",
+  titleHref,
+  action,
 }: InfoPanelProps) {
   const eyebrow = showLabel ? variantLabel[variant] : null;
+  const headingClass = `font-semibold tracking-tight text-slate-900 ${
+    compact ? "text-base sm:text-lg" : "text-lg sm:text-xl"
+  }`;
+  const heading = (
+    <h2 className={`${headingClass} ${action ? "" : eyebrow ? "mt-1" : ""}`}>
+      {titleHref ? (
+        <Link href={titleHref} className="hover:underline underline-offset-4">
+          {title}
+        </Link>
+      ) : (
+        title
+      )}
+    </h2>
+  );
 
   return (
     <section
@@ -47,13 +66,18 @@ export function InfoPanel({
           {eyebrow}
         </p>
       ) : null}
-      <h2
-        className={`font-semibold tracking-tight text-slate-900 ${
-          compact ? "text-base sm:text-lg" : "text-lg sm:text-xl"
-        } ${eyebrow ? "mt-1" : ""}`}
-      >
-        {title}
-      </h2>
+      {action ? (
+        <div
+          className={`flex flex-wrap items-start justify-between gap-3 ${
+            eyebrow ? "mt-1" : ""
+          }`}
+        >
+          {heading}
+          <div className="shrink-0">{action}</div>
+        </div>
+      ) : (
+        heading
+      )}
       <div
         className={`text-sm text-slate-700 ${
           compact ? "mt-2 leading-snug" : "mt-3 leading-relaxed"

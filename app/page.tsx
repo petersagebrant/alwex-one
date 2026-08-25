@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AuthErrorBanner } from "@/components/auth/AuthErrorBanner";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { AoChefDashboard } from "@/components/dashboard/AoChefDashboard";
 import { KpiOverviewSection } from "@/components/dashboard/KpiOverviewSection";
@@ -55,7 +56,12 @@ function yesterdayChangeIconClass(text: string): string {
   return "bg-slate-400";
 }
 
-export default async function Home() {
+type HomeProps = {
+  searchParams?: Promise<{ error?: string }>;
+};
+
+export default async function Home({ searchParams }: HomeProps) {
+  const error = (await searchParams)?.error;
   const currentUser = await getCurrentUser().catch(() => null);
   const profileRow = currentUser
     ? await fetchProfileByUserId(currentUser.id).catch(() => null)
@@ -85,7 +91,9 @@ export default async function Home() {
       }),
       getDashboardAreaNotices().catch(() => []),
     ]);
-    return <AoChefDashboard data={aoData} notices={orgNotices} />;
+    return (
+      <AoChefDashboard data={aoData} notices={orgNotices} error={error} />
+    );
   }
 
   const [data, kpiDetails, reportingContext, kpiOverview, orgNotices] =
@@ -293,6 +301,8 @@ export default async function Home() {
       <AppHeader current="home" />
 
       <main className="mx-auto w-full max-w-[1440px] flex-1 space-y-6 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+        <AuthErrorBanner error={error} />
+
         {vdPrincipal ? (
           <VdBriefingPanel
             initialContent={initialBriefing}

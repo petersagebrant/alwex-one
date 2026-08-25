@@ -286,4 +286,30 @@ describe("aktuellt module wiring", () => {
     assert.doesNotMatch(assistant, /getDashboardAreaNotices/);
     assert.doesNotMatch(assistant, /area_notices/);
   });
+
+  it("gives AO-chef Nytt inlägg and own-area Se alla from area.slug", () => {
+    const aoChef = read("../../components/dashboard/AoChefDashboard.tsx");
+    const feed = read("../../components/dashboard/OrgNoticesFeed.tsx");
+    const decisionsPage = read("../../app/admin/decisions/page.tsx");
+
+    assert.match(aoChef, /ownAreaSlug=\{area\.slug\}/);
+    assert.match(aoChef, /newNoticeHref=\{newAreaNoticeHref\(area\.slug\)\}/);
+    assert.match(aoChef, /href="\/report\/kpis"/);
+    assert.match(aoChef, /Rapportera KPI/);
+    assert.doesNotMatch(aoChef, /Lars-Olof/);
+
+    assert.match(feed, /noticeSeeAllHref/);
+    assert.match(feed, /ownAreaSlug/);
+    assert.match(feed, /Nytt inlägg/);
+    assert.match(feed, /newNoticeHref/);
+
+    assert.match(decisionsPage, /canWriteDecisions\(profile\.role\)/);
+    const allowIdx = decisionsPage.indexOf("allowDecisionWrite");
+    const newBeslutIdx = decisionsPage.indexOf("Nytt beslut");
+    assert.ok(allowIdx >= 0 && allowIdx < newBeslutIdx);
+    assert.match(
+      decisionsPage,
+      /allowDecisionWrite && !showCreate && !showEdit/,
+    );
+  });
 });

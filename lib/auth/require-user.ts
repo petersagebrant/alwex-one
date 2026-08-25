@@ -1,5 +1,9 @@
 import { redirect } from "next/navigation";
 import {
+  denyRedirectHref,
+  loginRedirectHref,
+} from "@/lib/auth/deny-redirect";
+import {
   canAdministerUsers,
   canManageBusinessAreas,
   canWriteDecisions,
@@ -31,7 +35,7 @@ export async function requireUser(): Promise<AuthUser> {
   } = await supabase.auth.getUser();
 
   if (error || !user) {
-    redirect("/login");
+    redirect(loginRedirectHref());
   }
 
   return {
@@ -65,10 +69,9 @@ export async function requireProfile(): Promise<AuthProfile> {
   const profile = await fetchProfileByUserId(user.id);
 
   if (!profile) {
+    // Signed in but unassigned — /login would be bounced by proxy, dropping ?error=.
     redirect(
-      `/login?error=${encodeURIComponent(
-        "Inget konto med tilldelad roll. Kontakta administratör.",
-      )}`,
+      denyRedirectHref("Inget konto med tilldelad roll. Kontakta administratör."),
     );
   }
 
@@ -81,7 +84,7 @@ export async function requireProfile(): Promise<AuthProfile> {
 }
 
 function deny(message: string): never {
-  redirect(`/login?error=${encodeURIComponent(message)}`);
+  redirect(denyRedirectHref(message));
 }
 
 /** KPI, mål, aktiviteter (VD / AO-chef / Administratör). */

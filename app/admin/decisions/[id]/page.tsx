@@ -8,6 +8,8 @@ import {
   SummaryCard,
 } from "@/components/ui";
 import { formatDateSv, formatDateTimeSv } from "@/lib/format/date";
+import { canWriteDecisions } from "@/lib/auth/roles";
+import { requireProfile } from "@/lib/auth/require-user";
 import { getDecisionById } from "@/services/decisions";
 
 type DecisionDetailPageProps = {
@@ -39,11 +41,16 @@ export default async function DecisionDetailPage({
   params,
 }: DecisionDetailPageProps) {
   const { id } = await params;
-  const decision = await getDecisionById(id).catch(() => null);
+  const [decision, profile] = await Promise.all([
+    getDecisionById(id).catch(() => null),
+    requireProfile(),
+  ]);
 
   if (!decision) {
     notFound();
   }
+
+  const allowDecisionWrite = canWriteDecisions(profile.role);
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-[#f7f8fa] text-neutral-900">
@@ -75,12 +82,14 @@ export default async function DecisionDetailPage({
               >
                 {decision.status}
               </span>
-              <Link
-                href={`/admin/decisions?edit=${decision.id}`}
-                className="text-sm font-medium text-neutral-700 underline-offset-4 hover:underline"
-              >
-                Ändra
-              </Link>
+              {allowDecisionWrite ? (
+                <Link
+                  href={`/admin/decisions?edit=${decision.id}`}
+                  className="text-sm font-medium text-neutral-700 underline-offset-4 hover:underline"
+                >
+                  Ändra
+                </Link>
+              ) : null}
             </div>
           </div>
         </div>

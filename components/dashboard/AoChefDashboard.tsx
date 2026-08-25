@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AuthErrorBanner } from "@/components/auth/AuthErrorBanner";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { OrgNoticesFeed } from "@/components/dashboard/OrgNoticesFeed";
 import { VdDiaryTimeline } from "@/components/dashboard/VdDiaryTimeline";
@@ -13,6 +14,7 @@ import {
 } from "@/components/ui";
 import { formatKpiDisplayValue } from "@/lib/format/kpi";
 import { reportedTargetStatusTone } from "@/lib/kpi/areaOperationalStatus";
+import { newAreaNoticeHref } from "@/lib/notices/dashboardLinks";
 import type { AoChefDashboardData } from "@/services/aoChefDashboard";
 import type { AreaNoticeListItem } from "@/services/areaNotices";
 
@@ -48,9 +50,10 @@ function AoChefKpiStatus({ kpi }: { kpi: AoChefDashboardData["kpis"][number] }) 
 type AoChefDashboardProps = {
   data: AoChefDashboardData;
   notices: AreaNoticeListItem[];
+  error?: string;
 };
 
-export function AoChefDashboard({ data, notices }: AoChefDashboardProps) {
+export function AoChefDashboard({ data, notices, error }: AoChefDashboardProps) {
   const {
     area,
     greetingName,
@@ -70,8 +73,6 @@ export function AoChefDashboard({ data, notices }: AoChefDashboardProps) {
   const greeting = greetingName
     ? `God morgon ${greetingName}.`
     : "God morgon.";
-  const reportIncomplete =
-    reporting.reportedCount < reporting.totalCount;
   const reportPct =
     reporting.totalCount > 0
       ? Math.round((reporting.reportedCount / reporting.totalCount) * 100)
@@ -82,6 +83,8 @@ export function AoChefDashboard({ data, notices }: AoChefDashboardProps) {
       <AppHeader current="home" />
 
       <main className="mx-auto w-full max-w-3xl flex-1 space-y-5 px-4 py-6 sm:px-6 sm:py-8">
+        <AuthErrorBanner error={error} />
+
         <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_6px_18px_rgba(15,23,42,0.05)] sm:p-6">
           <p className="text-xs font-semibold tracking-[0.14em] text-slate-500">
             {overviewTitle}
@@ -112,7 +115,11 @@ export function AoChefDashboard({ data, notices }: AoChefDashboardProps) {
           </div>
         </section>
 
-        <OrgNoticesFeed notices={notices} />
+        <OrgNoticesFeed
+          notices={notices}
+          ownAreaSlug={area.slug}
+          newNoticeHref={newAreaNoticeHref(area.slug)}
+        />
 
         <InfoPanel
           title="Mina KPI:er idag"
@@ -127,13 +134,15 @@ export function AoChefDashboard({ data, notices }: AoChefDashboardProps) {
                   {reporting.reportedCount} av {reporting.totalCount}{" "}
                   rapporterade
                 </p>
-                <p className="text-sm text-slate-500">{area.name}</p>
+                <p className="text-sm text-slate-500">
+                  {area.name}. Öppna KPI-rapportering för att fylla i värden.
+                </p>
               </div>
               <Link
                 href="/report/kpis"
                 className="inline-flex items-center rounded-xl bg-[#0b1220] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
               >
-                {reportIncomplete ? "Rapportera KPI" : "Visa rapporter"}
+                Rapportera KPI
               </Link>
             </div>
             <div
@@ -181,7 +190,18 @@ export function AoChefDashboard({ data, notices }: AoChefDashboardProps) {
         </section>
 
         <section className="space-y-3">
-          <SectionHeader title="KPI:er" description={area.name} />
+          <SectionHeader
+            title="KPI:er"
+            description={area.name}
+            action={
+              <Link
+                href="/report/kpis"
+                className="text-sm font-semibold text-slate-800 underline-offset-4 hover:underline"
+              >
+                Rapportera KPI
+              </Link>
+            }
+          />
           {kpis.length === 0 ? (
             <p className="rounded-2xl border border-slate-200/80 bg-white p-4 text-sm text-slate-600">
               Inga KPI:er för {area.name}.

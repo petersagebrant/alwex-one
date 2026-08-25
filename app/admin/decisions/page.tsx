@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { formatDateSv } from "@/lib/format/date";
+import { canWriteDecisions } from "@/lib/auth/roles";
+import { requireProfile } from "@/lib/auth/require-user";
 import { getBusinessAreaOptions } from "@/services/businessAreas";
 import { getDecisionById, getDecisions } from "@/services/decisions";
 import type { DecisionListItem } from "@/services/decisions";
@@ -169,9 +171,11 @@ export default async function AdminDecisionsPage({
   searchParams,
 }: AdminDecisionsPageProps) {
   const params = await searchParams;
-  const showCreate = params.new === "1";
   const editId = params.edit?.trim() || null;
   const error = params.error;
+  const profile = await requireProfile();
+  const allowDecisionWrite = canWriteDecisions(profile.role);
+  const showCreate = allowDecisionWrite && params.new === "1";
 
   const [decisions, areas, editingDecision] = await Promise.all([
     getDecisions(),
@@ -179,7 +183,7 @@ export default async function AdminDecisionsPage({
     editId ? getDecisionById(editId) : Promise.resolve(null),
   ]);
 
-  const showEdit = Boolean(editId && editingDecision);
+  const showEdit = allowDecisionWrite && Boolean(editId && editingDecision);
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-[#f7f8fa] text-neutral-900">
@@ -203,7 +207,7 @@ export default async function AdminDecisionsPage({
             </p>
           </div>
 
-          {!showCreate && !showEdit ? (
+          {allowDecisionWrite && !showCreate && !showEdit ? (
             <Link
               href="/admin/decisions?new=1"
               className="inline-flex items-center justify-center rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-neutral-800"
@@ -292,7 +296,7 @@ export default async function AdminDecisionsPage({
           </form>
         ) : null}
 
-        {editId && !editingDecision ? (
+        {allowDecisionWrite && editId && !editingDecision ? (
           <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
             Beslutet hittades inte.
           </p>
@@ -340,25 +344,27 @@ export default async function AdminDecisionsPage({
                       </span>
                     </div>
                   </Link>
-                  <div className="flex flex-wrap items-center gap-3 px-5 pb-4">
-                    <Link
-                      href={`/admin/decisions?edit=${decision.id}`}
-                      className="text-sm font-medium text-neutral-700 underline-offset-4 hover:underline"
-                    >
-                      Ändra
-                    </Link>
-                    {decision.status !== "Klart" ? (
-                      <form action={markDecisionCompleteAction}>
-                        <input type="hidden" name="id" value={decision.id} />
-                        <button
-                          type="submit"
-                          className="text-sm font-medium text-emerald-700 underline-offset-4 hover:underline"
-                        >
-                          Markera klart
-                        </button>
-                      </form>
-                    ) : null}
-                  </div>
+                  {allowDecisionWrite ? (
+                    <div className="flex flex-wrap items-center gap-3 px-5 pb-4">
+                      <Link
+                        href={`/admin/decisions?edit=${decision.id}`}
+                        className="text-sm font-medium text-neutral-700 underline-offset-4 hover:underline"
+                      >
+                        Ändra
+                      </Link>
+                      {decision.status !== "Klart" ? (
+                        <form action={markDecisionCompleteAction}>
+                          <input type="hidden" name="id" value={decision.id} />
+                          <button
+                            type="submit"
+                            className="text-sm font-medium text-emerald-700 underline-offset-4 hover:underline"
+                          >
+                            Markera klart
+                          </button>
+                        </form>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </li>
               ))}
             </ul>

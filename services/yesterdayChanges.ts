@@ -4,6 +4,7 @@ import type { ActivityListItem } from "@/services/activities";
 import type { GoalListItem } from "@/services/goals";
 import type { KPIListItem } from "@/services/kpis";
 import type { KPIHistory, StatusTone } from "@/types";
+import { historyRegisteredAt } from "@/lib/kpi/dailyReportDate";
 import {
   formatSinceLoginTime,
   getSinceLoginCutoff,
@@ -166,7 +167,8 @@ export function buildYesterdayChangeReport(input: {
   for (const [, list] of historyByKpi) {
     list.sort(
       (a, b) =>
-        new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime(),
+        new Date(historyRegisteredAt(b)).getTime() -
+        new Date(historyRegisteredAt(a)).getTime(),
     );
   }
 
@@ -187,7 +189,7 @@ export function buildYesterdayChangeReport(input: {
     if (!kpi) continue;
 
     const latest = history[0];
-    if (!latest || !isAfter(latest.recordedAt, input.cutoff)) {
+    if (!latest || !isAfter(historyRegisteredAt(latest), input.cutoff)) {
       continue;
     }
 
@@ -195,15 +197,15 @@ export function buildYesterdayChangeReport(input: {
       history.find(
         (entry) =>
           entry.id !== latest.id &&
-          new Date(entry.recordedAt).getTime() <
-            new Date(latest.recordedAt).getTime(),
+          new Date(historyRegisteredAt(entry)).getTime() <
+            new Date(historyRegisteredAt(latest)).getTime(),
       ) ?? null;
 
     const area = kpi.businessAreaName || null;
     const owner =
       cleanOwner(areaById.get(kpi.businessAreaId)?.manager) ?? null;
     const href = `/kpis/${kpi.id}`;
-    const occurredAt = latest.recordedAt;
+    const occurredAt = historyRegisteredAt(latest);
     const occurredAtLabel = formatSinceLoginTime(occurredAt);
     const resultatBoost = isResultatKpi(kpi.name) ? 5 : 0;
 

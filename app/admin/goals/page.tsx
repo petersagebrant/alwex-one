@@ -7,6 +7,8 @@ import { StatusBadge } from "@/components/ui";
 import { requireProfile } from "@/lib/auth/require-user";
 import { formatDateSv } from "@/lib/format/date";
 import { isGoalArchived } from "@/lib/goals/archive";
+import { GOAL_KIND_LABELS } from "@/lib/goals/kind";
+import { GOAL_LIFECYCLE_LABELS } from "@/lib/goals/lifecycle";
 import { toGoalOwnerOptions } from "@/lib/goals/owner";
 import { canWriteGoals } from "@/lib/goals/permissions";
 import { getBusinessAreaOptions } from "@/services/businessAreas";
@@ -242,7 +244,9 @@ function GoalAdminListSection({
                       ) : null}
                     </p>
                     <p className="mt-1 text-xs text-neutral-500">
-                      {goal.businessAreaName}
+                      {GOAL_KIND_LABELS[goal.goalKind]}
+                      {` · ${GOAL_LIFECYCLE_LABELS[goal.lifecycle]}`}
+                      {` · ${goal.businessAreaName}`}
                       {goal.owner ? ` · ${goal.owner}` : null}
                       {goal.deadline
                         ? ` · Deadline ${formatDateSv(goal.deadline)}`

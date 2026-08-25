@@ -1,6 +1,12 @@
 export type { StatusTone } from "./status";
 export type { BusinessArea, UpdateBusinessAreaInput } from "./business-area";
-export type { Goal, CreateGoalInput, UpdateGoalInput } from "./goal";
+export type {
+  Goal,
+  GoalKind,
+  GoalLifecycle,
+  CreateGoalInput,
+  UpdateGoalInput,
+} from "./goal";
 export type {
   Activity,
   ActivityStatus,

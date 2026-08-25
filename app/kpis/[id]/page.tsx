@@ -14,6 +14,10 @@ import {
 } from "@/components/ui";
 import { formatDateSv, formatDateTimeSv } from "@/lib/format/date";
 import {
+  compareHistoryByCalendarDate,
+  historyValueCalendarDate,
+} from "@/lib/kpi/dailyReportDate";
+import {
   formatExpectedFinalizationSv,
   formatMonthlyEconomicSummary,
   formatPeriodMonthSv,
@@ -81,7 +85,8 @@ export default async function KpiVdDetailPage({
       ? getSjukfranvaroComparison({ companyKpiId: kpi.id })
       : Promise.resolve(null),
   ]);
-  const historyNewestFirst = [...history].reverse();
+  const historyOldestFirst = [...history].sort(compareHistoryByCalendarDate);
+  const historyNewestFirst = [...historyOldestFirst].reverse();
   const isMonthlyEconomic = isMonthlyEconomicResultKpi(kpi);
   const isMonthlyStatistic =
     isStatisticKpi(kpi) && kpi.reportingFrequency === "MONTHLY";
@@ -118,13 +123,14 @@ export default async function KpiVdDetailPage({
   const previousEntry = historyNewestFirst[1] ?? null;
   const latestEntry = historyNewestFirst[0] ?? null;
 
-  const chartPoints = history.map((entry) => ({
+  const chartPoints = historyOldestFirst.map((entry) => ({
     value: entry.value,
     status: entry.status,
     recordedAt: entry.recordedAt,
+    reportDate: entry.reportDate,
     label: entry.periodMonth
       ? formatPeriodMonthSv(entry.periodMonth, { includeYear: true })
-      : formatDateSv(entry.recordedAt.slice(0, 10)),
+      : formatDateSv(historyValueCalendarDate(entry)),
   }));
 
   const areaHref = area ? `/areas/${area.slug}` : "/areas";
@@ -284,7 +290,13 @@ export default async function KpiVdDetailPage({
                 <dt className="text-slate-500">Senaste rapport</dt>
                 <dd className="font-medium text-slate-800">
                   {latestEntry
-                    ? formatDateTimeSv(latestEntry.recordedAt)
+                    ? `${formatDateSv(historyValueCalendarDate(latestEntry))}${
+                        latestEntry.updatedAt || latestEntry.createdAt
+                          ? ` · registrerad ${formatDateTimeSv(
+                              latestEntry.updatedAt || latestEntry.createdAt,
+                            )}`
+                          : ""
+                      }`
                     : "—"}
                 </dd>
               </div>
@@ -368,9 +380,7 @@ export default async function KpiVdDetailPage({
                     <th className="px-3 py-2.5 font-semibold">
                       {isMonthlyEconomic ? "Resultat / Budget / Avvikelse" : "Värde"}
                     </th>
-                    {isMonthlyEconomic ? (
-                      <th className="px-3 py-2.5 font-semibold">Registrerad</th>
-                    ) : null}
+                    <th className="px-3 py-2.5 font-semibold">Registrerad</th>
                     <th className="px-3 py-2.5 font-semibold">
                       {isNonTargetKpi(kpi) ? "Typ" : "Status"}
                     </th>
@@ -385,7 +395,7 @@ export default async function KpiVdDetailPage({
                       <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
                         {entry.periodMonth
                           ? formatPeriodMonthSv(entry.periodMonth, { includeYear: true })
-                          : formatDateTimeSv(entry.recordedAt)}
+                          : formatDateSv(historyValueCalendarDate(entry))}
                       </td>
                       <td className="border-b border-slate-100 px-3 py-3 font-medium text-slate-900">
                         {isMonthlyEconomic
@@ -398,11 +408,9 @@ export default async function KpiVdDetailPage({
                             })
                           : formatValue(entry.value, kpi.unit)}
                       </td>
-                      {isMonthlyEconomic ? (
-                        <td className="border-b border-slate-100 px-3 py-3 text-slate-600">
-                          {formatDateTimeSv(entry.recordedAt)}
-                        </td>
-                      ) : null}
+                      <td className="border-b border-slate-100 px-3 py-3 text-slate-600">
+                        {formatDateTimeSv(entry.updatedAt || entry.createdAt)}
+                      </td>
                       <td className="border-b border-slate-100 px-3 py-3">
                         {isCalculatedKpi(kpi) ? (
                           <BeraknadTypeBadge />

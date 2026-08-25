@@ -1,6 +1,7 @@
 import type { AuditFieldChange } from "@/types";
 import type { AuditLogListItem } from "@/services/auditLog";
 import type { KPIHistory, VdDiaryEvent, VdDiaryTone } from "@/types";
+import { historyRegisteredAt } from "@/lib/kpi/dailyReportDate";
 import { formatSinceLoginTime } from "@/services/sinceLogin";
 
 const FIELD_LABELS: Record<string, string> = {
@@ -23,6 +24,8 @@ const FIELD_LABELS: Record<string, string> = {
   unit: "Enhet",
   due_date: "Förfallodatum",
   meeting_date: "Mötesdatum",
+  goal_kind: "Måltyp",
+  lifecycle: "Tillstånd",
 };
 
 const DISPLAY_FIELDS = new Set([
@@ -311,7 +314,8 @@ export function buildDashboardHistoryEvents(input: {
   for (const [, list] of byKpi) {
     list.sort(
       (a, b) =>
-        new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime(),
+        new Date(historyRegisteredAt(b)).getTime() -
+        new Date(historyRegisteredAt(a)).getTime(),
     );
   }
 
@@ -322,7 +326,7 @@ export function buildDashboardHistoryEvents(input: {
       continue;
     }
 
-    const stampKey = `${kpiId}:${(latest.recordedAt || latest.createdAt).slice(0, 16)}`;
+    const stampKey = `${kpiId}:${historyRegisteredAt(latest).slice(0, 16)}`;
     if (coveredKpiKeys.has(stampKey)) {
       continue;
     }
@@ -357,10 +361,8 @@ export function buildDashboardHistoryEvents(input: {
       changeSummary: parts.join(" · "),
       area: meta?.area ?? "—",
       owner: meta?.owner?.trim() || "—",
-      occurredAt: latest.recordedAt || latest.createdAt,
-      occurredAtLabel: formatSinceLoginTime(
-        latest.recordedAt || latest.createdAt,
-      ),
+      occurredAt: historyRegisteredAt(latest),
+      occurredAtLabel: formatSinceLoginTime(historyRegisteredAt(latest)),
       href: `/kpis/${kpiId}`,
     });
   }

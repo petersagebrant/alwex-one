@@ -1,3 +1,8 @@
+"use client";
+
+import { useState } from "react";
+import { GOAL_KIND_LABELS } from "@/lib/goals/kind";
+import type { GoalKind } from "@/types";
 import type { GoalOwnerOption } from "@/lib/goals/owner";
 import type { GoalListItem } from "@/services/goals";
 
@@ -10,12 +15,18 @@ type GoalFormFieldsProps = {
   lockedAreaId?: string | null;
 };
 
+const fieldClassName =
+  "mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20";
+
 export function GoalFormFields({
   areas,
   owners,
   goal,
   lockedAreaId,
 }: GoalFormFieldsProps) {
+  const [goalKind, setGoalKind] = useState<GoalKind>(
+    goal?.goalKind ?? "MEASURABLE",
+  );
   const selectedAreaId = lockedAreaId || goal?.businessAreaId || "";
   const ownerOptions = [...owners];
   if (
@@ -28,8 +39,34 @@ export function GoalFormFields({
     });
   }
 
+  const isMeasurable = goalKind === "MEASURABLE";
+
   return (
     <>
+      <div>
+        <label
+          htmlFor="goalKind"
+          className="block text-xs font-medium text-neutral-500"
+        >
+          Typ
+        </label>
+        <select
+          id="goalKind"
+          name="goalKind"
+          value={goalKind}
+          onChange={(event) => setGoalKind(event.target.value as GoalKind)}
+          className={fieldClassName}
+        >
+          <option value="MEASURABLE">{GOAL_KIND_LABELS.MEASURABLE}</option>
+          <option value="ACTIVITY">{GOAL_KIND_LABELS.ACTIVITY}</option>
+        </select>
+        <p className="mt-1.5 text-xs text-neutral-500">
+          {isMeasurable
+            ? "Progress och Grön/Gul/Röd beräknas automatiskt från aktuellt värde, målvärde och deadline."
+            : "Följs genom kopplade aktiviteter. Grön/Gul/Röd sätts manuellt. Default är Gul."}
+        </p>
+      </div>
+
       <div>
         <label
           htmlFor="businessAreaId"
@@ -56,7 +93,7 @@ export function GoalFormFields({
             name="businessAreaId"
             required
             defaultValue={selectedAreaId}
-            className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
+            className={fieldClassName}
           >
             <option value="" disabled>
               Välj affärsområde
@@ -83,7 +120,7 @@ export function GoalFormFields({
           type="text"
           required
           defaultValue={goal?.title ?? ""}
-          className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
+          className={fieldClassName}
         />
       </div>
 
@@ -99,7 +136,7 @@ export function GoalFormFields({
           name="description"
           rows={3}
           defaultValue={goal?.description ?? ""}
-          className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
+          className={fieldClassName}
         />
       </div>
 
@@ -114,7 +151,7 @@ export function GoalFormFields({
           id="ownerId"
           name="ownerId"
           defaultValue={goal?.ownerId ?? ""}
-          className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
+          className={fieldClassName}
         >
           <option value="">
             {goal?.owner && !goal.ownerId
@@ -129,92 +166,97 @@ export function GoalFormFields({
         </select>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div>
-          <label
-            htmlFor="deadline"
-            className="block text-xs font-medium text-neutral-500"
-          >
-            Deadline
-          </label>
-          <input
-            id="deadline"
-            name="deadline"
-            type="date"
-            defaultValue={goal?.deadline ?? ""}
-            className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
-          />
-        </div>
-        <div>
-          <label
-            htmlFor="progress"
-            className="block text-xs font-medium text-neutral-500"
-          >
-            Progress (%)
-          </label>
-          <input
-            id="progress"
-            name="progress"
-            type="number"
-            min={0}
-            max={100}
-            defaultValue={goal?.progress ?? ""}
-            className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div>
-          <label
-            htmlFor="currentValue"
-            className="block text-xs font-medium text-neutral-500"
-          >
-            Aktuellt värde
-          </label>
-          <input
-            id="currentValue"
-            name="currentValue"
-            type="text"
-            defaultValue={goal?.currentValue ?? ""}
-            className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
-          />
-        </div>
-        <div>
-          <label
-            htmlFor="targetValue"
-            className="block text-xs font-medium text-neutral-500"
-          >
-            Målvärde
-          </label>
-          <input
-            id="targetValue"
-            name="targetValue"
-            type="text"
-            defaultValue={goal?.targetValue ?? ""}
-            className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
-          />
-        </div>
-      </div>
-
       <div>
         <label
-          htmlFor="status"
+          htmlFor="lifecycle"
           className="block text-xs font-medium text-neutral-500"
         >
-          Status
+          Tillstånd
         </label>
         <select
-          id="status"
-          name="status"
-          defaultValue={goal?.status ?? "Gul"}
-          className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
+          id="lifecycle"
+          name="lifecycle"
+          defaultValue={goal?.lifecycle ?? "ACTIVE"}
+          className={fieldClassName}
         >
-          <option value="Grön">Grön</option>
-          <option value="Gul">Gul</option>
-          <option value="Röd">Röd</option>
+          <option value="ACTIVE">Aktivt</option>
+          <option value="DONE">Klart</option>
         </select>
+        <p className="mt-1.5 text-xs text-neutral-500">
+          Klart är separat från Grön. Grön betyder i fas, inte avslutat.
+        </p>
       </div>
+
+      {isMeasurable ? (
+        <>
+          <div>
+            <label
+              htmlFor="deadline"
+              className="block text-xs font-medium text-neutral-500"
+            >
+              Deadline
+            </label>
+            <input
+              id="deadline"
+              name="deadline"
+              type="date"
+              defaultValue={goal?.deadline ?? ""}
+              className={fieldClassName}
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label
+                htmlFor="currentValue"
+                className="block text-xs font-medium text-neutral-500"
+              >
+                Aktuellt värde
+              </label>
+              <input
+                id="currentValue"
+                name="currentValue"
+                type="text"
+                defaultValue={goal?.currentValue ?? ""}
+                className={fieldClassName}
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="targetValue"
+                className="block text-xs font-medium text-neutral-500"
+              >
+                Målvärde
+              </label>
+              <input
+                id="targetValue"
+                name="targetValue"
+                type="text"
+                defaultValue={goal?.targetValue ?? ""}
+                className={fieldClassName}
+              />
+            </div>
+          </div>
+        </>
+      ) : (
+        <div>
+          <label
+            htmlFor="status"
+            className="block text-xs font-medium text-neutral-500"
+          >
+            Status
+          </label>
+          <select
+            id="status"
+            name="status"
+            defaultValue={goal?.status ?? "Gul"}
+            className={fieldClassName}
+          >
+            <option value="Grön">Grön</option>
+            <option value="Gul">Gul</option>
+            <option value="Röd">Röd</option>
+          </select>
+        </div>
+      )}
     </>
   );
 }

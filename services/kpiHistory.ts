@@ -18,6 +18,10 @@ import {
   resolveActorName,
 } from "@/services/changeHistory";
 import { parseKpiStoredStatus } from "@/lib/kpi/kind";
+import {
+  dailyReportDateRejectedReason,
+  stockholmCalendarDate,
+} from "@/lib/kpi/dailyReportDate";
 import type {
   CreateKPIHistoryInput,
   KPIHistory,
@@ -60,12 +64,7 @@ function parseNumericValue(value: string): number | null {
 
 /** YYYY-MM-DD for a Date in Europe/Stockholm. */
 export function toStockholmReportDate(date: Date): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/Stockholm",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(date);
+  return stockholmCalendarDate(date);
 }
 
 /** First calendar day of the Stockholm month containing `reportDate` (YYYY-MM-DD). */
@@ -74,10 +73,6 @@ export function stockholmMonthStart(reportDate: string): string {
     throw new Error("reportDate måste vara YYYY-MM-DD.");
   }
   return `${reportDate.slice(0, 7)}-01`;
-}
-
-function isValidReportDate(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
 /**
@@ -252,8 +247,9 @@ export async function upsertDailyKpiReport(
   }
 
   const reportDate = input.reportDate.trim();
-  if (!isValidReportDate(reportDate)) {
-    throw new Error("reportDate måste vara YYYY-MM-DD.");
+  const dateError = dailyReportDateRejectedReason(reportDate);
+  if (dateError) {
+    throw new Error(dateError);
   }
 
   const value = input.value.trim();

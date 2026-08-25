@@ -2274,6 +2274,8 @@ function toCompactOpenAiContext(
       status: goal.status,
       owner: goal.owner,
       deadline: goal.deadline,
+      kind: goal.goalKind,
+      lifecycle: goal.lifecycle,
     })),
     activities: (context.activities ?? []).map((activity) => ({
       title: activity.title,

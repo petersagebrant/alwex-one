@@ -8,6 +8,7 @@ import { DailyKpiReportList } from "@/components/report/DailyKpiReportList";
 import { MonthlyKpiReportSection } from "@/components/report/MonthlyKpiReportSection";
 import { RatioPercentReportSection } from "@/components/report/RatioPercentReportSection";
 import { loadVdAreaReportingAction } from "@/app/report/kpis/actions";
+import { formatDateSv } from "@/lib/format/date";
 import type { MyKpisForTodayReporting } from "@/types";
 
 type AreaOption = {
@@ -18,6 +19,7 @@ type AreaOption = {
 type VdDailyReportingPanelProps = {
   businessAreaId: string | null;
   areas: AreaOption[];
+  reportDate: string;
 };
 
 /**
@@ -31,18 +33,20 @@ type VdDailyReportingPanelProps = {
 export function VdDailyReportingPanel({
   businessAreaId,
   areas,
+  reportDate,
 }: VdDailyReportingPanelProps) {
   if (!businessAreaId) {
     return (
       <div className="space-y-5">
         <InfoPanel
-          title="Dagens KPI-rapportering"
+          title="KPI-rapportering"
           showLabel={false}
           compact
           className="!border-slate-200/80 !bg-white"
         >
           <p className="text-sm text-slate-700">
-            Välj affärsområde för att visa dagens KPI-rapportering.
+            Välj affärsområde för att visa KPI-rapportering för{" "}
+            {formatDateSv(reportDate)}.
           </p>
         </InfoPanel>
       </div>
@@ -51,9 +55,10 @@ export function VdDailyReportingPanel({
 
   return (
     <VdAreaReportingPanel
-      key={businessAreaId}
+      key={`${businessAreaId}-${reportDate}`}
       businessAreaId={businessAreaId}
       areas={areas}
+      reportDate={reportDate}
     />
   );
 }
@@ -61,9 +66,11 @@ export function VdDailyReportingPanel({
 function VdAreaReportingPanel({
   businessAreaId,
   areas,
+  reportDate,
 }: {
   businessAreaId: string;
   areas: AreaOption[];
+  reportDate: string;
 }) {
   const router = useRouter();
   const [reporting, setReporting] = useState<MyKpisForTodayReporting | null>(
@@ -71,6 +78,7 @@ function VdAreaReportingPanel({
   );
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const dateLabel = formatDateSv(reportDate);
 
   const areaName =
     areas.find((a) => a.id === businessAreaId)?.name ?? businessAreaId;
@@ -84,7 +92,7 @@ function VdAreaReportingPanel({
       setError(null);
 
       try {
-        const result = await loadVdAreaReportingAction(areaId);
+        const result = await loadVdAreaReportingAction(areaId, reportDate);
         if (!result.ok) {
           setReporting(null);
           setError(result.error);
@@ -99,7 +107,7 @@ function VdAreaReportingPanel({
         setLoading(false);
       }
     },
-    [],
+    [reportDate],
   );
 
   useEffect(() => {
@@ -107,7 +115,10 @@ function VdAreaReportingPanel({
 
     void (async () => {
       try {
-        const result = await loadVdAreaReportingAction(businessAreaId);
+        const result = await loadVdAreaReportingAction(
+          businessAreaId,
+          reportDate,
+        );
         if (cancelled) return;
         if (!result.ok) {
           setReporting(null);
@@ -130,7 +141,7 @@ function VdAreaReportingPanel({
     return () => {
       cancelled = true;
     };
-  }, [businessAreaId]);
+  }, [businessAreaId, reportDate]);
 
   const handleReported = useCallback(() => {
     if (!businessAreaId) return;
@@ -140,11 +151,13 @@ function VdAreaReportingPanel({
 
   return (
     <div className="space-y-5">
-      <p className="text-sm text-slate-700">Valt område: {areaName}</p>
+      <p className="text-sm text-slate-700">
+        Valt område: {areaName} · {dateLabel}
+      </p>
 
       {error ? (
         <InfoPanel
-          title="Dagens KPI-rapportering"
+          title={`KPI-rapportering ${dateLabel}`}
           showLabel={false}
           compact
           className="!border-slate-200/80 !bg-white"
@@ -153,7 +166,7 @@ function VdAreaReportingPanel({
         </InfoPanel>
       ) : loading || !reporting ? (
         <InfoPanel
-          title="Dagens KPI-rapportering"
+          title={`KPI-rapportering ${dateLabel}`}
           showLabel={false}
           compact
           className="!border-slate-200/80 !bg-white"
@@ -181,7 +194,7 @@ function ReportingBody({
   return (
     <>
       <InfoPanel
-        title="Dagens KPI-rapportering"
+        title={`KPI-rapportering ${formatDateSv(reporting.reportDate)}`}
         showLabel={false}
         compact
         className="!border-slate-200/80 !bg-white"
@@ -217,6 +230,7 @@ function ReportingBody({
         <RatioPercentReportSection
           groups={reporting.ratioGroups}
           onReported={onReported}
+          reportDate={reporting.reportDate}
         />
       ) : null}
 
@@ -224,6 +238,7 @@ function ReportingBody({
         <DailyKpiReportList
           items={reporting.items}
           onReported={onReported}
+          reportDate={reporting.reportDate}
         />
       ) : null}
 
@@ -241,7 +256,10 @@ function ReportingBody({
         </p>
       ) : null}
 
-      <CalculatedKpiReportSection items={reporting.calculatedItems} />
+      <CalculatedKpiReportSection
+        items={reporting.calculatedItems}
+        reportDate={reporting.reportDate}
+      />
     </>
   );
 }

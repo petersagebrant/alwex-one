@@ -1,4 +1,5 @@
 import { getCurrentUser } from "@/lib/auth/require-user";
+import { isGoalDone, isGoalNeedingAction } from "@/lib/goals/lifecycle";
 import { fetchBusinessAreas } from "@/lib/supabase/business-areas";
 import { formatDateSv, formatDateTimeSv } from "@/lib/format/date";
 import {
@@ -551,7 +552,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     });
   const upcoming = openDecisions.slice(0, 5);
 
-  const completedGoals = (goals ?? []).filter((goal) => goal.status === "Grön");
+  const completedGoals = (goals ?? []).filter(isGoalDone);
   const ongoingActivities = (activities ?? []).filter(
     (activity) => activity.status === "Pågår",
   );
@@ -646,7 +647,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     });
 
   const actionGoals: DashboardActionGoal[] = (goals ?? [])
-    .filter((goal) => goal.status === "Röd" || goal.status === "Gul")
+    .filter(isGoalNeedingAction)
     .map((goal) => ({
       id: goal.id,
       goal: goal.title,
@@ -720,9 +721,7 @@ export async function getDashboardData(): Promise<DashboardData> {
           areaName: topFollowUpKpi.businessAreaName,
         }
       : null,
-    yellowGoals: (goals ?? [])
-      .filter((goal) => goal.status === "Gul" || goal.status === "Röd")
-      .map((goal) => ({
+    yellowGoals: (goals ?? []).filter(isGoalNeedingAction).map((goal) => ({
         title: goal.title,
         area: areaNames.get(goal.businessAreaId) ?? goal.businessAreaName,
       })),

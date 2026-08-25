@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { GoalArchiveControls } from "@/components/admin/GoalArchiveControls";
+import { GoalLinkedActivities } from "@/components/admin/GoalLinkedActivities";
 import { AppHeader } from "@/components/layout/AppHeader";
 import {
   InfoPanel,
@@ -12,7 +13,10 @@ import {
 import { requireProfile } from "@/lib/auth/require-user";
 import { formatDateSv, formatDateTimeSv } from "@/lib/format/date";
 import { isGoalArchived } from "@/lib/goals/archive";
+import { GOAL_KIND_LABELS } from "@/lib/goals/kind";
+import { GOAL_LIFECYCLE_LABELS } from "@/lib/goals/lifecycle";
 import { canWriteGoals } from "@/lib/goals/permissions";
+import { getActivitiesByGoalId } from "@/services/activities";
 import { getGoalById } from "@/services/goals";
 
 type GoalDetailPageProps = {
@@ -43,6 +47,8 @@ export default async function GoalDetailPage({ params }: GoalDetailPageProps) {
   }
 
   const archived = isGoalArchived(goal);
+  const isMeasurable = goal.goalKind === "MEASURABLE";
+  const linkedActivities = await getActivitiesByGoalId(goal.id);
   const progressLabel =
     goal.progress === null || goal.progress === undefined
       ? "—"
@@ -68,7 +74,9 @@ export default async function GoalDetailPage({ params }: GoalDetailPageProps) {
                 {goal.title}
               </h1>
               <p className="mt-1 text-sm text-neutral-500">
-                {goal.businessAreaName}
+                {GOAL_KIND_LABELS[goal.goalKind]}
+                {` · ${GOAL_LIFECYCLE_LABELS[goal.lifecycle]}`}
+                {` · ${goal.businessAreaName}`}
                 {goal.owner ? ` · ${goal.owner}` : null}
               </p>
             </div>
@@ -78,6 +86,9 @@ export default async function GoalDetailPage({ params }: GoalDetailPageProps) {
                   Arkiverad
                 </span>
               ) : null}
+              <span className="inline-flex rounded-md bg-neutral-100 px-2 py-1 text-xs font-semibold text-neutral-600">
+                {GOAL_LIFECYCLE_LABELS[goal.lifecycle]}
+              </span>
               <StatusBadge status={goal.status} />
               {canWrite ? (
                 <>
@@ -101,18 +112,35 @@ export default async function GoalDetailPage({ params }: GoalDetailPageProps) {
 
         <section className="space-y-3">
           <SectionHeader title="Översikt" />
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <SummaryCard
-              title="Aktuellt värde"
-              value={goal.currentValue ?? "—"}
-            />
-            <SummaryCard title="Målvärde" value={goal.targetValue ?? "—"} />
-            <SummaryCard title="Progress" value={progressLabel} />
-            <SummaryCard
-              title="Deadline"
-              value={goal.deadline ? formatDateSv(goal.deadline) : "—"}
-            />
-          </div>
+          {isMeasurable ? (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <SummaryCard
+                title="Aktuellt värde"
+                value={goal.currentValue ?? "—"}
+              />
+              <SummaryCard title="Målvärde" value={goal.targetValue ?? "—"} />
+              <SummaryCard title="Progress" value={progressLabel} />
+              <SummaryCard
+                title="Deadline"
+                value={goal.deadline ? formatDateSv(goal.deadline) : "—"}
+              />
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <SummaryCard
+                title="Typ"
+                value={GOAL_KIND_LABELS.ACTIVITY}
+              />
+              <SummaryCard
+                title="Tillstånd"
+                value={GOAL_LIFECYCLE_LABELS[goal.lifecycle]}
+              />
+              <SummaryCard
+                title="Kopplade aktiviteter"
+                value={String(linkedActivities.length)}
+              />
+            </div>
+          )}
         </section>
 
         <InfoPanel title="Detaljer" variant="info" showLabel={false}>
@@ -120,6 +148,18 @@ export default async function GoalDetailPage({ params }: GoalDetailPageProps) {
             <div className="flex items-baseline justify-between gap-3">
               <dt className="text-slate-500">Namn</dt>
               <dd className="font-medium text-slate-800">{goal.title}</dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-3">
+              <dt className="text-slate-500">Typ</dt>
+              <dd className="font-medium text-slate-800">
+                {GOAL_KIND_LABELS[goal.goalKind]}
+              </dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-3">
+              <dt className="text-slate-500">Tillstånd</dt>
+              <dd className="font-medium text-slate-800">
+                {GOAL_LIFECYCLE_LABELS[goal.lifecycle]}
+              </dd>
             </div>
             <div className="flex items-baseline justify-between gap-3">
               <dt className="text-slate-500">Affärsområde</dt>
@@ -159,6 +199,12 @@ export default async function GoalDetailPage({ params }: GoalDetailPageProps) {
             ? goal.description
             : "Ingen beskrivning registrerad ännu."}
         </InfoPanel>
+
+        <GoalLinkedActivities
+          goalId={goal.id}
+          activities={linkedActivities}
+          canCreate={canWrite}
+        />
       </main>
     </div>
   );

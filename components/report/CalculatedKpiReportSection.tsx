@@ -3,11 +3,13 @@ import type { DailyKpiReportItem } from "@/types";
 
 type CalculatedKpiReportSectionProps = {
   items: DailyKpiReportItem[];
+  reportDate: string;
 };
 
 /** Section under reportable KPIs — system-computed only, never in progress counts. */
 export function CalculatedKpiReportSection({
   items,
+  reportDate,
 }: CalculatedKpiReportSectionProps) {
   if (items.length === 0) {
     return null;
@@ -24,7 +26,7 @@ export function CalculatedKpiReportSection({
       <ul className="space-y-3">
         {items.map((item) => (
           <li key={item.kpi.id}>
-            <CalculatedKpiReportBlock item={item} />
+            <CalculatedKpiReportBlock item={item} reportDate={reportDate} />
           </li>
         ))}
       </ul>

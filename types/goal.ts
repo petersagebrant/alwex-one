@@ -1,5 +1,8 @@
 import type { StatusTone } from "./status";
 
+export type GoalKind = "MEASURABLE" | "ACTIVITY";
+export type GoalLifecycle = "ACTIVE" | "DONE";
+
 export type Goal = {
   id: string;
   businessAreaId: string;
@@ -7,6 +10,8 @@ export type Goal = {
   description: string | null;
   owner: string | null;
   ownerId: string | null;
+  goalKind: GoalKind;
+  lifecycle: GoalLifecycle;
   status: StatusTone;
   targetValue: string | null;
   currentValue: string | null;
@@ -23,11 +28,12 @@ export type CreateGoalInput = {
   description?: string;
   ownerId?: string;
   owner?: string;
-  status: StatusTone;
+  goalKind: GoalKind;
+  lifecycle?: GoalLifecycle;
+  status?: StatusTone;
   targetValue?: string;
   currentValue?: string;
   deadline?: string;
-  progress?: number;
 };
 
 export type UpdateGoalInput = {
@@ -37,9 +43,10 @@ export type UpdateGoalInput = {
   description?: string;
   ownerId?: string;
   owner?: string;
-  status: StatusTone;
+  goalKind: GoalKind;
+  lifecycle?: GoalLifecycle;
+  status?: StatusTone;
   targetValue?: string;
   currentValue?: string;
   deadline?: string;
-  progress?: number;
 };

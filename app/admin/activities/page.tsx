@@ -15,7 +15,12 @@ export const metadata: Metadata = {
 };
 
 type AdminActivitiesPageProps = {
-  searchParams: Promise<{ new?: string; edit?: string; error?: string }>;
+  searchParams: Promise<{
+    new?: string;
+    edit?: string;
+    error?: string;
+    goalId?: string;
+  }>;
 };
 
 const statusClass: Record<string, string> = {
@@ -152,6 +157,7 @@ export default async function AdminActivitiesPage({
   const showCreate = params.new === "1";
   const editId = params.edit?.trim() || null;
   const error = params.error;
+  const prefillGoalId = params.goalId?.trim() || null;
 
   const [activities, areas, goals, editingActivity] = await Promise.all([
     getActivities(),
@@ -167,6 +173,9 @@ export default async function AdminActivitiesPage({
     title: goal.title,
     businessAreaId: goal.businessAreaId,
   }));
+  const prefillGoal = prefillGoalId
+    ? goals.find((goal) => goal.id === prefillGoalId) ?? null
+    : null;
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-[#f7f8fa] text-neutral-900">
@@ -222,7 +231,12 @@ export default async function AdminActivitiesPage({
             ) : null}
 
             <div className="mt-4 space-y-4">
-              <ActivityFormFields areas={areas} goals={goalOptions} />
+              <ActivityFormFields
+                areas={areas}
+                goals={goalOptions}
+                initialBusinessAreaId={prefillGoal?.businessAreaId ?? ""}
+                initialGoalId={prefillGoal?.id ?? ""}
+              />
               <ActivityDetailFields />
             </div>
 

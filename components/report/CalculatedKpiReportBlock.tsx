@@ -1,11 +1,13 @@
 import { BeraknadTypeBadge } from "@/components/kpis/BeraknadTypeBadge";
 import { StatusBadge } from "@/components/ui";
 import { formatKpiDisplayValue } from "@/lib/format/kpi";
+import { formatDateSv } from "@/lib/format/date";
 import { isStatusTone } from "@/lib/kpi/kind";
 import type { DailyKpiReportItem } from "@/types";
 
 type CalculatedKpiReportBlockProps = {
   item: DailyKpiReportItem;
+  reportDate: string;
 };
 
 /**
@@ -14,6 +16,7 @@ type CalculatedKpiReportBlockProps = {
  */
 export function CalculatedKpiReportBlock({
   item,
+  reportDate,
 }: CalculatedKpiReportBlockProps) {
   const unit = item.kpi.unit;
   const isRatioTarget =
@@ -48,7 +51,9 @@ export function CalculatedKpiReportBlock({
           ) : null}
           <dl className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600">
             <div>
-              <dt className="inline text-slate-500">Idag: </dt>
+              <dt className="inline text-slate-500">
+                {formatDateSv(reportDate)}:{" "}
+              </dt>
               <dd className="inline font-medium text-slate-800">
                 {isComplete
                   ? formatKpiDisplayValue(todayValue, unit)

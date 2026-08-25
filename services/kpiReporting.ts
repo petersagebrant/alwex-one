@@ -27,10 +27,8 @@ import {
 } from "@/lib/kpi/ratioGroup";
 import { countKpiSetReportingProgress } from "@/lib/kpi/reportingProgress";
 import { getKPIsByBusinessArea } from "@/services/kpis";
-import {
-  getRecentKpiHistoryForKpis,
-  toStockholmReportDate,
-} from "@/services/kpiHistory";
+import { resolveDailyReportDate } from "@/lib/kpi/dailyReportDate";
+import { getRecentKpiHistoryForKpis } from "@/services/kpiHistory";
 import type {
   DailyKpiComputationMeta,
   DailyKpiReportItem,
@@ -74,7 +72,7 @@ type ReportingProfile = Pick<AuthProfile, "role" | "businessAreaId">;
 function emptyReporting(
   businessAreaId: string,
   businessAreaName: string,
-  reportDate = toStockholmReportDate(new Date()),
+  reportDate = resolveDailyReportDate(undefined),
 ): MyKpisForTodayReporting {
   return {
     reportDate,
@@ -159,9 +157,9 @@ function sortReportItems(items: DailyKpiReportItem[]): DailyKpiReportItem[] {
  */
 export async function getKpisForTodayReporting(
   businessAreaId: string,
-  options?: { businessAreaName?: string },
+  options?: { businessAreaName?: string; reportDate?: string },
 ): Promise<MyKpisForTodayReporting> {
-  const reportDate = toStockholmReportDate(new Date());
+  const reportDate = resolveDailyReportDate(options?.reportDate);
 
   try {
     const [kpis, areas] = await Promise.all([
@@ -416,17 +414,20 @@ export async function getKpisForTodayReporting(
  */
 export async function getMyKpisForTodayReporting(
   profile: ReportingProfile,
+  reportDate?: string,
 ): Promise<MyKpisForTodayReporting | null> {
   if (profile.role !== "ao_chef" || !profile.businessAreaId) {
     return null;
   }
 
-  return getKpisForTodayReporting(profile.businessAreaId);
+  return getKpisForTodayReporting(profile.businessAreaId, { reportDate });
 }
 
-/** Org-wide daily reporting progress (for VD / admin Dashboard). */
-export async function getTodayOrgReportingStats(): Promise<TodayOrgReportingStats> {
-  const reportDate = toStockholmReportDate(new Date());
+/** Org-wide daily reporting progress (default: Stockholm yesterday). */
+export async function getTodayOrgReportingStats(
+  reportDateInput?: string,
+): Promise<TodayOrgReportingStats> {
+  const reportDate = resolveDailyReportDate(reportDateInput);
 
   try {
     const [kpis, todayRows] = await Promise.all([

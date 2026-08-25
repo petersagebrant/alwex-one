@@ -3,17 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireOperationalWriter } from "@/lib/auth/require-user";
+import { parseGoalFormValues } from "@/lib/goals/validateGoalForm";
 import {
   archiveGoal,
   createGoal,
   unarchiveGoal,
   updateGoal,
 } from "@/services/goals";
-import type { StatusTone } from "@/types";
-
-function isStatusTone(value: string): value is StatusTone {
-  return value === "Grön" || value === "Gul" || value === "Röd";
-}
 
 function firstParam(value: FormDataEntryValue | null): string {
   return String(value ?? "");
@@ -46,10 +42,11 @@ function readGoalFields(formData: FormData) {
     title: firstParam(formData.get("title")),
     description: firstParam(formData.get("description")),
     ownerId: firstParam(formData.get("ownerId")),
+    goalKind: firstParam(formData.get("goalKind")),
+    lifecycle: firstParam(formData.get("lifecycle")),
     deadline: firstParam(formData.get("deadline")),
     targetValue: firstParam(formData.get("targetValue")),
     currentValue: firstParam(formData.get("currentValue")),
-    progressValue: firstParam(formData.get("progress")),
     statusValue: firstParam(formData.get("status")),
   };
 }
@@ -58,35 +55,24 @@ export async function createGoalAction(formData: FormData) {
   await requireOperationalWriter();
   const fields = readGoalFields(formData);
   const areaId = fields.businessAreaId.trim() || null;
+  const parsed = parseGoalFormValues(fields);
 
-  if (!fields.businessAreaId.trim()) {
-    redirect(goalsNewPath(null, "Välj ett affärsområde."));
+  if (!parsed.ok) {
+    redirect(goalsNewPath(areaId, parsed.error));
   }
-
-  if (!fields.title.trim()) {
-    redirect(goalsNewPath(areaId, "Titel är obligatorisk."));
-  }
-
-  if (!isStatusTone(fields.statusValue)) {
-    redirect(goalsNewPath(areaId, "Ogiltig status."));
-  }
-
-  const progress =
-    fields.progressValue.trim() === ""
-      ? undefined
-      : Number(fields.progressValue);
 
   try {
     await createGoal({
-      businessAreaId: fields.businessAreaId,
-      title: fields.title,
-      description: fields.description,
-      ownerId: fields.ownerId,
-      deadline: fields.deadline || undefined,
-      targetValue: fields.targetValue,
-      currentValue: fields.currentValue,
-      progress: Number.isFinite(progress) ? progress : undefined,
-      status: fields.statusValue,
+      businessAreaId: parsed.value.businessAreaId,
+      title: parsed.value.title,
+      description: parsed.value.description,
+      ownerId: parsed.value.ownerId,
+      goalKind: parsed.value.goalKind,
+      lifecycle: parsed.value.lifecycle,
+      deadline: parsed.value.deadline,
+      targetValue: parsed.value.targetValue,
+      currentValue: parsed.value.currentValue,
+      status: parsed.value.status,
     });
   } catch (error) {
     const message =
@@ -109,35 +95,24 @@ export async function updateGoalAction(formData: FormData) {
     redirect("/admin/goals?error=Saknar%20m%C3%A5l-id.");
   }
 
-  if (!fields.businessAreaId.trim()) {
-    redirect(goalsEditPath(id, "Välj ett affärsområde."));
+  const parsed = parseGoalFormValues(fields);
+  if (!parsed.ok) {
+    redirect(goalsEditPath(id, parsed.error));
   }
-
-  if (!fields.title.trim()) {
-    redirect(goalsEditPath(id, "Titel är obligatorisk."));
-  }
-
-  if (!isStatusTone(fields.statusValue)) {
-    redirect(goalsEditPath(id, "Ogiltig status."));
-  }
-
-  const progress =
-    fields.progressValue.trim() === ""
-      ? undefined
-      : Number(fields.progressValue);
 
   try {
     await updateGoal({
       id,
-      businessAreaId: fields.businessAreaId,
-      title: fields.title,
-      description: fields.description,
-      ownerId: fields.ownerId,
-      deadline: fields.deadline || undefined,
-      targetValue: fields.targetValue,
-      currentValue: fields.currentValue,
-      progress: Number.isFinite(progress) ? progress : undefined,
-      status: fields.statusValue,
+      businessAreaId: parsed.value.businessAreaId,
+      title: parsed.value.title,
+      description: parsed.value.description,
+      ownerId: parsed.value.ownerId,
+      goalKind: parsed.value.goalKind,
+      lifecycle: parsed.value.lifecycle,
+      deadline: parsed.value.deadline,
+      targetValue: parsed.value.targetValue,
+      currentValue: parsed.value.currentValue,
+      status: parsed.value.status,
     });
   } catch (error) {
     const message =

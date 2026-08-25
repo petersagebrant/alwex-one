@@ -1,4 +1,8 @@
 import { isGoalArchived } from "@/lib/goals/archive";
+import { computeMeasurableProgressAndStatus } from "@/lib/goals/autoCalc";
+import { parseGoalKind } from "@/lib/goals/kind";
+import { parseGoalLifecycle } from "@/lib/goals/lifecycle";
+import type { GoalKind, GoalLifecycle } from "@/types/goal";
 import { profileAssignmentLabel } from "@/lib/goals/owner";
 import {
   fetchAllGoals,
@@ -7,6 +11,7 @@ import {
   insertGoal,
   updateGoalArchivedAt,
   updateGoalRow,
+  type GoalRow,
 } from "@/lib/supabase/goals";
 import {
   fetchBusinessAreaById,
@@ -35,6 +40,8 @@ const GOAL_TRACKED_FIELDS = [
   "description",
   "owner",
   "owner_id",
+  "goal_kind",
+  "lifecycle",
   "status",
   "target_value",
   "current_value",
@@ -51,22 +58,32 @@ function toStatusTone(value: string): StatusTone {
   return "Gul";
 }
 
-function mapGoalRow(row: {
-  id: string;
-  business_area_id: string;
-  title: string;
-  description: string | null;
-  owner: string | null;
-  owner_id: string | null;
-  status: string;
-  target_value: string | null;
-  current_value: string | null;
+function resolveMeasurableMetrics(input: {
+  currentValue: string | null;
+  targetValue: string | null;
   deadline: string | null;
-  progress: number | null;
-  archived_at: string | null;
-  created_at: string;
-  updated_at: string;
-}): Goal {
+  createdAt?: string | null;
+  existing?: { progress: number | null; status: string };
+}): { progress: number | null; status: StatusTone } {
+  const result = computeMeasurableProgressAndStatus({
+    currentValue: input.currentValue,
+    targetValue: input.targetValue,
+    deadline: input.deadline,
+    createdAt: input.createdAt,
+  });
+  if (result.computed) {
+    return { progress: result.progress, status: result.status };
+  }
+  if (input.existing) {
+    return {
+      progress: input.existing.progress,
+      status: toStatusTone(input.existing.status),
+    };
+  }
+  return { progress: null, status: "Gul" };
+}
+
+function mapGoalRow(row: GoalRow): Goal {
   return {
     id: row.id,
     businessAreaId: row.business_area_id,
@@ -74,6 +91,8 @@ function mapGoalRow(row: {
     description: row.description,
     owner: row.owner,
     ownerId: row.owner_id,
+    goalKind: parseGoalKind(row.goal_kind),
+    lifecycle: parseGoalLifecycle(row.lifecycle),
     status: toStatusTone(row.status),
     targetValue: row.target_value,
     currentValue: row.current_value,
@@ -104,6 +123,37 @@ async function resolveOwnerFields(input: {
   return {
     ownerId: null,
     owner: input.owner?.trim() || null,
+  };
+}
+
+function buildGoalPayload(input: {
+  businessAreaId: string;
+  title: string;
+  description?: string;
+  ownerId: string | null;
+  owner: string | null;
+  goalKind: GoalKind;
+  lifecycle: GoalLifecycle;
+  status: StatusTone;
+  targetValue?: string;
+  currentValue?: string;
+  deadline?: string;
+  progress: number | null;
+}) {
+  const isActivity = input.goalKind === "ACTIVITY";
+  return {
+    business_area_id: input.businessAreaId,
+    title: input.title,
+    description: input.description?.trim() || null,
+    owner: input.owner,
+    owner_id: input.ownerId,
+    goal_kind: input.goalKind,
+    lifecycle: input.lifecycle,
+    status: input.status,
+    target_value: isActivity ? null : input.targetValue?.trim() || null,
+    current_value: isActivity ? null : input.currentValue?.trim() || null,
+    deadline: isActivity ? null : input.deadline || null,
+    progress: isActivity ? null : input.progress,
   };
 }
 
@@ -155,25 +205,40 @@ export async function createGoal(input: CreateGoalInput): Promise<Goal> {
     throw new Error("businessAreaId är obligatoriskt.");
   }
 
-  const progress =
-    input.progress === undefined
-      ? null
-      : Math.min(100, Math.max(0, Math.round(input.progress)));
-
+  const goalKind = parseGoalKind(input.goalKind);
+  const lifecycle = parseGoalLifecycle(input.lifecycle);
   const ownerFields = await resolveOwnerFields(input);
 
-  const payload = {
-    business_area_id: input.businessAreaId,
+  let status: StatusTone = "Gul";
+  let progress: number | null = null;
+  if (goalKind === "ACTIVITY") {
+    status = input.status && (input.status === "Grön" || input.status === "Gul" || input.status === "Röd")
+      ? input.status
+      : "Gul";
+  } else {
+    const metrics = resolveMeasurableMetrics({
+      currentValue: input.currentValue?.trim() || null,
+      targetValue: input.targetValue?.trim() || null,
+      deadline: input.deadline || null,
+    });
+    status = metrics.status;
+    progress = metrics.progress;
+  }
+
+  const payload = buildGoalPayload({
+    businessAreaId: input.businessAreaId,
     title,
-    description: input.description?.trim() || null,
+    description: input.description,
+    ownerId: ownerFields.ownerId,
     owner: ownerFields.owner,
-    owner_id: ownerFields.ownerId,
-    status: input.status,
-    target_value: input.targetValue?.trim() || null,
-    current_value: input.currentValue?.trim() || null,
-    deadline: input.deadline || null,
+    goalKind,
+    lifecycle,
+    status,
+    targetValue: input.targetValue,
+    currentValue: input.currentValue,
+    deadline: input.deadline,
     progress,
-  };
+  });
 
   const row = await insertGoal(payload);
 
@@ -226,25 +291,45 @@ export async function updateGoal(input: UpdateGoalInput): Promise<Goal> {
     throw new Error("Målet hittades inte.");
   }
 
-  const progress =
-    input.progress === undefined
-      ? null
-      : Math.min(100, Math.max(0, Math.round(input.progress)));
-
+  const goalKind = parseGoalKind(input.goalKind);
+  const lifecycle = parseGoalLifecycle(input.lifecycle);
   const ownerFields = await resolveOwnerFields(input);
 
-  const next = {
-    business_area_id: input.businessAreaId,
+  let status: StatusTone = "Gul";
+  let progress: number | null = null;
+  if (goalKind === "ACTIVITY") {
+    status = input.status && (input.status === "Grön" || input.status === "Gul" || input.status === "Röd")
+      ? input.status
+      : "Gul";
+  } else {
+    const metrics = resolveMeasurableMetrics({
+      currentValue: input.currentValue?.trim() || null,
+      targetValue: input.targetValue?.trim() || null,
+      deadline: input.deadline || null,
+      createdAt: existing.created_at,
+      existing: {
+        progress: existing.progress,
+        status: existing.status,
+      },
+    });
+    status = metrics.status;
+    progress = metrics.progress;
+  }
+
+  const next = buildGoalPayload({
+    businessAreaId: input.businessAreaId,
     title,
-    description: input.description?.trim() || null,
+    description: input.description,
+    ownerId: ownerFields.ownerId,
     owner: ownerFields.owner,
-    owner_id: ownerFields.ownerId,
-    status: input.status,
-    target_value: input.targetValue?.trim() || null,
-    current_value: input.currentValue?.trim() || null,
-    deadline: input.deadline || null,
+    goalKind,
+    lifecycle,
+    status,
+    targetValue: input.targetValue,
+    currentValue: input.currentValue,
+    deadline: input.deadline,
     progress,
-  };
+  });
 
   const changes = collectFieldChanges(
     {
@@ -253,6 +338,8 @@ export async function updateGoal(input: UpdateGoalInput): Promise<Goal> {
       description: existing.description,
       owner: existing.owner,
       owner_id: existing.owner_id,
+      goal_kind: existing.goal_kind,
+      lifecycle: existing.lifecycle,
       status: existing.status,
       target_value: existing.target_value,
       current_value: existing.current_value,

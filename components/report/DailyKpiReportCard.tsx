@@ -7,13 +7,14 @@ import { StatusBadge } from "@/components/ui";
 import { computeKpiStatus } from "@/lib/kpi/computeStatus";
 import { isStatisticKpi, isStatusTone } from "@/lib/kpi/kind";
 import { dailyReportActionLabel } from "@/lib/kpi/reportActionLabel";
-import { formatDateTimeSv } from "@/lib/format/date";
+import { formatDateSv, formatDateTimeSv } from "@/lib/format/date";
 import { formatKpiDisplayValue } from "@/lib/format/kpi";
 import { reportDailyKpiAction } from "@/app/report/kpis/actions";
 import type { DailyKpiReportItem, StatusTone } from "@/types";
 
 type DailyKpiReportCardProps = {
   item: DailyKpiReportItem;
+  reportDate: string;
   expanded: boolean;
   onToggle: () => void;
   /** Called after a successful save so parent clients can reload SoT. */
@@ -28,6 +29,7 @@ function seedStatus(item: DailyKpiReportItem): StatusTone {
 
 export function DailyKpiReportCard({
   item,
+  reportDate,
   expanded,
   onToggle,
   onReported,
@@ -64,13 +66,16 @@ export function DailyKpiReportCard({
   const todayTone = isStatusTone(item.todayReport?.status)
     ? item.todayReport.status
     : null;
+  const dateLabel = formatDateSv(reportDate);
+  const registeredAt =
+    item.todayReport?.updatedAt ?? item.todayReport?.createdAt ?? null;
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
 
     if (!value.trim()) {
-      setError("Ange dagens värde.");
+      setError("Ange ett värde.");
       return;
     }
     if (commentRequired && !comment.trim()) {
@@ -84,6 +89,7 @@ export function DailyKpiReportCard({
         value,
         status: isStatistic ? "Statistik" : effectiveStatus,
         comment,
+        reportDate,
       });
 
       if (!result.ok) {
@@ -140,7 +146,7 @@ export function DailyKpiReportCard({
               <>
                 {item.isReported && item.todayReport ? (
                   <div>
-                    <dt className="inline text-slate-500">Idag: </dt>
+                    <dt className="inline text-slate-500">{dateLabel}: </dt>
                     <dd className="inline font-medium text-slate-800">
                       {formatKpiDisplayValue(item.todayReport.value, unit)}
                     </dd>
@@ -169,7 +175,7 @@ export function DailyKpiReportCard({
                 </div>
                 {item.isReported && item.todayReport ? (
                   <div>
-                    <dt className="inline text-slate-500">Idag: </dt>
+                    <dt className="inline text-slate-500">{dateLabel}: </dt>
                     <dd className="inline font-medium text-slate-800">
                       {formatKpiDisplayValue(item.todayReport.value, unit)}
                     </dd>
@@ -194,13 +200,15 @@ export function DailyKpiReportCard({
             <>
               <StatusBadge status={todayTone} />
               <p className="text-[11px] text-slate-500">
-                {formatDateTimeSv(item.todayReport!.updatedAt)}
+                Rapportdatum {dateLabel}
+                {registeredAt ? ` · Registrerad ${formatDateTimeSv(registeredAt)}` : ""}
               </p>
             </>
           ) : null}
           {isStatistic && item.isReported && item.todayReport ? (
             <p className="text-[11px] text-slate-500">
-              {formatDateTimeSv(item.todayReport.updatedAt)}
+              Rapportdatum {dateLabel}
+              {registeredAt ? ` · Registrerad ${formatDateTimeSv(registeredAt)}` : ""}
             </p>
           ) : null}
           {!expanded ? (
@@ -251,7 +259,7 @@ export function DailyKpiReportCard({
                 htmlFor={`value-${item.kpi.id}`}
                 className="block text-xs font-medium text-slate-500"
               >
-                Dagens värde{unit?.trim() ? ` (${unit.trim()})` : ""}
+                Värde{unit?.trim() ? ` (${unit.trim()})` : ""}
               </label>
               <input
                 id={`value-${item.kpi.id}`}

@@ -17,10 +17,13 @@ import { fetchKpiById } from "@/lib/supabase/kpis";
 import { fetchKpiHistoryByPeriodMonthsForKpis } from "@/lib/supabase/kpi-history";
 import { getKpisForTodayReporting } from "@/services/kpiReporting";
 import {
+  dailyReportDateRejectedReason,
+  resolveDailyReportDate,
+} from "@/lib/kpi/dailyReportDate";
+import {
   upsertDailyKpiReport,
   upsertMonthlyKpiReport,
   upsertMonthlyStatisticReport,
-  toStockholmReportDate,
 } from "@/services/kpiHistory";
 import type { MyKpisForTodayReporting, StatusTone } from "@/types";
 
@@ -46,11 +49,12 @@ export type LoadVdAreaReportingResult =
   | { ok: false; error: string };
 
 /**
- * VD/admin: resolve area (id or slug) and load today's reporting.
- * Called from the client panel when the user changes selectedAreaId.
+ * VD/admin: resolve area (id or slug) and load reporting for the selected day.
+ * Called from the client panel when the user changes selectedAreaId or date.
  */
 export async function loadVdAreaReportingAction(
   areaParam: string,
+  reportDate?: string,
 ): Promise<LoadVdAreaReportingResult> {
   const profile = await requireProfile();
   if (profile.role !== "vd" && profile.role !== "administrator") {
@@ -78,6 +82,7 @@ export async function loadVdAreaReportingAction(
 
   const reporting = await getKpisForTodayReporting(area.id, {
     businessAreaName: area.name,
+    reportDate: resolveDailyReportDate(reportDate),
   });
 
   return { ok: true, reporting };
@@ -88,7 +93,7 @@ function isStatus(value: string): value is StatusTone {
 }
 
 /**
- * Save or update today's daily KPI report.
+ * Save or update a daily KPI report for `reportDate`.
  * AO-chef: own business_area_id only. VD/admin: any area (operational write).
  * Uses upsertDailyKpiReport — one row per (kpi_id, report_date).
  */
@@ -97,6 +102,7 @@ export async function reportDailyKpiAction(input: {
   value: string;
   status: string;
   comment?: string;
+  reportDate?: string;
 }): Promise<ReportDailyKpiResult> {
   const profile = await requireOperationalWriter();
 
@@ -107,7 +113,14 @@ export async function reportDailyKpiAction(input: {
 
   const value = input.value.trim();
   if (!value) {
-    return { ok: false, error: "Ange dagens värde." };
+    return { ok: false, error: "Ange ett värde." };
+  }
+
+  const reportDate =
+    input.reportDate?.trim() || resolveDailyReportDate(undefined);
+  const dateError = dailyReportDateRejectedReason(reportDate);
+  if (dateError) {
+    return { ok: false, error: dateError };
   }
 
   const kpi = await fetchKpiById(kpiId).catch(() => null);
@@ -154,7 +167,6 @@ export async function reportDailyKpiAction(input: {
 
   // Statistics KPIs never use Grön/Gul/Röd — store Statistik and skip comment gate.
   if (kpi.kpi_kind === "STATISTIC") {
-    const reportDate = toStockholmReportDate(new Date());
     try {
       await upsertDailyKpiReport({
         kpiId,
@@ -202,8 +214,6 @@ export async function reportDailyKpiAction(input: {
       error: "Beskriv kort varför KPI:n avviker.",
     };
   }
-
-  const reportDate = toStockholmReportDate(new Date());
 
   try {
     await upsertDailyKpiReport({

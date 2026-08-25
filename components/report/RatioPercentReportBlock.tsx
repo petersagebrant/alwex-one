@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition, type FormEvent } from "react";
 import { StatusBadge } from "@/components/ui";
 import { formatKpiDisplayValue } from "@/lib/format/kpi";
+import { formatDateSv } from "@/lib/format/date";
 import { isStatusTone } from "@/lib/kpi/kind";
 import { dailyReportActionLabel } from "@/lib/kpi/reportActionLabel";
 import { reportDailyKpiAction } from "@/app/report/kpis/actions";
@@ -11,6 +12,7 @@ import type { RatioPercentReportGroup } from "@/types";
 
 type RatioPercentReportBlockProps = {
   group: RatioPercentReportGroup;
+  reportDate: string;
   /** Called after a successful save so parent clients can reload SoT. */
   onReported?: () => void;
 };
@@ -22,6 +24,7 @@ type RatioPercentReportBlockProps = {
  */
 export function RatioPercentReportBlock({
   group,
+  reportDate,
   onReported,
 }: RatioPercentReportBlockProps) {
   const router = useRouter();
@@ -70,6 +73,7 @@ export function RatioPercentReportBlock({
         kpiId: numerator.kpi.id,
         value: numeratorValue,
         status: "Statistik",
+        reportDate,
       });
       if (!numResult.ok) {
         setError(numResult.error);
@@ -80,6 +84,7 @@ export function RatioPercentReportBlock({
         kpiId: denominator.kpi.id,
         value: denominatorValue,
         status: "Statistik",
+        reportDate,
       });
       if (!denResult.ok) {
         setError(denResult.error);
@@ -122,7 +127,9 @@ export function RatioPercentReportBlock({
             <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600">
               {bothInputsReported ? (
                 <div>
-                  <dt className="inline text-slate-500">Idag: </dt>
+                  <dt className="inline text-slate-500">
+                    {formatDateSv(reportDate)}:{" "}
+                  </dt>
                   <dd className="inline font-medium text-slate-800">
                     {formatKpiDisplayValue(todayResultValue, resultUnit)}
                   </dd>

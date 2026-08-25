@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { AoChefKpiReportList } from "@/components/report/AoChefKpiReportList";
+import { AoDailyReportDatePicker } from "@/components/report/AoDailyReportDatePicker";
 import { CalculatedKpiReportSection } from "@/components/report/CalculatedKpiReportSection";
 import { MonthlyKpiReportSection } from "@/components/report/MonthlyKpiReportSection";
 import { RatioPercentReportSection } from "@/components/report/RatioPercentReportSection";
@@ -14,10 +15,14 @@ import {
   getMyKpisForTodayReporting,
 } from "@/services/kpiReporting";
 import { formatDateSv } from "@/lib/format/date";
+import {
+  resolveDailyReportDate,
+  stockholmCalendarDate,
+} from "@/lib/kpi/dailyReportDate";
 import type { MyKpisForTodayReporting } from "@/types";
 
 export const metadata: Metadata = {
-  title: "Mina KPI:er idag | LEIR",
+  title: "KPI-rapportering | LEIR",
   description: "Daglig KPI-rapportering för affärsområdeschef",
 };
 
@@ -25,8 +30,12 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 type ReportKpisPageProps = {
-  searchParams: Promise<{ area?: string | string[] }>;
+  searchParams: Promise<{ area?: string | string[]; date?: string | string[] }>;
 };
+
+function firstParam(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
 
 function AoChefReportingProgress({
   reporting,
@@ -36,11 +45,12 @@ function AoChefReportingProgress({
   const reported = reporting.reportedCount;
   const total = reporting.totalCount;
   const progressPct = total > 0 ? Math.round((reported / total) * 100) : 0;
+  const dateLabel = formatDateSv(reporting.reportDate);
 
   return (
     <>
       <InfoPanel
-        title="Dagens KPI-rapportering"
+        title={`KPI-rapportering ${dateLabel}`}
         showLabel={false}
         compact
         className="!border-slate-200/80 !bg-white"
@@ -73,11 +83,17 @@ function AoChefReportingProgress({
       </InfoPanel>
 
       {reporting.ratioGroups.length > 0 ? (
-        <RatioPercentReportSection groups={reporting.ratioGroups} />
+        <RatioPercentReportSection
+          groups={reporting.ratioGroups}
+          reportDate={reporting.reportDate}
+        />
       ) : null}
 
       {reporting.items.length > 0 ? (
-        <AoChefKpiReportList items={reporting.items} />
+        <AoChefKpiReportList
+          items={reporting.items}
+          reportDate={reporting.reportDate}
+        />
       ) : null}
 
       <MonthlyKpiReportSection items={reporting.monthlyItems} />
@@ -91,7 +107,10 @@ function AoChefReportingProgress({
         </p>
       ) : null}
 
-      <CalculatedKpiReportSection items={reporting.calculatedItems} />
+      <CalculatedKpiReportSection
+        items={reporting.calculatedItems}
+        reportDate={reporting.reportDate}
+      />
     </>
   );
 }
@@ -118,9 +137,13 @@ function ReportPageActions({ showManageKpis }: { showManageKpis: boolean }) {
 }
 
 export default async function ReportKpisPage({
-  searchParams: _searchParams,
+  searchParams,
 }: ReportKpisPageProps) {
   const profile = await requireProfile();
+  const params = await searchParams;
+  const reportDate = resolveDailyReportDate(firstParam(params.date));
+  const maxDate = stockholmCalendarDate();
+  const reportDateLabel = formatDateSv(reportDate);
 
   const isAoChef = profile.role === "ao_chef";
   const isLeadership =
@@ -137,10 +160,10 @@ export default async function ReportKpisPage({
           <AppHeader current="kpis" />
           <main className="mx-auto w-full max-w-3xl flex-1 space-y-6 px-4 py-6 sm:px-6 sm:py-8">
             <div className="flex flex-wrap items-end justify-between gap-3">
-              <SectionHeader title="Mina KPI:er idag" />
+              <SectionHeader title="KPI-rapportering" />
               <ReportPageActions showManageKpis={false} />
             </div>
-            <InfoPanel title="Mina KPI:er idag" showLabel={false} compact>
+            <InfoPanel title="KPI-rapportering" showLabel={false} compact>
               <p>
                 Ditt konto saknar kopplat affärsområde. Kontakta administratör.
               </p>
@@ -151,10 +174,7 @@ export default async function ReportKpisPage({
     }
 
     // AO-chef: ignore any `area` query param; always force own business_area_id.
-    const reporting = await getMyKpisForTodayReporting(profile);
-    const reportDateLabel = reporting?.reportDate
-      ? formatDateSv(reporting.reportDate)
-      : "idag";
+    const reporting = await getMyKpisForTodayReporting(profile, reportDate);
 
     return (
       <div className="flex min-h-full flex-1 flex-col bg-[#eef2f6] font-sans text-slate-800">
@@ -163,11 +183,13 @@ export default async function ReportKpisPage({
         <main className="mx-auto w-full max-w-3xl flex-1 space-y-5 px-4 py-6 sm:px-6 sm:py-8">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <SectionHeader
-              title="Mina KPI:er idag"
+              title="KPI-rapportering"
               description={`${reporting?.businessAreaName ?? "Affärsområde"} · ${reportDateLabel}`}
             />
             <ReportPageActions showManageKpis={false} />
           </div>
+
+          <AoDailyReportDatePicker value={reportDate} max={maxDate} />
 
           {reporting ? <AoChefReportingProgress reporting={reporting} /> : null}
         </main>
@@ -175,7 +197,7 @@ export default async function ReportKpisPage({
     );
   }
 
-  // VD / administrator: client owns selection (no URL hydrate this pass).
+  // VD / administrator: area is client state; date defaults to yesterday.
   const areas = await fetchBusinessAreas().catch(() => []);
 
   return (
@@ -185,14 +207,16 @@ export default async function ReportKpisPage({
       <main className="mx-auto w-full max-w-3xl flex-1 space-y-5 px-4 py-6 sm:px-6 sm:py-8">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <SectionHeader
-            title="KPI-rapportering idag"
-            description="Välj affärsområde för granskning"
+            title="KPI-rapportering"
+            description="Välj affärsområde och rapportdatum"
           />
           <ReportPageActions showManageKpis />
         </div>
 
         <VdKpiReportingView
           areas={areas.map((area) => ({ id: area.id, name: area.name }))}
+          defaultReportDate={reportDate}
+          maxReportDate={maxDate}
         />
       </main>
     </div>

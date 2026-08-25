@@ -117,7 +117,7 @@ describe("goals module operational filters and UI", () => {
     assert.match(form, /name="ownerId"/);
     assert.doesNotMatch(form, /name="owner"/);
     assert.match(form, /htmlFor="ownerId"/);
-    assert.match(actions, /ownerId: fields\.ownerId/);
+    assert.match(actions, /ownerId: parsed\.value\.ownerId/);
     assert.match(actions, /requireOperationalWriter/);
     assert.match(areaPage, /canWriteGoalsForArea/);
     assert.match(areaList, /Nytt mål/);
@@ -133,5 +133,91 @@ describe("goals module operational filters and UI", () => {
     assert.match(assistant, /getGoals\(/);
     assert.doesNotMatch(assistant, /includeArchived:\s*true/);
     assert.match(aoChef, /getGoalsByBusinessAreaId\(businessAreaId\)/);
+  });
+});
+
+describe("goal kinds and lifecycle", () => {
+  const kindsMigration = readFileSync(
+    fileURLToPath(
+      new URL(
+        "../../supabase/migrations/20260824170000_goal_kinds_and_lifecycle.sql",
+        import.meta.url,
+      ),
+    ),
+    "utf8",
+  );
+  const kindsNormalized = kindsMigration.replace(/\s+/g, " ").toLowerCase();
+
+  it("adds goal_kind and lifecycle without rewriting live progress/status", () => {
+    assert.match(
+      kindsNormalized,
+      /add column if not exists goal_kind text not null default 'measurable'/,
+    );
+    assert.match(
+      kindsNormalized,
+      /check \(goal_kind in \('measurable', 'activity'\)\)/,
+    );
+    assert.match(
+      kindsNormalized,
+      /add column if not exists lifecycle text not null default 'active'/,
+    );
+    assert.match(
+      kindsNormalized,
+      /check \(lifecycle in \('active', 'done'\)\)/,
+    );
+    assert.match(kindsMigration, new RegExp(KEEP_ID));
+    assert.match(
+      kindsNormalized,
+      new RegExp(
+        `update public\\.goals set goal_kind = 'measurable', lifecycle = 'active' where id = '${KEEP_ID}'`,
+      ),
+    );
+    assert.doesNotMatch(kindsNormalized, /progress\s*=/);
+    assert.doesNotMatch(kindsNormalized, /status\s*=/);
+    assert.doesNotMatch(kindsNormalized, /current_value\s*=/);
+    assert.doesNotMatch(kindsNormalized, /target_value\s*=/);
+    assert.doesNotMatch(kindsNormalized, /alter table public\.kpis/);
+    assert.doesNotMatch(kindsNormalized, /update public\.kpis/);
+    const seed = read(
+      "../../supabase/migrations/20260807110000_seed_alwex_one_core_data.sql",
+    );
+    assert.doesNotMatch(seed, /goal_kind/);
+    assert.doesNotMatch(seed, /lifecycle/);
+  });
+
+  it("counts Klara mål as DONE, not Grön", () => {
+    const dashboard = read("../../services/dashboard.ts");
+    assert.match(dashboard, /isGoalDone/);
+    assert.match(dashboard, /completed-goals/);
+    assert.doesNotMatch(
+      dashboard,
+      /completedGoals = \(goals \?\? \[\]\)\.filter\(\(goal\) => goal\.status === "Grön"\)/,
+    );
+    assert.match(dashboard, /isGoalNeedingAction/);
+  });
+
+  it("uses a client type picker and hides manual progress/color for MEASURABLE", () => {
+    const form = read("../../components/admin/GoalFormFields.tsx");
+    assert.match(form, /"use client"/);
+    assert.match(form, /name="goalKind"/);
+    assert.match(form, /name="lifecycle"/);
+    const kindIndex = form.indexOf('name="goalKind"');
+    const titleIndex = form.indexOf('name="title"');
+    assert.ok(kindIndex >= 0 && titleIndex > kindIndex);
+    assert.doesNotMatch(form, /name="progress"/);
+    assert.match(form, /name="status"/);
+    assert.match(form, /isMeasurable/);
+  });
+
+  it("hides the AO progress bar for ACTIVITY goals", () => {
+    const areaList = read("../../components/areas/AreaGoalsList.tsx");
+    assert.match(areaList, /goal\.goalKind === "MEASURABLE"/);
+    assert.match(areaList, /StatusBadge/);
+  });
+
+  it("adds kind and lifecycle to the compact AI briefing payload", () => {
+    const assistant = read("../../services/assistant.ts");
+    assert.match(assistant, /kind: goal\.goalKind/);
+    assert.match(assistant, /lifecycle: goal\.lifecycle/);
   });
 });

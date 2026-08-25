@@ -7,11 +7,13 @@ import type { DailyKpiReportItem } from "@/types";
 type DailyKpiReportListProps = {
   items: DailyKpiReportItem[];
   onReported?: () => void;
+  reportDate: string;
 };
 
 export function DailyKpiReportList({
   items,
   onReported,
+  reportDate,
 }: DailyKpiReportListProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -38,6 +40,7 @@ export function DailyKpiReportList({
         <li key={`${item.kpi.id}-${item.todayReport?.updatedAt ?? "open"}`}>
           <DailyKpiReportCard
             item={item}
+            reportDate={reportDate}
             expanded={expandedId === item.kpi.id}
             onToggle={() => handleToggle(item.kpi.id)}
             onReported={handleReported}

@@ -1,3 +1,4 @@
+import type { GoalKind, GoalLifecycle } from "@/types/goal";
 import { createClient } from "@/lib/supabase/server";
 
 export type GoalRow = {
@@ -7,6 +8,8 @@ export type GoalRow = {
   description: string | null;
   owner: string | null;
   owner_id: string | null;
+  goal_kind: GoalKind;
+  lifecycle: GoalLifecycle;
   status: string;
   target_value: string | null;
   current_value: string | null;
@@ -23,6 +26,8 @@ export type InsertGoalInput = {
   description: string | null;
   owner: string | null;
   owner_id: string | null;
+  goal_kind: GoalKind;
+  lifecycle: GoalLifecycle;
   status: string;
   target_value: string | null;
   current_value: string | null;
@@ -36,7 +41,7 @@ export type FetchGoalsOptions = {
 };
 
 const goalSelect =
-  "id, business_area_id, title, description, owner, owner_id, status, target_value, current_value, deadline, progress, archived_at, created_at, updated_at";
+  "id, business_area_id, title, description, owner, owner_id, goal_kind, lifecycle, status, target_value, current_value, deadline, progress, archived_at, created_at, updated_at";
 
 export async function fetchGoalsByBusinessAreaId(
   businessAreaId: string,
@@ -108,6 +113,8 @@ export type UpdateGoalRowInput = {
   description: string | null;
   owner: string | null;
   owner_id: string | null;
+  goal_kind: GoalKind;
+  lifecycle: GoalLifecycle;
   status: string;
   target_value: string | null;
   current_value: string | null;

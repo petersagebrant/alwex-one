@@ -66,6 +66,7 @@ export function ActivityFormFields({
         <select
           id="goalId"
           name="goalId"
+          key={`${businessAreaId}-${initialGoalId ?? ""}`}
           defaultValue={initialGoalId ?? ""}
           disabled={!businessAreaId}
           className={fieldClassName}

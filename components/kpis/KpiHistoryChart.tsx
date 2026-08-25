@@ -7,6 +7,8 @@ export type KpiHistoryChartPoint = {
   status: KpiStoredStatus;
   recordedAt: string;
   label: string;
+  /** Calendar day the value belongs to; fallback is recordedAt. */
+  reportDate?: string | null;
 };
 
 type KpiHistoryChartProps = {
@@ -44,8 +46,16 @@ function formatPercentChange(changePercent: number): string {
 }
 
 function changePeriodLabel(previousIso: string, latestIso: string): string {
-  const previous = new Date(previousIso);
-  const latest = new Date(latestIso);
+  const previous = new Date(
+    /^\d{4}-\d{2}-\d{2}$/.test(previousIso)
+      ? `${previousIso}T12:00:00`
+      : previousIso,
+  );
+  const latest = new Date(
+    /^\d{4}-\d{2}-\d{2}$/.test(latestIso)
+      ? `${latestIso}T12:00:00`
+      : latestIso,
+  );
   if (Number.isNaN(previous.getTime()) || Number.isNaN(latest.getTime())) {
     return "Sedan föregående mätning";
   }
@@ -66,7 +76,9 @@ function changePeriodLabel(previousIso: string, latestIso: string): string {
   return "Sedan föregående mätning";
 }
 
-function computeChange(points: { numeric: number; recordedAt: string }[]) {
+function computeChange(
+  points: { numeric: number; recordedAt: string; reportDate?: string | null }[],
+) {
   if (points.length < 2) {
     return null;
   }
@@ -84,7 +96,10 @@ function computeChange(points: { numeric: number; recordedAt: string }[]) {
     changePercent,
     arrow: changePercent > 0 ? "↑" : changePercent < 0 ? "↓" : "→",
     label: formatPercentChange(changePercent),
-    periodLabel: changePeriodLabel(previous.recordedAt, latest.recordedAt),
+    periodLabel: changePeriodLabel(
+      previous.reportDate ?? previous.recordedAt,
+      latest.reportDate ?? latest.recordedAt,
+    ),
     toneClass:
       changePercent > 0
         ? "text-emerald-700"

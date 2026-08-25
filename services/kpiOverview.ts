@@ -11,10 +11,11 @@ import {
   fetchKpiHistoryByReportDate,
 } from "@/lib/supabase/kpi-history";
 import { getKPIs, type KPIListItem } from "@/services/kpis";
+import { getRecentKpiHistoryForKpis } from "@/services/kpiHistory";
 import {
-  getRecentKpiHistoryForKpis,
-  toStockholmReportDate,
-} from "@/services/kpiHistory";
+  compareHistoryByCalendarDate,
+  resolveDailyReportDate,
+} from "@/lib/kpi/dailyReportDate";
 import type { KPI, KpiTrend } from "@/types/kpi";
 import type { KPIHistory } from "@/types/kpi-history";
 import type { StatusTone } from "@/types/status";
@@ -57,10 +58,7 @@ function isAlwexTotaltArea(area: { name: string; slug: string }): boolean {
 }
 
 function historyNewestFirst(entries: KPIHistory[]): KPIHistory[] {
-  return [...entries].sort(
-    (a, b) =>
-      new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime(),
-  );
+  return [...entries].sort((a, b) => compareHistoryByCalendarDate(b, a));
 }
 
 export function enrichKpiForDisplay(
@@ -75,7 +73,7 @@ export function enrichKpiForDisplay(
     kpi,
     displayTrend: resolveKpiTrend(kpi.trend, sorted),
     previousValue: previous?.value ?? null,
-    lastReportedAt: latest?.recordedAt ?? null,
+    lastReportedAt: latest?.updatedAt ?? latest?.createdAt ?? latest?.recordedAt ?? null,
     href: `/kpis/${kpi.id}`,
   };
 }
@@ -130,7 +128,7 @@ function buildAreaSection(input: {
  * TARGET-only G/Y/R counts, and reporting progress (ratio groups as one).
  */
 export async function getKpiOverviewData(): Promise<KpiOverviewData> {
-  const reportDate = toStockholmReportDate(new Date());
+  const reportDate = resolveDailyReportDate(undefined);
 
   try {
     const [kpis, areas, todayRows] = await Promise.all([

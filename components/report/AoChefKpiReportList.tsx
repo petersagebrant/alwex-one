@@ -7,13 +7,17 @@ import type { DailyKpiReportItem } from "@/types";
 
 type AoChefKpiReportListProps = {
   items: DailyKpiReportItem[];
+  reportDate: string;
 };
 
 /**
  * AO-chef daily list with the same collapse UX as VD DailyKpiReportList:
  * open → save → collapse → reopen with saved values.
  */
-export function AoChefKpiReportList({ items }: AoChefKpiReportListProps) {
+export function AoChefKpiReportList({
+  items,
+  reportDate,
+}: AoChefKpiReportListProps) {
   const router = useRouter();
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -40,6 +44,7 @@ export function AoChefKpiReportList({ items }: AoChefKpiReportListProps) {
         <li key={`${item.kpi.id}-${item.todayReport?.updatedAt ?? "open"}`}>
           <DailyKpiReportCard
             item={item}
+            reportDate={reportDate}
             expanded={expandedId === item.kpi.id}
             onToggle={() => handleToggle(item.kpi.id)}
             onReported={handleReported}

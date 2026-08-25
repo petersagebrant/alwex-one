@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { AoChefDashboard } from "@/components/dashboard/AoChefDashboard";
 import { KpiOverviewSection } from "@/components/dashboard/KpiOverviewSection";
+import { OrgNoticesFeed } from "@/components/dashboard/OrgNoticesFeed";
 import { VdAttentionList } from "@/components/dashboard/VdAttentionList";
 import { VdBriefingPanel } from "@/components/dashboard/VdBriefingPanel";
 import { VdDiaryTimeline } from "../components/dashboard/VdDiaryTimeline";
@@ -19,6 +20,7 @@ import {
 } from "@/services/assistant";
 import { getAoChefDashboardData } from "@/services/aoChefDashboard";
 import { getDashboardData } from "@/services/dashboard";
+import { getDashboardAreaNotices } from "@/services/areaNotices";
 import { getKPIs } from "@/services/kpis";
 import { getKpiOverviewData } from "@/services/kpiOverview";
 import { getDashboardReportingContext } from "@/services/kpiReporting";
@@ -85,39 +87,44 @@ export default async function Home() {
     profileRow?.role === "ao_chef" &&
     profileRow.business_area_id
   ) {
-    const aoData = await getAoChefDashboardData({
-      id: currentUser!.id,
-      email: currentUser!.email,
-      role: "ao_chef",
-      businessAreaId: profileRow.business_area_id,
-    });
-    return <AoChefDashboard data={aoData} />;
+    const [aoData, orgNotices] = await Promise.all([
+      getAoChefDashboardData({
+        id: currentUser!.id,
+        email: currentUser!.email,
+        role: "ao_chef",
+        businessAreaId: profileRow.business_area_id,
+      }),
+      getDashboardAreaNotices().catch(() => []),
+    ]);
+    return <AoChefDashboard data={aoData} notices={orgNotices} />;
   }
 
-  const [data, kpiDetails, reportingContext, kpiOverview] = await Promise.all([
-    getDashboardData(),
-    getKPIs().catch(() => []),
-    profileRow
-      ? getDashboardReportingContext({
-          role: profileRow.role,
-          businessAreaId: profileRow.business_area_id,
-        }).catch(() => ({
-          kind: "none" as const,
-          myReporting: null,
-          orgStats: null,
-        }))
-      : Promise.resolve({
-          kind: "none" as const,
-          myReporting: null,
-          orgStats: null,
-        }),
-    getKpiOverviewData().catch(() => ({
-      reportDate: "",
-      orgStatusCounts: { Grön: 0, Gul: 0, Röd: 0 },
-      alwexTotalt: null,
-      areas: [],
-    })),
-  ]);
+  const [data, kpiDetails, reportingContext, kpiOverview, orgNotices] =
+    await Promise.all([
+      getDashboardData(),
+      getKPIs().catch(() => []),
+      profileRow
+        ? getDashboardReportingContext({
+            role: profileRow.role,
+            businessAreaId: profileRow.business_area_id,
+          }).catch(() => ({
+            kind: "none" as const,
+            myReporting: null,
+            orgStats: null,
+          }))
+        : Promise.resolve({
+            kind: "none" as const,
+            myReporting: null,
+            orgStats: null,
+          }),
+      getKpiOverviewData().catch(() => ({
+        reportDate: "",
+        orgStatusCounts: { Grön: 0, Gul: 0, Röd: 0 },
+        alwexTotalt: null,
+        areas: [],
+      })),
+      getDashboardAreaNotices().catch(() => []),
+    ]);
   const kpis = data?.kpis ?? [];
   const businessAreas = data?.businessAreas ?? [];
   const attentionItems = data?.attentionItems ?? [];
@@ -294,6 +301,8 @@ export default async function Home() {
             linkHints={briefingLinkHints}
           />
         ) : null}
+
+        <OrgNoticesFeed notices={orgNotices} />
 
         <KpiOverviewSection data={kpiOverview} />
 

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AppHeader } from "@/components/layout/AppHeader";
+import { OrgNoticesFeed } from "@/components/dashboard/OrgNoticesFeed";
 import { VdDiaryTimeline } from "@/components/dashboard/VdDiaryTimeline";
 import { BeraknadTypeBadge } from "@/components/kpis/BeraknadTypeBadge";
 import { ReportingStatusBadge } from "@/components/kpis/ReportingStatusBadge";
@@ -13,6 +14,7 @@ import {
 import { formatKpiDisplayValue } from "@/lib/format/kpi";
 import { reportedTargetStatusTone } from "@/lib/kpi/areaOperationalStatus";
 import type { AoChefDashboardData } from "@/services/aoChefDashboard";
+import type { AreaNoticeListItem } from "@/services/areaNotices";
 
 function yesterdayChangeDot(tone: string): string {
   if (tone === "red") return "bg-rose-500";
@@ -45,9 +47,10 @@ function AoChefKpiStatus({ kpi }: { kpi: AoChefDashboardData["kpis"][number] }) 
 
 type AoChefDashboardProps = {
   data: AoChefDashboardData;
+  notices: AreaNoticeListItem[];
 };
 
-export function AoChefDashboard({ data }: AoChefDashboardProps) {
+export function AoChefDashboard({ data, notices }: AoChefDashboardProps) {
   const {
     area,
     greetingName,
@@ -108,6 +111,8 @@ export function AoChefDashboard({ data }: AoChefDashboardProps) {
             </span>
           </div>
         </section>
+
+        <OrgNoticesFeed notices={notices} />
 
         <InfoPanel
           title="Mina KPI:er idag"

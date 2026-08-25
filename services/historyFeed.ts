@@ -26,6 +26,9 @@ const FIELD_LABELS: Record<string, string> = {
   meeting_date: "Mötesdatum",
   goal_kind: "Måltyp",
   lifecycle: "Tillstånd",
+  kind: "Typ",
+  ends_on: "Gäller till",
+  body: "Text",
 };
 
 const DISPLAY_FIELDS = new Set([
@@ -42,6 +45,8 @@ const DISPLAY_FIELDS = new Set([
   "due_date",
   "meeting_date",
   "vd_comment",
+  "kind",
+  "ends_on",
 ]);
 
 function extractQuotedTitle(description: string): string | null {
@@ -168,6 +173,14 @@ function auditHeadline(
     return "Kommentar tillagd";
   }
 
+  if (entityType === "area_notice") {
+    if (action === "created") return "Aktuellt skapat";
+    const archived = fields?.find((field) => field.field === "archived_at");
+    if (archived?.to) return "Aktuellt arkiverat";
+    if (archived && !archived.to) return "Aktuellt återaktiverat";
+    return "Aktuellt uppdaterat";
+  }
+
   return "Händelse";
 }
 
@@ -177,6 +190,9 @@ function defaultTone(entityType: string, action: string): VdDiaryTone {
     return action === "completed" ? "green" : "blue";
   }
   if (entityType === "goal") return "blue";
+  if (entityType === "area_notice") {
+    return action === "created" ? "blue" : "slate";
+  }
   if (entityType === "activity") {
     return action === "created" ? "blue" : "slate";
   }

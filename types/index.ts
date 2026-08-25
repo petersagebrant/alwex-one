@@ -8,6 +8,12 @@ export type {
   UpdateGoalInput,
 } from "./goal";
 export type {
+  AreaNotice,
+  AreaNoticeKind,
+  CreateAreaNoticeInput,
+  UpdateAreaNoticeInput,
+} from "./area-notice";
+export type {
   Activity,
   ActivityStatus,
   ActivityPriority,

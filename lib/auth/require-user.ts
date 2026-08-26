@@ -115,7 +115,7 @@ export async function requireBusinessAreaManager(): Promise<AuthProfile> {
   return profile;
 }
 
-/** Användaradministration (VD / Administratör). */
+/** Användaradministration (VD / Vice VD / Administratör). */
 export async function requireUserAdministrator(): Promise<AuthProfile> {
   const profile = await requireProfile();
   if (!canAdministerUsers(profile.role)) {

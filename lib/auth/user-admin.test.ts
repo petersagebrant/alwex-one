@@ -62,6 +62,9 @@ describe("invite payload validation", () => {
       businessAreaId: "",
     });
     assert.equal(missingArea.ok, false);
+    if (!missingArea.ok) {
+      assert.equal(missingArea.error, "AO-chef måste tillhöra ett affärsområde.");
+    }
 
     const vdWithArea = parseInviteUserInput({
       displayName: "Peter",
@@ -70,6 +73,20 @@ describe("invite payload validation", () => {
       businessAreaId: AREA_ID,
     });
     assert.equal(vdWithArea.ok, false);
+    if (!vdWithArea.ok) {
+      assert.equal(vdWithArea.error, "Endast AO-chef får ha ett affärsområde.");
+    }
+
+    const vdWithoutArea = parseInviteUserInput({
+      displayName: "Peter",
+      email: "vd@alwex.se",
+      role: "vd",
+      businessAreaId: "",
+    });
+    assert.equal(vdWithoutArea.ok, true);
+    if (vdWithoutArea.ok) {
+      assert.equal(vdWithoutArea.value.businessAreaId, null);
+    }
 
     const admin = parseInviteUserInput({
       displayName: "Admin",
@@ -79,13 +96,42 @@ describe("invite payload validation", () => {
     });
     assert.equal(admin.ok, true);
 
+    const las = parseInviteUserInput({
+      displayName: "Läs",
+      email: "las@alwex.se",
+      role: "lasbehorighet",
+      businessAreaId: "",
+    });
+    assert.equal(las.ok, true);
+    if (las.ok) {
+      assert.equal(las.value.businessAreaId, null);
+    }
+
     const viceVd = parseInviteUserInput({
       displayName: "Vice VD",
-      email: "vice@alwex.se",
+      email: "vicevd.test@alwex.test",
       role: "vice_vd",
       businessAreaId: "",
     });
-    assert.equal(viceVd.ok, false);
+    assert.equal(viceVd.ok, true);
+    if (viceVd.ok) {
+      assert.equal(viceVd.value.role, "vice_vd");
+      assert.equal(viceVd.value.businessAreaId, null);
+    }
+
+    const viceVdWithArea = parseInviteUserInput({
+      displayName: "Vice VD",
+      email: "vicevd.test@alwex.test",
+      role: "vice_vd",
+      businessAreaId: AREA_ID,
+    });
+    assert.equal(viceVdWithArea.ok, false);
+    if (!viceVdWithArea.ok) {
+      assert.equal(
+        viceVdWithArea.error,
+        "Endast AO-chef får ha ett affärsområde.",
+      );
+    }
   });
 
   it("rejects unknown roles including empty", () => {
@@ -137,6 +183,20 @@ describe("self role/area updates", () => {
       disabling: false,
     });
     assert.equal(allowed.ok, true);
+  });
+
+  it("lets an admin set vice_vd without an area", () => {
+    const parsed = parseUpdateUserInput({
+      id: OTHER_ID,
+      displayName: "Vice",
+      role: "vice_vd",
+      businessAreaId: "",
+    });
+    assert.equal(parsed.ok, true);
+    if (parsed.ok) {
+      assert.equal(parsed.value.role, "vice_vd");
+      assert.equal(parsed.value.businessAreaId, null);
+    }
   });
 });
 

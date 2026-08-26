@@ -2,13 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { SetUserPasswordControls } from "@/components/admin/SetUserPasswordControls";
+import { UserFormFields } from "@/components/admin/UserFormFields";
 import { StatusBadge } from "@/components/ui";
 import { requireUserAdministrator } from "@/lib/auth/require-user";
-import {
-  APP_ROLES,
-  APP_ROLE_LABELS,
-  canSetUserPassword,
-} from "@/lib/auth/roles";
+import { canSetUserPassword } from "@/lib/auth/roles";
 import { getBusinessAreaOptions } from "@/services/businessAreas";
 import { getAdminUsers, type AdminUserListItem } from "@/services/users";
 import {
@@ -31,124 +28,6 @@ type AdminUsersPageProps = {
     message?: string;
   }>;
 };
-
-const fieldClassName =
-  "mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20";
-
-function UserFormFields({
-  areas,
-  user,
-  lockRole,
-  lockArea,
-}: {
-  areas: { id: string; name: string }[];
-  user?: AdminUserListItem | null;
-  lockRole?: boolean;
-  lockArea?: boolean;
-}) {
-  return (
-    <>
-      <div>
-        <label
-          htmlFor="displayName"
-          className="block text-xs font-medium text-neutral-500"
-        >
-          Namn
-        </label>
-        <input
-          id="displayName"
-          name="displayName"
-          type="text"
-          required
-          maxLength={120}
-          defaultValue={user?.rawDisplayName ?? ""}
-          className={fieldClassName}
-        />
-      </div>
-
-      {user ? null : (
-        <div>
-          <label
-            htmlFor="email"
-            className="block text-xs font-medium text-neutral-500"
-          >
-            E-post
-          </label>
-          <input
-            id="email"
-            name="email"
-            type="email"
-            autoComplete="off"
-            required
-            className={fieldClassName}
-          />
-        </div>
-      )}
-
-      <div>
-        <label
-          htmlFor="role"
-          className="block text-xs font-medium text-neutral-500"
-        >
-          Roll
-        </label>
-        <select
-          id="role"
-          name="role"
-          required
-          defaultValue={user?.role ?? ""}
-          disabled={lockRole}
-          className={fieldClassName}
-        >
-          <option value="" disabled>
-            Välj roll
-          </option>
-          {APP_ROLES.map((role) => (
-            <option key={role} value={role}>
-              {APP_ROLE_LABELS[role]}
-            </option>
-          ))}
-        </select>
-        {lockRole ? (
-          <input type="hidden" name="role" value={user?.role ?? ""} />
-        ) : null}
-      </div>
-
-      <div>
-        <label
-          htmlFor="businessAreaId"
-          className="block text-xs font-medium text-neutral-500"
-        >
-          Affärsområde
-        </label>
-        <select
-          id="businessAreaId"
-          name="businessAreaId"
-          defaultValue={user?.businessAreaId ?? ""}
-          disabled={lockArea}
-          className={fieldClassName}
-        >
-          <option value="">Inget (alla roller utom AO-chef)</option>
-          {areas.map((area) => (
-            <option key={area.id} value={area.id}>
-              {area.name}
-            </option>
-          ))}
-        </select>
-        {lockArea ? (
-          <input
-            type="hidden"
-            name="businessAreaId"
-            value={user?.businessAreaId ?? ""}
-          />
-        ) : null}
-        <p className="mt-1.5 text-xs text-neutral-500">
-          Obligatoriskt för AO-chef. Övriga roller ska inte ha affärsområde.
-        </p>
-      </div>
-    </>
-  );
-}
 
 function UserStatusBadge({ status }: { status: AdminUserListItem["status"] }) {
   if (status === "inactive") {

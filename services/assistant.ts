@@ -7,6 +7,7 @@ import {
   assertRowsInAiScope,
   type AiPrincipal,
 } from "@/lib/ai/security";
+import { isVdEquivalent } from "@/lib/auth/roles";
 import {
   buildAiCacheKey,
   ScopedSingleflightCache,
@@ -286,7 +287,7 @@ export async function buildAssistantContext(
       getDecisions({ businessAreaId: areaId }).catch(
         () => [] as DecisionListItem[],
       ),
-      principal.role === "vd"
+      isVdEquivalent(principal.role)
         ? getDashboardData().catch(() => null)
         : Promise.resolve(null),
     ]);

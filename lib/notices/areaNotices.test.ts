@@ -142,11 +142,13 @@ describe("area notice visibility", () => {
 describe("area notice write permissions", () => {
   it("lets all authenticated roles be represented: read is org-wide, write is scoped", () => {
     assert.equal(canWriteAreaNotices("vd"), true);
+    assert.equal(canWriteAreaNotices("vice_vd"), true);
     assert.equal(canWriteAreaNotices("administrator"), true);
     assert.equal(canWriteAreaNotices("ao_chef"), true);
     assert.equal(canWriteAreaNotices("lasbehorighet"), false);
 
     assert.equal(canWriteAreaNoticesForArea("vd", null, AREA_A), true);
+    assert.equal(canWriteAreaNoticesForArea("vice_vd", null, AREA_A), true);
     assert.equal(
       canWriteAreaNoticesForArea("administrator", null, AREA_B),
       true,

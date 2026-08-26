@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { getCurrentUser } from "@/lib/auth/require-user";
-import { canAdministerUsers } from "@/lib/auth/roles";
+import { canAdministerUsers, isVdEquivalent } from "@/lib/auth/roles";
 import { fetchProfileByUserId } from "@/lib/supabase/profiles";
 import { signOutAction } from "@/app/login/actions";
 
@@ -54,7 +54,7 @@ export async function AppHeader({ current = "home" }: AppHeaderProps) {
   const visibleNavItems = navItems.filter((item) => {
     if (item.key === "assistant") {
       return (
-        profile?.role === "vd" ||
+        Boolean(profile && isVdEquivalent(profile.role)) ||
         (profile?.role === "ao_chef" && Boolean(profile.business_area_id))
       );
     }

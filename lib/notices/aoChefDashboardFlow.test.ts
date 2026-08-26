@@ -111,6 +111,7 @@ describe("AO-chef dashboard flow (kyl-frys simulation)", () => {
 
   it("keeps VD/admin Nytt beslut, org Aktuellt and KPI area picker", () => {
     assert.equal(canWriteDecisions("vd"), true);
+    assert.equal(canWriteDecisions("vice_vd"), true);
     assert.equal(canWriteDecisions("administrator"), true);
     assert.equal(noticeSeeAllHref(KYL_FRYS), `/areas/${KYL_FRYS}`);
     assert.equal(noticeSeeAllHref(OTHER_AO), `/areas/${OTHER_AO}`);
@@ -126,11 +127,16 @@ describe("AO-chef dashboard flow (kyl-frys simulation)", () => {
     assert.match(feed, /noticeItemHref/);
     assert.match(decisionsPage, /Nytt beslut/);
     assert.match(reportKpis, /isLeadership/);
+    assert.match(reportKpis, /isVdEquivalent\(profile\.role\)/);
     assert.match(reportKpis, /<VdKpiReportingView/);
     assert.match(vdView, /Visa affärsområde/);
     assert.match(vdView, /selectedAreaId/);
     assert.equal(
       canWriteAreaNoticesForArea("vd", null, AREA_OTHER),
+      true,
+    );
+    assert.equal(
+      canWriteAreaNoticesForArea("vice_vd", null, AREA_OTHER),
       true,
     );
     assert.equal(

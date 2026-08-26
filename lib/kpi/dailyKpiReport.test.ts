@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  authorizeDailyKpiReport,
   collectBatchDailyReports,
   dailyKpiValidationKpiFromKpi,
   EMPTY_DAILY_BATCH_MESSAGE,
@@ -252,5 +253,36 @@ describe("GROUPED pair abort", () => {
 describe("empty batch message", () => {
   it("keeps the empty-save copy", () => {
     assert.equal(EMPTY_DAILY_BATCH_MESSAGE, "Inget att spara.");
+  });
+});
+
+describe("authorizeDailyKpiReport", () => {
+  const kpi = { businessAreaId: "area-1" };
+
+  it("lets vd, vice_vd and administrator report any area", () => {
+    assert.equal(authorizeDailyKpiReport({ role: "vd", businessAreaId: null }, kpi).ok, true);
+    assert.equal(
+      authorizeDailyKpiReport({ role: "vice_vd", businessAreaId: null }, kpi).ok,
+      true,
+    );
+    assert.equal(
+      authorizeDailyKpiReport({ role: "administrator", businessAreaId: null }, kpi).ok,
+      true,
+    );
+  });
+
+  it("scopes ao_chef to own area and denies lasbehorighet", () => {
+    assert.equal(
+      authorizeDailyKpiReport({ role: "ao_chef", businessAreaId: "area-1" }, kpi).ok,
+      true,
+    );
+    assert.equal(
+      authorizeDailyKpiReport({ role: "ao_chef", businessAreaId: "area-2" }, kpi).ok,
+      false,
+    );
+    assert.equal(
+      authorizeDailyKpiReport({ role: "lasbehorighet", businessAreaId: null }, kpi).ok,
+      false,
+    );
   });
 });

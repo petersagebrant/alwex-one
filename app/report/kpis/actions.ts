@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { isVdEquivalent } from "@/lib/auth/roles";
 import {
   requireOperationalWriter,
   requireProfile,
@@ -68,7 +69,7 @@ export async function loadVdAreaReportingAction(
   reportDate?: string,
 ): Promise<LoadVdAreaReportingResult> {
   const profile = await requireProfile();
-  if (profile.role !== "vd" && profile.role !== "administrator") {
+  if (!isVdEquivalent(profile.role) && profile.role !== "administrator") {
     return { ok: false, error: "Du saknar behörighet." };
   }
 
@@ -307,7 +308,7 @@ export async function reportMonthlyKpiAction(input: {
   }
   if (
     profile.role !== "ao_chef" &&
-    profile.role !== "vd" &&
+    !isVdEquivalent(profile.role) &&
     profile.role !== "administrator"
   ) {
     return { ok: false, error: "Du saknar behörighet." };
@@ -381,7 +382,7 @@ export async function reportMonthlyStatisticKpiAction(input: {
   }
   if (
     profile.role !== "ao_chef" &&
-    profile.role !== "vd" &&
+    !isVdEquivalent(profile.role) &&
     profile.role !== "administrator"
   ) {
     return { ok: false, error: "Du saknar behörighet." };
@@ -424,7 +425,7 @@ export async function loadMonthlyKpiValueAction(input: {
     return { ok: false, error: "KPI:n hittades inte." };
   }
   const mayRead =
-    profile.role === "vd" ||
+    isVdEquivalent(profile.role) ||
     profile.role === "administrator" ||
     (profile.role === "ao_chef" &&
       profile.businessAreaId === kpi.business_area_id);

@@ -1,4 +1,8 @@
-import { isAppRole, type AppRole } from "@/lib/auth/roles";
+import {
+  isAppRole,
+  roleRequiresBusinessArea,
+  type AppRole,
+} from "@/lib/auth/roles";
 import {
   isProtectedUserId,
   protectedUserMutationError,
@@ -66,8 +70,10 @@ function parseRoleAndArea(
     return { ok: false, error: "Ogiltig roll." };
   }
 
-  const areaRaw = asString(areaValue).trim();
-  if (roleRaw === "ao_chef") {
+  const areaRaw =
+    typeof areaValue === "string" ? areaValue.trim() : "";
+
+  if (roleRequiresBusinessArea(roleRaw)) {
     if (!areaRaw) {
       return {
         ok: false,

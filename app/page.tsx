@@ -27,6 +27,7 @@ import { getDashboardReportingContext } from "@/services/kpiReporting";
 import { countTargetKpiStatuses } from "@/lib/kpi/kind";
 import { isMonthlyRevenueVsBudgetKpi } from "@/lib/kpi/economics";
 import { countUnreportedTargetKpis } from "@/lib/kpi/reportedTargetKpis";
+import { isVdEquivalent } from "@/lib/auth/roles";
 import { getCurrentUser } from "@/lib/auth/require-user";
 import { fetchProfileByUserId } from "@/lib/supabase/profiles";
 import { formatDateTimeSv } from "@/lib/format/date";
@@ -70,11 +71,11 @@ export default async function Home({ searchParams }: HomeProps) {
     ? await fetchProfileByUserId(currentUser.id).catch(() => null)
     : null;
   const vdPrincipal =
-    currentUser && profileRow?.role === "vd"
+    currentUser && profileRow && isVdEquivalent(profileRow.role)
       ? {
           userId: currentUser.id,
           email: currentUser.email,
-          role: "vd" as const,
+          role: profileRow.role,
           scope: "organization" as const,
           businessAreaId: null,
         }

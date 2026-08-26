@@ -4,6 +4,7 @@ import {
   AiAccessError,
   assertAreaIdsInAiScope,
   assertRowsInAiScope,
+  requireVdPrincipal,
   resolveAiPrincipal,
 } from "./security";
 
@@ -17,6 +18,25 @@ describe("AI principal and scope", () => {
       businessAreaId: null,
     });
     assert.equal(principal.scope, "organization");
+    assert.equal(principal.role, "vd");
+  });
+
+  it("allows Vice VD with organization scope like VD", () => {
+    const principal = resolveAiPrincipal(user, {
+      id: user.id,
+      role: "vice_vd",
+      businessAreaId: null,
+    });
+    assert.equal(principal.scope, "organization");
+    assert.equal(principal.role, "vice_vd");
+    assert.doesNotThrow(() => requireVdPrincipal(principal));
+    assert.doesNotThrow(() =>
+      assertRowsInAiScope(
+        principal,
+        [{ businessAreaId: "any-area" }],
+        "test",
+      ),
+    );
   });
 
   it("allows AO only for the profile business area", () => {
@@ -74,5 +94,23 @@ describe("AI principal and scope", () => {
       assert.throws(() => resolveAiPrincipal(user, profile), AiAccessError);
     }
     assert.throws(() => resolveAiPrincipal(null, null), AiAccessError);
+  });
+
+  it("denies administrator org AI and briefing", () => {
+    assert.throws(
+      () =>
+        resolveAiPrincipal(user, {
+          id: user.id,
+          role: "administrator",
+          businessAreaId: null,
+        }),
+      AiAccessError,
+    );
+    const ao = resolveAiPrincipal(user, {
+      id: user.id,
+      role: "ao_chef",
+      businessAreaId: "area-a",
+    });
+    assert.throws(() => requireVdPrincipal(ao), AiAccessError);
   });
 });

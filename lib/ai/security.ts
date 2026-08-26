@@ -1,10 +1,11 @@
 import type { AppRole } from "../auth/roles";
+import { isVdEquivalent } from "../auth/roles";
 
 export type AiPrincipal =
   | {
       userId: string;
       email: string | null;
-      role: "vd";
+      role: "vd" | "vice_vd";
       scope: "organization";
       businessAreaId: null;
     }
@@ -36,11 +37,11 @@ export function resolveAiPrincipal(
   if (!user || !profile || profile.id !== user.id) {
     throw new AiAccessError();
   }
-  if (profile.role === "vd") {
+  if (isVdEquivalent(profile.role)) {
     return {
       userId: user.id,
       email: user.email,
-      role: "vd",
+      role: profile.role,
       scope: "organization",
       businessAreaId: null,
     };
@@ -59,9 +60,9 @@ export function resolveAiPrincipal(
 
 export function requireVdPrincipal(principal: AiPrincipal): asserts principal is Extract<
   AiPrincipal,
-  { role: "vd" }
+  { role: "vd" | "vice_vd" }
 > {
-  if (principal.role !== "vd") {
+  if (!isVdEquivalent(principal.role)) {
     throw new AiAccessError("VD Briefing är endast tillgänglig för VD.");
   }
 }
@@ -77,7 +78,7 @@ export function assertRowsInAiScope<T extends { businessAreaId: string }>(
   rows: readonly T[],
   label: string,
 ): void {
-  if (principal.role === "vd") return;
+  if (isVdEquivalent(principal.role)) return;
   if (rows.some((row) => row.businessAreaId !== principal.businessAreaId)) {
     throw new AiAccessError(`Säkerhetskontroll misslyckades för ${label}.`);
   }
@@ -88,7 +89,7 @@ export function assertAreaIdsInAiScope(
   areaIds: readonly (string | null)[],
   label: string,
 ): void {
-  if (principal.role === "vd") return;
+  if (isVdEquivalent(principal.role)) return;
   if (areaIds.some((id) => id !== principal.businessAreaId)) {
     throw new AiAccessError(`Säkerhetskontroll misslyckades för ${label}.`);
   }

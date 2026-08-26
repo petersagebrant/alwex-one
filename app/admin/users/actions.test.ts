@@ -110,4 +110,16 @@ describe("user admin server actions", () => {
     assert.doesNotMatch(ui, /createServiceRoleClient/);
     assert.doesNotMatch(ui, /SUPABASE_SERVICE_ROLE_KEY/);
   });
+
+  it("lists Vice VD in the invite dropdown and keeps Inget for non-AO-chef", () => {
+    const fields = read("components/admin/UserFormFields.tsx");
+    assert.match(fields, /APP_ROLES\.map/);
+    assert.match(fields, /roleRequiresBusinessArea/);
+    assert.match(fields, /setBusinessAreaId\(""\)/);
+    assert.match(fields, /Vice VD, VD och övriga roller ska ha Inget/);
+
+    const roles = read("lib/auth/roles.ts");
+    assert.match(roles, /"vice_vd"/);
+    assert.match(roles, /vice_vd: "Vice VD"/);
+  });
 });

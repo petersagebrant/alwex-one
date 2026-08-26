@@ -1,3 +1,4 @@
+import { isVdEquivalent } from "@/lib/auth/roles";
 import type { AuthProfile } from "@/lib/auth/require-user";
 import {
   fetchKpiHistoryByReportDate,
@@ -480,7 +481,7 @@ export async function getDashboardReportingContext(
     return { kind: "ao_chef", myReporting, orgStats: null };
   }
 
-  if (profile.role === "vd" || profile.role === "administrator") {
+  if (isVdEquivalent(profile.role) || profile.role === "administrator") {
     const orgStats = await getTodayOrgReportingStats();
     return { kind: "leadership", myReporting: null, orgStats };
   }

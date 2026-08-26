@@ -8,6 +8,7 @@ import { DailyKpiBatchReportForm } from "@/components/report/DailyKpiBatchReport
 import { MonthlyKpiReportSection } from "@/components/report/MonthlyKpiReportSection";
 import { VdKpiReportingView } from "@/components/report/VdKpiReportingView";
 import { InfoPanel, SectionHeader } from "@/components/ui";
+import { isVdEquivalent } from "@/lib/auth/roles";
 import { requireProfile } from "@/lib/auth/require-user";
 import { fetchBusinessAreas } from "@/lib/supabase/business-areas";
 import {
@@ -139,7 +140,7 @@ export default async function ReportKpisPage({
 
   const isAoChef = profile.role === "ao_chef";
   const isLeadership =
-    profile.role === "vd" || profile.role === "administrator";
+    isVdEquivalent(profile.role) || profile.role === "administrator";
 
   if (!isAoChef && !isLeadership) {
     redirect("/");

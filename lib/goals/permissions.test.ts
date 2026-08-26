@@ -8,6 +8,7 @@ const AREA_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 describe("canWriteGoals", () => {
   it("allows vd, administrator and ao_chef", () => {
     assert.equal(canWriteGoals("vd"), true);
+    assert.equal(canWriteGoals("vice_vd"), true);
     assert.equal(canWriteGoals("administrator"), true);
     assert.equal(canWriteGoals("ao_chef"), true);
   });
@@ -20,6 +21,7 @@ describe("canWriteGoals", () => {
 describe("canWriteGoalsForArea", () => {
   it("lets vd and administrator write every area", () => {
     assert.equal(canWriteGoalsForArea("vd", null, AREA_A), true);
+    assert.equal(canWriteGoalsForArea("vice_vd", null, AREA_A), true);
     assert.equal(canWriteGoalsForArea("administrator", AREA_B, AREA_A), true);
   });
 

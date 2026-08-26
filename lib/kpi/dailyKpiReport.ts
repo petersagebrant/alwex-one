@@ -1,3 +1,4 @@
+import { isAppRole, isVdEquivalent } from "@/lib/auth/roles";
 import { parseKpiCalcOperator } from "@/lib/kpi/calculated";
 import { computeKpiStatus } from "@/lib/kpi/computeStatus";
 import {
@@ -171,10 +172,13 @@ export function authorizeDailyKpiReport(
     }
     return { ok: true };
   }
-  if (profile.role !== "vd" && profile.role !== "administrator") {
-    return { ok: false, error: "Du saknar behörighet att rapportera KPI." };
+  if (
+    isAppRole(profile.role) &&
+    (isVdEquivalent(profile.role) || profile.role === "administrator")
+  ) {
+    return { ok: true };
   }
-  return { ok: true };
+  return { ok: false, error: "Du saknar behörighet att rapportera KPI." };
 }
 
 /**

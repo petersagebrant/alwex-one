@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  APP_ROLES,
   canAdministerUsers,
   canManageBusinessAreas,
+  canSetUserPassword,
   canWriteDecisions,
   canWriteOperational,
 } from "./roles";
@@ -28,5 +30,25 @@ describe("canAdministerUsers", () => {
     assert.equal(canWriteDecisions("ao_chef"), false);
     assert.equal(canManageBusinessAreas("ao_chef"), false);
     assert.equal(canWriteOperational("ao_chef"), true);
+  });
+});
+
+describe("canSetUserPassword", () => {
+  it("allows only vd and vice_vd", () => {
+    assert.equal(canSetUserPassword("vd"), true);
+    assert.equal(canSetUserPassword("vice_vd"), true);
+    assert.equal(canSetUserPassword("administrator"), false);
+    assert.equal(canSetUserPassword("ao_chef"), false);
+    assert.equal(canSetUserPassword("lasbehorighet"), false);
+  });
+
+  it("is narrower than canAdministerUsers so administrator can invite but not set passwords", () => {
+    assert.equal(canAdministerUsers("administrator"), true);
+    assert.equal(canSetUserPassword("administrator"), false);
+    assert.equal(canSetUserPassword("vd"), canAdministerUsers("vd"));
+  });
+
+  it("does not expose vice_vd in the invite role catalog", () => {
+    assert.equal((APP_ROLES as readonly string[]).includes("vice_vd"), false);
   });
 });

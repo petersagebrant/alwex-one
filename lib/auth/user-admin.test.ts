@@ -8,6 +8,7 @@ import {
 } from "./protected-users";
 import {
   assertActorMayChangeTarget,
+  assertActorMaySetPassword,
   parseInviteUserInput,
   parseUpdateUserInput,
 } from "./user-admin";
@@ -77,6 +78,14 @@ describe("invite payload validation", () => {
       businessAreaId: "",
     });
     assert.equal(admin.ok, true);
+
+    const viceVd = parseInviteUserInput({
+      displayName: "Vice VD",
+      email: "vice@alwex.se",
+      role: "vice_vd",
+      businessAreaId: "",
+    });
+    assert.equal(viceVd.ok, false);
   });
 
   it("rejects unknown roles including empty", () => {
@@ -178,5 +187,29 @@ describe("protected system UUIDs", () => {
       disabling: false,
     });
     assert.equal(demoteAo.ok, false);
+  });
+});
+
+describe("assertActorMaySetPassword", () => {
+  it("blocks setting your own password", () => {
+    const self = assertActorMaySetPassword({
+      actorId: ACTOR_ID,
+      targetId: ACTOR_ID,
+    });
+    assert.equal(self.ok, false);
+  });
+
+  it("allows VD to set another user's password, including protected accounts", () => {
+    const other = assertActorMaySetPassword({
+      actorId: ACTOR_ID,
+      targetId: OTHER_ID,
+    });
+    assert.equal(other.ok, true);
+
+    const protectedVd = assertActorMaySetPassword({
+      actorId: ACTOR_ID,
+      targetId: PROTECTED_VD_USER_ID,
+    });
+    assert.equal(protectedVd.ok, true);
   });
 });

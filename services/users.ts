@@ -2,14 +2,18 @@ import "server-only";
 
 import { headers } from "next/headers";
 import { isProtectedUserId } from "@/lib/auth/protected-users";
+import { generateTemporaryPassword } from "@/lib/auth/temporary-password";
 import {
   assertActorMayChangeTarget,
+  assertActorMaySetPassword,
   parseInviteUserInput,
   parseUpdateUserInput,
   type InviteUserInput,
 } from "@/lib/auth/user-admin";
 import { APP_ROLE_LABELS, type AppRole } from "@/lib/auth/roles";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
+import { recordAuditLog } from "@/services/auditLog";
+import { resolveActorName } from "@/services/changeHistory";
 import {
   fetchAllProfilesForAdmin,
   insertProfile,
@@ -337,6 +341,52 @@ export async function sendUserAccessLink(
   }
 
   await sendInviteOrRecoveryLink(authUser);
+}
+
+export async function setUserTemporaryPassword(
+  actorId: string,
+  userId: string,
+): Promise<{ password: string; email: string | null }> {
+  const allowed = assertActorMaySetPassword({ actorId, targetId: userId });
+  if (!allowed.ok) {
+    throw new Error(allowed.error);
+  }
+
+  const profile = await requireExistingProfile(userId);
+  const authUsers = await listAuthUsers();
+  const authUser = authUsers.find((user) => user.id === userId);
+  if (!authUser) {
+    throw new Error("Auth-kontot hittades inte.");
+  }
+
+  const password = generateTemporaryPassword();
+  const admin = createServiceRoleClient();
+  const { error } = await admin.auth.admin.updateUserById(userId, {
+    password,
+  });
+  if (error) {
+    throw new Error(`Kunde inte ange nytt lösenord: ${error.message}`);
+  }
+
+  const actorName = await resolveActorName();
+  const targetEmail = authUser.email;
+  await recordAuditLog({
+    entityType: "user",
+    entityId: userId,
+    action: "password_reset",
+    description: "Administrativ lösenordsåterställning",
+    actorName,
+    businessAreaId: profile.business_area_id,
+    changes: {
+      fields: [
+        { field: "actor_id", from: null, to: actorId },
+        { field: "target_user_id", from: null, to: userId },
+        { field: "target_email", from: null, to: targetEmail },
+      ],
+    },
+  });
+
+  return { password, email: targetEmail };
 }
 
 async function requireExistingProfile(userId: string): Promise<ProfileRow> {

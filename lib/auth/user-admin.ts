@@ -178,3 +178,17 @@ export function assertActorMayChangeTarget(options: {
 
   return { ok: true, value: true };
 }
+
+export function assertActorMaySetPassword(options: {
+  actorId: string;
+  targetId: string;
+}): ParseResult<true> {
+  if (options.actorId === options.targetId) {
+    return {
+      ok: false,
+      error: "Du kan inte ange nytt lösenord för ditt eget konto.",
+    };
+  }
+
+  return { ok: true, value: true };
+}

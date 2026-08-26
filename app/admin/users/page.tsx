@@ -1,9 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AppHeader } from "@/components/layout/AppHeader";
+import { SetUserPasswordControls } from "@/components/admin/SetUserPasswordControls";
 import { StatusBadge } from "@/components/ui";
 import { requireUserAdministrator } from "@/lib/auth/require-user";
-import { APP_ROLES, APP_ROLE_LABELS } from "@/lib/auth/roles";
+import {
+  APP_ROLES,
+  APP_ROLE_LABELS,
+  canSetUserPassword,
+} from "@/lib/auth/roles";
 import { getBusinessAreaOptions } from "@/services/businessAreas";
 import { getAdminUsers, type AdminUserListItem } from "@/services/users";
 import {
@@ -165,6 +170,7 @@ export default async function AdminUsersPage({
   const areas = await getBusinessAreaOptions();
   const areaNames = new Map(areas.map((area) => [area.id, area.name]));
   const users = await getAdminUsers({ actorId: actor.id, areaNames });
+  const canSetPassword = canSetUserPassword(actor.role);
   const editingUser = editId
     ? (users.find((user) => user.id === editId) ?? null)
     : null;
@@ -355,6 +361,14 @@ export default async function AdminUsersPage({
                             : "Skicka lösenordsåterställning"}
                         </button>
                       </form>
+                    ) : null}
+
+                    {canSetPassword && !user.isSelf ? (
+                      <SetUserPasswordControls
+                        userId={user.id}
+                        displayName={user.displayName}
+                        email={user.email}
+                      />
                     ) : null}
 
                     {!user.isSelf && !user.protected ? (

@@ -48,6 +48,20 @@ describe("deny redirect", () => {
     assert.doesNotMatch(fnBody, /\/login/);
   });
 
+  it("gates password reset with canSetUserPassword and deny(), not canAdministerUsers", () => {
+    const source = readFileSync(
+      join(process.cwd(), "lib/auth/require-user.ts"),
+      "utf8",
+    );
+    const fnStart = source.indexOf("async function requireCanSetUserPassword");
+    assert.ok(fnStart >= 0);
+    const fnBody = source.slice(fnStart, fnStart + 360);
+    assert.match(fnBody, /canSetUserPassword\(profile\.role\)/);
+    assert.match(fnBody, /deny\(/);
+    assert.doesNotMatch(fnBody, /canAdministerUsers/);
+    assert.doesNotMatch(fnBody, /\/login/);
+  });
+
   it("shows ?error= on home for signed-in users", () => {
     const home = readFileSync(join(process.cwd(), "app/page.tsx"), "utf8");
     const aoChef = readFileSync(

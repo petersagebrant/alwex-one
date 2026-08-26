@@ -1,11 +1,15 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { requireUserAdministrator } from "@/lib/auth/require-user";
+import {
+  requireCanSetUserPassword,
+  requireUserAdministrator,
+} from "@/lib/auth/require-user";
 import {
   inviteUser,
   sendUserAccessLink,
   setUserDisabled,
+  setUserTemporaryPassword,
   updateUser,
 } from "@/services/users";
 
@@ -94,4 +98,27 @@ export async function sendUserAccessLinkAction(formData: FormData) {
   }
 
   redirect(usersPath({ message: "Ny länk skickad." }));
+}
+
+export type SetUserPasswordResult =
+  | { ok: true; password: string; email: string | null }
+  | { ok: false; error: string };
+
+export async function setUserPasswordAction(
+  userId: string,
+): Promise<SetUserPasswordResult> {
+  const actor = await requireCanSetUserPassword();
+  const id = userId.trim();
+  if (!id) {
+    return { ok: false, error: "Saknar användar-id." };
+  }
+
+  try {
+    const result = await setUserTemporaryPassword(actor.id, id);
+    return { ok: true, password: result.password, email: result.email };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Kunde inte ange nytt lösenord.";
+    return { ok: false, error: message };
+  }
 }

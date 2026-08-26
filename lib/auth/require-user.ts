@@ -6,6 +6,7 @@ import {
 import {
   canAdministerUsers,
   canManageBusinessAreas,
+  canSetUserPassword,
   canWriteDecisions,
   canWriteOperational,
   type AppRole,
@@ -119,6 +120,15 @@ export async function requireUserAdministrator(): Promise<AuthProfile> {
   const profile = await requireProfile();
   if (!canAdministerUsers(profile.role)) {
     deny("Du saknar behörighet att administrera användare.");
+  }
+  return profile;
+}
+
+/** Ange nytt lösenord (endast VD / Vice VD — inte administratör). */
+export async function requireCanSetUserPassword(): Promise<AuthProfile> {
+  const profile = await requireProfile();
+  if (!canSetUserPassword(profile.role)) {
+    deny("Du saknar behörighet att ange nytt lösenord.");
   }
   return profile;
 }

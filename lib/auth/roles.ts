@@ -38,6 +38,11 @@ export function canAdministerUsers(role: AppRole): boolean {
   return role === "vd" || role === "administrator";
 }
 
+/** VD / Vice VD — ange tillfälligt lösenord. Inte administratör eller AO-chef. */
+export function canSetUserPassword(role: AppRole | "vice_vd"): boolean {
+  return role === "vd" || role === "vice_vd";
+}
+
 export function canReadOnly(role: AppRole): boolean {
   return role === "lasbehorighet";
 }

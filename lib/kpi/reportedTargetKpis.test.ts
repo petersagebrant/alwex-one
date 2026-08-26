@@ -127,6 +127,17 @@ describe("briefing TARGET reporting helpers", () => {
     assert.equal(briefingTargetStatusLabel(kpi), "Gul");
   });
 
+  it("does not treat Omsättning mot budget as an unreported TARGET light", () => {
+    const kpi = {
+      kind: "TARGET" as const,
+      status: "Gul" as const,
+      currentValue: null,
+      calcOperator: null,
+      name: "Omsättning mot budget",
+    };
+    assert.equal(isUnreportedTargetKpi(kpi), false);
+  });
+
   it("rejects system-computed TARGET when operands are missing", () => {
     const kpi = {
       id: "ratio",

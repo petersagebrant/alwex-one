@@ -11,7 +11,7 @@ import { canManageBusinessAreas } from "@/lib/auth/roles";
 import { isCalculatedKpi, isNonTargetKpi, isStatisticKpi } from "@/lib/kpi/kind";
 import {
   formatMonthlyEconomicSummary,
-  isMonthlyEconomicResultKpi,
+  isMonthlyEconomicKpi,
   monthlyResultDisplayName,
 } from "@/lib/kpi/economics";
 import { getBusinessAreaOptions } from "@/services/businessAreas";
@@ -255,7 +255,7 @@ function KpiAdminListSection({
                     className="min-w-0 flex-1 transition hover:opacity-90"
                   >
                     <p className="font-medium text-neutral-900">
-                      {isMonthlyEconomicResultKpi(kpi)
+                      {isMonthlyEconomicKpi(kpi)
                         ? monthlyResultDisplayName(kpi.name, kpi.latestPeriodMonth)
                         : kpi.name}
                       {archived ? (
@@ -272,7 +272,7 @@ function KpiAdminListSection({
                         : isCalculatedKpi(kpi)
                           ? " · Typ: Beräknad"
                           : null}
-                      {isMonthlyEconomicResultKpi(kpi)
+                      {isMonthlyEconomicKpi(kpi)
                         ? ` · ${formatMonthlyEconomicSummary({
                             actualValue: kpi.latestActualValue,
                             budgetValue: kpi.latestBudgetValue,
@@ -280,12 +280,13 @@ function KpiAdminListSection({
                             unit: kpi.unit,
                             periodMonth: kpi.latestPeriodMonth,
                             status: kpi.isPeriodPending ? null : kpi.status,
+                            kpiName: kpi.name,
                           })}`
                         : kpi.currentValue
                         ? ` · ${kpi.currentValue}${kpi.unit ? ` ${kpi.unit}` : ""}`
                         : null}
                       {!isNonTargetKpi(kpi) &&
-                      !isMonthlyEconomicResultKpi(kpi) &&
+                      !isMonthlyEconomicKpi(kpi) &&
                       kpi.targetValue
                         ? ` · Mål ${kpi.targetValue}${kpi.unit ? ` ${kpi.unit}` : ""}`
                         : null}

@@ -45,7 +45,8 @@ import { parseNumeric } from "@/lib/kpi/parseNumeric";
 import {
   buildMonthlyResultState,
   formatMonthlyEconomicSummary,
-  isMonthlyEconomicResultKpi,
+  isMonthlyEconomicKpi,
+  isMonthlyRevenueVsBudgetKpi,
   monthlyResultDisplayName,
 } from "@/lib/kpi/economics";
 import { buildMonthlyResultAiContext } from "@/lib/kpi/monthlyResultPresentation";
@@ -77,7 +78,7 @@ Om samband syns men orsaken inte är säker, skriv t.ex.:
 "Tillgänglig data visar ett samband mellan X och Y, men fastställer inte den bakomliggande orsaken."
 Om orsaken saknas helt: "Orsaken framgår inte av tillgänglig data."
 Namnge ansvarig när namn finns i context.
-Skilj alltid aktuell omsättningsutveckling från senaste fastställda resultat.
+Skilj alltid månadens omsättning mot budget från månadens resultat mot budget; använd samma resultatmånad för båda.
 Om pendingClosing är true: skriv att perioden inväntar bokslut, inferera inte aktuell lönsamhet och gör den inte till en avvikelse.
 För monthlyEconomic: ange alltid resultMonth, actualResult, budgetResult, deviation och status med tydliga svenska etiketter.
 Deviation är avvikelsen, aldrig det faktiska resultatet. targetValue null betyder att KPI:n inte ska beskrivas som "mot mål 0".
@@ -108,7 +109,7 @@ Om samband syns men orsaken inte är säker, skriv t.ex.:
 Om orsaken saknas helt: "Orsaken framgår inte av tillgänglig data."
 Namnge ansvarig när namn finns i context.
 Använd analysisInsights om de finns — lägg inte till nya orsaker.
-Skilj aktuell omsättningsutveckling från senaste fastställda resultat. PendingClosing är neutralt och får aldrig användas som negativ signal eller som belägg för aktuell lönsamhet.
+Skilj månadens omsättning mot budget från månadens resultat mot budget; använd samma resultatmånad. PendingClosing är neutralt och får aldrig användas som negativ signal eller som belägg för aktuell lönsamhet.
 För monthlyEconomic: ange alltid resultatmånad, faktiskt resultat, budgeterat resultat, avvikelse och status. Avvikelsen är aldrig det faktiska resultatet och mål 0 får inte nämnas.
 
 Struktur (markdown) — använd exakt dessa rubriker:
@@ -400,7 +401,9 @@ export async function buildAssistantContext(
   const dateLabel = formatDateLabel(date);
 
   const kpiCounts = countTargetKpiStatuses(
-    allKpis.filter((kpi) => !kpi.isPeriodPending),
+    allKpis.filter(
+      (kpi) => !kpi.isPeriodPending && !isMonthlyRevenueVsBudgetKpi(kpi),
+    ),
   );
   const goalCounts = countStatuses(allGoals.map((goal) => goal.status));
 
@@ -2128,7 +2131,9 @@ function filterContextToArea(
       ...full.summary,
       areaCount: 1,
       kpiCounts: countTargetKpiStatuses(
-        kpis.filter((kpi) => !kpi.isPeriodPending),
+        kpis.filter(
+          (kpi) => !kpi.isPeriodPending && !isMonthlyRevenueVsBudgetKpi(kpi),
+        ),
       ),
       goalCounts: countStatuses(goals.map((goal) => goal.status)),
       delayedActivityCount: delayedFirst.filter(isDelayedActivity).length,
@@ -2161,7 +2166,7 @@ function slimBroadContext(full: AssistantContext): AssistantContext {
     (full.kpis ?? []).filter(isVdFollowUpKpi),
   ).slice(0, 12);
   const monthlyResults = (full.kpis ?? []).filter(
-    (kpi) => isMonthlyEconomicResultKpi(kpi) && !kpi.isPeriodPending,
+    (kpi) => isMonthlyEconomicKpi(kpi) && !kpi.isPeriodPending,
   );
   const broadKpis = [...followKpis];
   for (const kpi of monthlyResults) {
@@ -2244,7 +2249,17 @@ function toCompactOpenAiContext(
         (context.kpis ?? []).map((item) => [item.id, item]),
       );
       return (context.kpis ?? []).map((kpi) => {
-      const monthlyEconomic = buildMonthlyResultAiContext(kpi);
+      const siblingRevenue = (context.kpis ?? []).find(
+        (item) =>
+          item.businessAreaId === kpi.businessAreaId &&
+          item.id !== kpi.id &&
+          isMonthlyRevenueVsBudgetKpi(item),
+      );
+      const monthlyEconomic = buildMonthlyResultAiContext({
+        ...kpi,
+        revenueActualValue: siblingRevenue?.latestActualValue,
+        revenueBudgetValue: siblingRevenue?.latestBudgetValue,
+      });
       const usable = isUsableBriefingTargetKpi(kpi, kpisById);
       return {
         name: kpi.name,
@@ -2260,10 +2275,7 @@ function toCompactOpenAiContext(
         unit: kpi.unit,
         trend: usable ? kpi.trend : null,
         reported: usable,
-        semanticRole:
-          kpi.name === "Omsättning månad hittills"
-            ? "current_month_to_date_revenue"
-            : monthlyEconomic?.semanticRole,
+        semanticRole: monthlyEconomic?.semanticRole,
         monthlyEconomic: monthlyEconomic ?? undefined,
       };
       });
@@ -2451,7 +2463,7 @@ Regler:
 5. Inga upprepningar.
 6. Använd exakt rubrikerna nedan (inklusive emoji).
 7. Håll maxgränserna strikt.
-8. Skilj aktuell dags-/MTD-omsättning från senaste fastställda månadsresultat.
+8. Använd monthlyEconomic för samma resultatmånad: omsättning och resultat mot budget tillsammans. Använd inte dagsomsättning eller månad-hittills-omsättning.
 9. För monthlyEconomic, skriv uttryckligen resultatmånad, faktiskt resultat, budgeterat resultat, avvikelse och status. Avvikelse är aldrig faktiskt resultat. Skriv aldrig mål 0 för denna KPI.
 10. TARGET utan rapporterat currentValue är "Ej rapporterat", aldrig Grön/Gul/Röd, även om lagrad status är Gul.
 11. Använd endast faktiskt rapporterade TARGET-KPI:er för avvikelse, risk, trend och rekommendation. Beräknad KPI utan komplett underlag används inte.
@@ -2495,7 +2507,7 @@ const VD_BRIEFING_OPENAI_MODEL = "gpt-5";
 const VD_BRIEFING_MAX_COMPLETION_TOKENS = 1200;
 const VD_BRIEFING_REASONING_EFFORT = "minimal" as const;
 /** Bump when briefing format/payload changes so stale AI cache is not shown. */
-const VD_BRIEFING_CACHE_VERSION = 6;
+const VD_BRIEFING_CACHE_VERSION = 7;
 
 const vdBriefingCache = new ScopedSingleflightCache<string>();
 
@@ -2829,11 +2841,12 @@ function formatKpiFact(kpi: KPIListItem): string {
           unit: kpi.unit,
           periodMonth: kpi.latestPeriodMonth,
           status: kpi.status,
+          kpiName: kpi.name,
         })}.`
       : "";
     return `${monthlyResultDisplayName(kpi.name, kpi.expectedPeriodMonth)} inväntar bokslut och förväntas omkring ${state.expectedFinalizationLabel}.${latest} Detta säger inget om aktuell lönsamhet`;
   }
-  if (isMonthlyEconomicResultKpi(kpi) && kpi.latestPeriodMonth) {
+  if (isMonthlyEconomicKpi(kpi) && kpi.latestPeriodMonth) {
     return `${formatMonthlyEconomicSummary({
       actualValue: kpi.latestActualValue,
       budgetValue: kpi.latestBudgetValue,
@@ -2841,6 +2854,7 @@ function formatKpiFact(kpi: KPIListItem): string {
       unit: kpi.unit,
       periodMonth: kpi.latestPeriodMonth,
       status: kpi.status,
+      kpiName: kpi.name,
     })}`;
   }
   const current = [kpi.currentValue, kpi.unit].filter(Boolean).join(" ");
@@ -3286,7 +3300,7 @@ function answerOpenDecisions(context: AssistantContext): string {
 }
 
 function formatKpiValueAgainstTarget(kpi: KPIListItem): string {
-  if (isMonthlyEconomicResultKpi(kpi)) {
+  if (isMonthlyEconomicKpi(kpi)) {
     return formatKpiFact(kpi);
   }
   const current = [kpi.currentValue, kpi.unit].filter(Boolean).join(" ");

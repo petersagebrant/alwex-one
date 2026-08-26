@@ -7,7 +7,7 @@ import {
 } from "@/lib/kpi/kind";
 import {
   formatMonthlyEconomicSummary,
-  isMonthlyEconomicResultKpi,
+  isMonthlyEconomicKpi,
   monthlyResultDisplayName,
 } from "@/lib/kpi/economics";
 import { fetchBusinessAreaById } from "@/lib/supabase/business-areas";
@@ -466,7 +466,7 @@ export async function getAoChefDashboardData(
     reporting,
     kpis: kpis.map((kpi) => ({
       id: kpi.id,
-      name: isMonthlyEconomicResultKpi(kpi)
+      name: isMonthlyEconomicKpi(kpi)
         ? monthlyResultDisplayName(
             kpi.name,
             kpi.isPeriodPending
@@ -478,7 +478,7 @@ export async function getAoChefDashboardData(
       calcOperator: kpi.calcOperator,
       status: parseKpiStoredStatus(kpi.status),
       currentValue:
-        isMonthlyEconomicResultKpi(kpi)
+        isMonthlyEconomicKpi(kpi)
           ? formatMonthlyEconomicSummary({
               actualValue: kpi.isPeriodPending ? null : kpi.latestActualValue,
               budgetValue: kpi.isPeriodPending ? null : kpi.latestBudgetValue,
@@ -488,11 +488,12 @@ export async function getAoChefDashboardData(
                 ? kpi.expectedPeriodMonth
                 : kpi.latestPeriodMonth,
               status: kpi.isPeriodPending ? null : kpi.status,
+              kpiName: kpi.name,
             })
           : kpi.currentValue,
-      targetValue: isMonthlyEconomicResultKpi(kpi) ? null : kpi.targetValue,
-      unit: isMonthlyEconomicResultKpi(kpi) ? null : kpi.unit,
-      isMonthlyEconomicResult: isMonthlyEconomicResultKpi(kpi),
+      targetValue: isMonthlyEconomicKpi(kpi) ? null : kpi.targetValue,
+      unit: isMonthlyEconomicKpi(kpi) ? null : kpi.unit,
+      isMonthlyEconomicResult: isMonthlyEconomicKpi(kpi),
       isPeriodPending: kpi.isPeriodPending ?? false,
       href: `/kpis/${kpi.id}`,
     })),

@@ -4,6 +4,7 @@ import {
   SectionHeader,
   StatusBadge,
 } from "@/components/ui";
+import { MonthlyEconomicPictureView } from "@/components/kpis/MonthlyEconomicPictureView";
 import { BeraknadTypeBadge } from "@/components/kpis/BeraknadTypeBadge";
 import { ReportingStatusBadge } from "@/components/kpis/ReportingStatusBadge";
 import { formatKpiDisplayValue } from "@/lib/format/kpi";
@@ -12,9 +13,14 @@ import { computeAreaOperationalStatus } from "@/lib/kpi/areaOperationalStatus";
 import {
   formatExpectedFinalizationSv,
   formatPeriodMonthSv,
+  isMonthlyEconomicKpi,
   isMonthlyEconomicResultKpi,
+  isMonthlyRevenueVsBudgetKpi,
 } from "@/lib/kpi/economics";
-import { buildMonthlyResultPresentation } from "@/lib/kpi/monthlyResultPresentation";
+import {
+  buildMonthlyEconomicPicture,
+  buildMonthlyResultPresentation,
+} from "@/lib/kpi/monthlyResultPresentation";
 import { resolveKpiStatusPresentation } from "@/lib/kpi/statusPresentation";
 import type {
   KpiOverviewAreaSection,
@@ -94,7 +100,13 @@ function monthlyResultPeriod(item: KpiOverviewDisplayItem): string | null {
   );
 }
 
-function KeyKpiRows({ items }: { items: KpiOverviewDisplayItem[] }) {
+function KeyKpiRows({
+  items,
+  allKpis,
+}: {
+  items: KpiOverviewDisplayItem[];
+  allKpis: KpiOverviewDisplayItem[];
+}) {
   if (items.length === 0) {
     return (
       <p className="text-sm text-slate-500">Inga nyckel-KPI:er att visa.</p>
@@ -111,7 +123,7 @@ function KeyKpiRows({ items }: { items: KpiOverviewDisplayItem[] }) {
           >
             <div className="min-w-0 flex-1">
               <p className="font-medium text-slate-900 group-hover:underline">
-                {isMonthlyEconomicResultKpi(item.kpi)
+                {isMonthlyEconomicKpi(item.kpi)
                   ? `${item.kpi.name}${
                       monthlyResultPeriod(item)
                         ? ` – ${formatPeriodMonthSv(monthlyResultPeriod(item)!)}`
@@ -120,6 +132,15 @@ function KeyKpiRows({ items }: { items: KpiOverviewDisplayItem[] }) {
                   : item.kpi.name}
               </p>
               {isMonthlyEconomicResultKpi(item.kpi) ? (
+                <CompactEconomicPicture
+                  item={item}
+                  revenueKpi={
+                    allKpis.find((row) =>
+                      isMonthlyRevenueVsBudgetKpi(row.kpi),
+                    )?.kpi ?? null
+                  }
+                />
+              ) : isMonthlyEconomicKpi(item.kpi) ? (
                 <MonthlyResultValues item={item} />
               ) : (
                 <p className="mt-0.5 text-base font-semibold tabular-nums text-slate-900">
@@ -156,6 +177,45 @@ function KeyKpiRows({ items }: { items: KpiOverviewDisplayItem[] }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+function CompactEconomicPicture({
+  item,
+  revenueKpi,
+}: {
+  item: KpiOverviewDisplayItem;
+  revenueKpi: KpiOverviewDisplayItem["kpi"] | null;
+}) {
+  const periodMonth = monthlyResultPeriod(item);
+  if (!periodMonth) {
+    return <p className="mt-1 text-sm text-slate-500">Inväntar bokslut</p>;
+  }
+  const picture = buildMonthlyEconomicPicture({
+    periodMonth,
+    unit: item.kpi.unit,
+    result: {
+      actualValue: item.kpi.latestActualValue,
+      budgetValue: item.kpi.latestBudgetValue,
+      status: item.kpi.status,
+      isReported: !item.kpi.isPeriodPending,
+    },
+    revenue:
+      revenueKpi &&
+      !revenueKpi.isPeriodPending &&
+      revenueKpi.latestPeriodMonth === periodMonth
+        ? {
+            actualValue: revenueKpi.latestActualValue,
+            budgetValue: revenueKpi.latestBudgetValue,
+            status: revenueKpi.status,
+            isReported: true,
+          }
+        : null,
+  });
+  return (
+    <div className="mt-1">
+      <MonthlyEconomicPictureView picture={picture} variant="compact" />
+    </div>
   );
 }
 
@@ -253,7 +313,7 @@ function AreaOverviewCard({
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
           Nyckel-KPI:er
         </p>
-        <KeyKpiRows items={section.keyKpis} />
+        <KeyKpiRows items={section.keyKpis} allKpis={section.allKpis} />
       </div>
 
       {areaHref ? (

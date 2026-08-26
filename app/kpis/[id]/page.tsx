@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppHeader } from "@/components/layout/AppHeader";
+import { MonthlyEconomicMonthPicker } from "@/components/kpis/MonthlyEconomicMonthPicker";
+import { MonthlyEconomicPictureView } from "@/components/kpis/MonthlyEconomicPictureView";
 import { KpiHistoryChart } from "@/components/kpis/KpiHistoryChart";
 import { BeraknadTypeBadge } from "@/components/kpis/BeraknadTypeBadge";
 import { SjukfranvaroAreasSection } from "@/components/kpis/SjukfranvaroAreasSection";
@@ -21,9 +23,16 @@ import {
   formatExpectedFinalizationSv,
   formatMonthlyEconomicSummary,
   formatPeriodMonthSv,
+  isMonthlyEconomicKpi,
   isMonthlyEconomicResultKpi,
+  isMonthlyRevenueVsBudgetKpi,
+  monthlyEconomicOperandLabels,
+  normalizePeriodMonth,
 } from "@/lib/kpi/economics";
-import { buildMonthlyResultPresentation } from "@/lib/kpi/monthlyResultPresentation";
+import {
+  buildMonthlyEconomicPicture,
+  buildMonthlyResultPresentation,
+} from "@/lib/kpi/monthlyResultPresentation";
 import {
   isCalculatedKpi,
   isNonTargetKpi,
@@ -35,12 +44,13 @@ import {
 import { resolveKpiTrend } from "@/lib/kpi/resolveTrend";
 import { formatSjukfranvaroVdCompletenessLabel } from "@/lib/kpi/sjukfranvaroCompletenessLabel";
 import { fetchBusinessAreaById } from "@/lib/supabase/business-areas";
-import { getKPIById, isKpiArchived } from "@/services/kpis";
+import { getKPIById, getKPIsByBusinessArea, isKpiArchived } from "@/services/kpis";
 import { getKPIHistory } from "@/services/kpiHistory";
 import { getSjukfranvaroComparison } from "@/services/sjukfranvaro";
 
 type KpiVdDetailPageProps = {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<{ month?: string | string[] }>;
 };
 
 export async function generateMetadata({
@@ -58,6 +68,19 @@ export async function generateMetadata({
   };
 }
 
+function firstParam(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function parseMonthParam(value: string | undefined): string | null {
+  if (!value) return null;
+  try {
+    return normalizePeriodMonth(value);
+  } catch {
+    return null;
+  }
+}
+
 function formatValue(value: string | null, unit: string | null): string {
   if (!value) {
     return "—";
@@ -68,8 +91,10 @@ function formatValue(value: string | null, unit: string | null): string {
 /** Read-only VD KPI detail with history and chart. */
 export default async function KpiVdDetailPage({
   params,
+  searchParams,
 }: KpiVdDetailPageProps) {
   const { id } = await params;
+  const query = (await searchParams) ?? {};
 
   const kpi = await getKPIById(id).catch(() => null);
   if (!kpi) {
@@ -78,24 +103,84 @@ export default async function KpiVdDetailPage({
 
   const archived = isKpiArchived(kpi);
   const showAoComparison = isWeightedRatioPercentKpi(kpi);
-  const [history, area, sjukfranvaroComparison] = await Promise.all([
+  const isMonthlyEconomic = isMonthlyEconomicKpi(kpi);
+  const isMonthlyResult = isMonthlyEconomicResultKpi(kpi);
+  const [history, area, sjukfranvaroComparison, areaKpis] = await Promise.all([
     getKPIHistory(kpi.id),
     fetchBusinessAreaById(kpi.businessAreaId).catch(() => null),
     showAoComparison
       ? getSjukfranvaroComparison({ companyKpiId: kpi.id })
       : Promise.resolve(null),
+    isMonthlyEconomic
+      ? getKPIsByBusinessArea(kpi.businessAreaId).catch(() => [])
+      : Promise.resolve([]),
   ]);
+  const resultKpi =
+    areaKpis.find((item) => isMonthlyEconomicResultKpi(item)) ?? null;
+  const revenueKpi =
+    areaKpis.find((item) => isMonthlyRevenueVsBudgetKpi(item)) ?? null;
+  const siblingId = isMonthlyResult ? revenueKpi?.id : resultKpi?.id;
+  const siblingHistory =
+    siblingId && siblingId !== kpi.id
+      ? await getKPIHistory(siblingId).catch(() => [])
+      : [];
+  const resultHistory = isMonthlyResult ? history : siblingHistory;
+  const revenueHistory = isMonthlyResult ? siblingHistory : history;
   const historyOldestFirst = [...history].sort(compareHistoryByCalendarDate);
   const historyNewestFirst = [...historyOldestFirst].reverse();
-  const isMonthlyEconomic = isMonthlyEconomicResultKpi(kpi);
   const isMonthlyStatistic =
     isStatisticKpi(kpi) && kpi.reportingFrequency === "MONTHLY";
-  const monthlyPeriodMonth =
+  const selectedPeriodMonth =
+    parseMonthParam(firstParam(query.month)) ??
     (kpi.isPeriodPending ? kpi.expectedPeriodMonth : kpi.latestPeriodMonth) ??
     kpi.latestPeriodMonth ??
     kpi.expectedPeriodMonth;
+  const selectedResultEntry = selectedPeriodMonth
+    ? resultHistory.find((entry) => entry.periodMonth === selectedPeriodMonth) ??
+      null
+    : null;
+  const selectedRevenueEntry = selectedPeriodMonth
+    ? revenueHistory.find((entry) => entry.periodMonth === selectedPeriodMonth) ??
+      null
+    : null;
+  const economicPicture =
+    isMonthlyEconomic && selectedPeriodMonth
+      ? buildMonthlyEconomicPicture({
+          periodMonth: selectedPeriodMonth,
+          unit: kpi.unit,
+          result: {
+            actualValue: selectedResultEntry?.actualValue ?? null,
+            budgetValue: selectedResultEntry?.budgetValue ?? null,
+            status: selectedResultEntry?.status ?? null,
+            isReported: Boolean(
+              selectedResultEntry?.actualValue && selectedResultEntry?.budgetValue,
+            ),
+          },
+          revenue: {
+            actualValue: selectedRevenueEntry?.actualValue ?? null,
+            budgetValue: selectedRevenueEntry?.budgetValue ?? null,
+            status: selectedRevenueEntry?.status ?? null,
+            isReported: Boolean(
+              selectedRevenueEntry?.actualValue &&
+                selectedRevenueEntry?.budgetValue,
+            ),
+          },
+          resultHistory: resultHistory.map((entry) => ({
+            periodMonth: entry.periodMonth,
+            actualValue: entry.actualValue,
+            budgetValue: entry.budgetValue,
+          })),
+          revenueHistory: revenueHistory.map((entry) => ({
+            periodMonth: entry.periodMonth,
+            actualValue: entry.actualValue,
+            budgetValue: entry.budgetValue,
+          })),
+          resultHref: resultKpi ? `/kpis/${resultKpi.id}` : null,
+        })
+      : null;
+  const monthlyPeriodMonth = selectedPeriodMonth;
   const monthlyPresentation =
-    isMonthlyEconomic && monthlyPeriodMonth
+    isMonthlyEconomic && !economicPicture && monthlyPeriodMonth
       ? buildMonthlyResultPresentation({
           kpiName: kpi.name,
           unit: kpi.unit,
@@ -184,8 +269,20 @@ export default async function KpiVdDetailPage({
           </div>
         </div>
 
+        {economicPicture ? (
+          <MonthlyEconomicPictureView
+            picture={economicPicture}
+            monthPicker={
+              <MonthlyEconomicMonthPicker
+                kpiId={kpi.id}
+                value={selectedPeriodMonth!}
+              />
+            }
+          />
+        ) : null}
+
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {monthlyPresentation ? (
+          {economicPicture ? null : monthlyPresentation ? (
             <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_6px_18px_rgba(15,23,42,0.05)]">
               <h2 className="text-base font-semibold text-slate-900">
                 {monthlyPresentation.title}
@@ -210,8 +307,8 @@ export default async function KpiVdDetailPage({
               ) : (
                 <dl className="mt-4 space-y-2 text-sm tabular-nums">
                   <div className="flex justify-between gap-3"><dt className="text-slate-500">Resultatmånad</dt><dd className="font-medium text-slate-800">{monthlyPresentation.resultMonth}</dd></div>
-                  <div className="flex justify-between gap-3"><dt className="text-slate-500">Faktiskt resultat</dt><dd className="font-medium text-slate-800">{monthlyPresentation.actualValue}</dd></div>
-                  <div className="flex justify-between gap-3"><dt className="text-slate-500">Budgeterat resultat</dt><dd className="font-medium text-slate-800">{monthlyPresentation.budgetValue}</dd></div>
+                  <div className="flex justify-between gap-3"><dt className="text-slate-500">{monthlyEconomicOperandLabels(kpi).actual}</dt><dd className="font-medium text-slate-800">{monthlyPresentation.actualValue}</dd></div>
+                  <div className="flex justify-between gap-3"><dt className="text-slate-500">{monthlyEconomicOperandLabels(kpi).budget}</dt><dd className="font-medium text-slate-800">{monthlyPresentation.budgetValue}</dd></div>
                   <div className="flex justify-between gap-3"><dt className="text-slate-500">Avvikelse</dt><dd className="font-medium text-slate-800">{monthlyPresentation.deviationValue}</dd></div>
                   <div className="flex justify-between gap-3"><dt className="text-slate-500">Status</dt><dd className="font-medium text-slate-800">{monthlyPresentation.statusValue}</dd></div>
                 </dl>
@@ -274,7 +371,9 @@ export default async function KpiVdDetailPage({
                     : isCalculatedKpi(kpi)
                       ? "Beräknad"
                       : isMonthlyEconomic
-                        ? "Månadsresultat mot budget"
+                        ? isMonthlyResult
+                          ? "Månadsresultat mot budget"
+                          : "Månadsomsättning mot budget"
                         : "KPI med mål"}
                 </dd>
               </div>
@@ -329,7 +428,7 @@ export default async function KpiVdDetailPage({
                 : isNonTargetKpi(kpi)
                 ? "Historik baserat på kpi_history"
                 : isMonthlyEconomic
-                  ? "Månadsvis avvikelse mellan faktiskt och budgeterat resultat"
+                  ? "Månadsvis avvikelse mellan faktiskt utfall och budget"
                 : "Utfall och målvärde baserat på kpi_history"
             }
           />
@@ -405,6 +504,7 @@ export default async function KpiVdDetailPage({
                               deviationValue: entry.value,
                               unit: kpi.unit,
                               status: entry.status,
+                              kpiName: kpi.name,
                             })
                           : formatValue(entry.value, kpi.unit)}
                       </td>

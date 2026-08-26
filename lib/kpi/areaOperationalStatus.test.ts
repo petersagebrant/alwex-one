@@ -138,4 +138,35 @@ describe("computeAreaOperationalStatus", () => {
       null,
     );
   });
+
+  it("does not let Omsättning mot budget turn the area red or yellow", () => {
+    assert.equal(
+      computeAreaOperationalStatus([
+        {
+          name: "Omsättning mot budget",
+          kind: "TARGET",
+          status: "Röd",
+          currentValue: "-2",
+        },
+        {
+          name: "Resultat mot budget",
+          kind: "TARGET",
+          status: "Grön",
+          currentValue: "0,4",
+        },
+      ]),
+      "Grön",
+    );
+    assert.equal(
+      computeAreaOperationalStatus([
+        {
+          name: "Omsättning mot budget",
+          kind: "TARGET",
+          status: "Röd",
+          currentValue: "-2",
+        },
+      ]),
+      null,
+    );
+  });
 });

@@ -26,7 +26,8 @@ import { parseNumeric } from "@/lib/kpi/parseNumeric";
 import { shouldWriteKpiMeasurementHistory } from "@/lib/kpi/shouldWriteMeasurementHistory";
 import {
   expectedResultPeriodMonth,
-  isMonthlyEconomicResultKpi,
+  isMonthlyEconomicKpi,
+  computeYearToDateEconomicSum,
 } from "@/lib/kpi/economics";
 import {
   fetchBusinessAreaById,
@@ -154,7 +155,7 @@ function mapKpiRow(row: KpiRow): KPI {
 async function enrichMonthlyResultPeriods<T extends KPI>(kpis: T[]): Promise<T[]> {
   const resultIds = new Set(
     kpis
-      .filter(isMonthlyEconomicResultKpi)
+      .filter(isMonthlyEconomicKpi)
       .map((kpi) => kpi.id),
   );
   if (resultIds.size === 0) return kpis;
@@ -165,7 +166,11 @@ async function enrichMonthlyResultPeriods<T extends KPI>(kpis: T[]): Promise<T[]
   );
   const latestByKpi = new Map<string, (typeof rows)[number]>();
   const latestCompleteByKpi = new Map<string, string>();
+  const historyByKpi = new Map<string, typeof rows>();
   for (const row of rows) {
+    const list = historyByKpi.get(row.kpi_id) ?? [];
+    list.push(row);
+    historyByKpi.set(row.kpi_id, list);
     if (row.period_month && !latestByKpi.has(row.kpi_id)) {
       latestByKpi.set(row.kpi_id, row);
     }
@@ -183,6 +188,14 @@ async function enrichMonthlyResultPeriods<T extends KPI>(kpis: T[]): Promise<T[]
     const latestRow = latestByKpi.get(kpi.id);
     const latestPeriodMonth = latestRow?.period_month ?? null;
     const latestCompletePeriodMonth = latestCompleteByKpi.get(kpi.id) ?? null;
+    const ytd = computeYearToDateEconomicSum(
+      (historyByKpi.get(kpi.id) ?? []).map((row) => ({
+        periodMonth: row.period_month,
+        actualValue: row.actual_value,
+        budgetValue: row.budget_value,
+      })),
+      latestCompletePeriodMonth ?? expected,
+    );
     return {
       ...kpi,
       latestPeriodMonth,
@@ -194,6 +207,8 @@ async function enrichMonthlyResultPeriods<T extends KPI>(kpis: T[]): Promise<T[]
         latestRow != null &&
         latestRow.actual_value == null &&
         latestRow.budget_value == null,
+      latestYtdActualValue: ytd.actualValue,
+      latestYtdBudgetValue: ytd.budgetValue,
     };
   });
 }

@@ -5,6 +5,7 @@ import {
   type KpiKind,
   type KpiStoredStatus,
 } from "@/lib/kpi/kind";
+import { isMonthlyRevenueVsBudgetKpi } from "@/lib/kpi/economics";
 import { targetDeviationMagnitude } from "@/lib/kpi/targetDeviation";
 
 const DEFAULT_KEY_KPI_LIMIT = 4;
@@ -21,6 +22,7 @@ export type KeyKpiCandidate = {
   status: KpiStoredStatus;
   currentValue?: string | null;
   targetValue?: string | null;
+  name?: string | null;
 };
 
 /**
@@ -29,6 +31,7 @@ export type KeyKpiCandidate = {
  * Rules (v1):
  * - Max `limit` (default 4)
  * - TARGET only (incl. RATIO_PERCENT) — STATISTIC / CALCULATED excluded
+ * - Omsättning mot budget excluded (economic sibling of Resultat mot budget)
  * - Requires a valid numeric current value (no key slot for "Ej rapporterad")
  * - Status order: Röd → Gul → Grön
  * - Same status → largest deviation from target
@@ -44,6 +47,7 @@ export function selectKeyKpis<T extends KeyKpiCandidate>(
   const targets = kpis.filter(
     (kpi) =>
       isTargetKpi(kpi) &&
+      !isMonthlyRevenueVsBudgetKpi(kpi) &&
       isStatusTone(kpi.status) &&
       hasValidKpiCurrentValue(kpi.currentValue),
   );

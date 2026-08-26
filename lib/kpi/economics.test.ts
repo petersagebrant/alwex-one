@@ -3,20 +3,28 @@ import { describe, it } from "node:test";
 import {
   buildMonthlyResultState,
   computeEconomicDeviation,
+  computeEconomicDeviationPercent,
+  computeEconomicMargin,
   computeMonthToDateSum,
+  computeYearToDateEconomicSum,
   expectedResultFinalizationDate,
   expectedResultPeriodMonth,
+  economicSignedTone,
+  formatEconomicMarginPercent,
+  formatEconomicPercent,
   formatExpectedFinalizationSv,
   formatMonthlyEconomicSummary,
   formatPeriodMonthSv,
+  isMonthlyEconomicKpi,
   isMonthlyEconomicResultKpi,
+  isMonthlyRevenueVsBudgetKpi,
   monthlyResultDisplayName,
   resolveMonthlyEconomicValues,
 } from "./economics";
 import { computeKpiStatus } from "./computeStatus";
 
 describe("shared economic KPI semantics", () => {
-  it("sums daily revenue through report date without mixing months", () => {
+  it("sums month-to-date values through report date without mixing months", () => {
     const rows = [
       { reportDate: "2026-07-31", value: "900" },
       { reportDate: "2026-08-01", value: "100" },
@@ -106,6 +114,96 @@ describe("shared economic KPI semantics", () => {
       }),
       false,
     );
+    assert.equal(
+      isMonthlyEconomicResultKpi({
+        name: "Omsättning mot budget",
+        reportingFrequency: "MONTHLY",
+      }),
+      false,
+    );
+  });
+
+  it("treats Omsättning mot budget as the economic sibling, not the huvud-KPI", () => {
+    assert.equal(
+      isMonthlyRevenueVsBudgetKpi({ name: "Omsättning mot budget" }),
+      true,
+    );
+    assert.equal(
+      isMonthlyEconomicKpi({
+        name: "Omsättning mot budget",
+        reportingFrequency: "MONTHLY",
+      }),
+      true,
+    );
+    assert.equal(
+      isMonthlyEconomicKpi({
+        name: "Resultat mot budget",
+        reportingFrequency: "MONTHLY",
+      }),
+      true,
+    );
+    assert.equal(
+      isMonthlyRevenueVsBudgetKpi({ name: "Resultat mot budget" }),
+      false,
+    );
+  });
+
+  it("computes deviation percent against absolute budget and skips budget 0", () => {
+    assert.equal(computeEconomicDeviationPercent("1,2", "0,8"), "50");
+    assert.equal(computeEconomicDeviationPercent("1,0", "1,2"), "-16,667");
+    assert.equal(computeEconomicDeviationPercent("1,2", "0"), null);
+    assert.equal(computeEconomicDeviationPercent("1,2", null), null);
+    assert.equal(formatEconomicPercent("50"), "+50 %");
+    assert.equal(formatEconomicPercent("-16,667"), "-16,667 %");
+  });
+
+  it("computes margin from same-month result and revenue", () => {
+    assert.equal(computeEconomicMargin("1,2", "10"), "12,0");
+    assert.equal(computeEconomicMargin("0", "10"), "0,0");
+    assert.equal(computeEconomicMargin("1,2", "0"), null);
+    assert.equal(computeEconomicMargin("1,2", null), null);
+  });
+
+  it("formats result margin as one decimal percent without double-scaling", () => {
+    assert.equal(computeEconomicMargin("1,1", "12,4"), "8,9");
+    assert.equal(formatEconomicMarginPercent("1,1", "12,4"), "8,9 %");
+    assert.notEqual(formatEconomicMarginPercent("1,1", "12,4"), "8,871 %");
+    assert.notEqual(formatEconomicMarginPercent("1,1", "12,4"), "+887 %");
+    assert.notEqual(formatEconomicMarginPercent("1,1", "12,4"), "887,1 %");
+    assert.equal(formatEconomicMarginPercent("1,2", "10"), "12,0 %");
+    assert.equal(formatEconomicMarginPercent("0", "10"), "0,0 %");
+    assert.equal(formatEconomicMarginPercent("1,1", "0"), null);
+    assert.equal(formatEconomicMarginPercent("1,1", null), null);
+  });
+
+  it("sums YTD actual/budget through selected month and skips missing", () => {
+    const rows = [
+      { periodMonth: "2025-12-01", actualValue: "9", budgetValue: "8" },
+      { periodMonth: "2026-01-01", actualValue: "1,0", budgetValue: "1,2" },
+      { periodMonth: "2026-02-01", actualValue: "1,5", budgetValue: null },
+      { periodMonth: "2026-03-01", actualValue: "0,8", budgetValue: "1,0" },
+      { periodMonth: "2026-04-01", actualValue: "2,0", budgetValue: "1,8" },
+    ];
+    assert.deepEqual(computeYearToDateEconomicSum(rows, "2026-03-01"), {
+      actualValue: "3,3",
+      budgetValue: "2,2",
+    });
+    assert.deepEqual(computeYearToDateEconomicSum(rows, "2025-12-01"), {
+      actualValue: "9",
+      budgetValue: "8",
+    });
+    assert.deepEqual(computeYearToDateEconomicSum([], "2026-03-01"), {
+      actualValue: null,
+      budgetValue: null,
+    });
+  });
+
+  it("colors signed deviation green/red and treats zero as neutral", () => {
+    assert.equal(economicSignedTone("+0,4 Mkr"), "positive");
+    assert.equal(economicSignedTone("-0,3 Mkr"), "negative");
+    assert.equal(economicSignedTone("0 Mkr"), "neutral");
+    assert.equal(economicSignedTone(null), "neutral");
+    assert.equal(economicSignedTone("0", { zero: "positive" }), "positive");
   });
 
   it("computes 1,2 minus 0,8 as +0,4 and evaluates it green", () => {

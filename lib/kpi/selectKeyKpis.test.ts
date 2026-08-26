@@ -192,4 +192,29 @@ describe("selectKeyKpis", () => {
     ];
     assert.equal(selectKeyKpis(kpis, 2).length, 2);
   });
+
+  it("excludes Omsättning mot budget so Resultat remains the economic key KPI", () => {
+    const kpis = [
+      {
+        id: "omsattning",
+        name: "Omsättning mot budget",
+        kind: "TARGET" as const,
+        status: "Röd" as const,
+        currentValue: "-1",
+        targetValue: "0",
+      },
+      {
+        id: "resultat",
+        name: "Resultat mot budget",
+        kind: "TARGET" as const,
+        status: "Gul" as const,
+        currentValue: "-0,1",
+        targetValue: "0",
+      },
+    ];
+    assert.deepEqual(
+      selectKeyKpis(kpis).map((kpi) => kpi.id),
+      ["resultat"],
+    );
+  });
 });

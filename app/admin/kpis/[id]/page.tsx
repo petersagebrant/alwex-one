@@ -18,7 +18,7 @@ import { formatDateSv, formatDateTimeSv } from "@/lib/format/date";
 import {
   formatMonthlyEconomicSummary,
   formatPeriodMonthSv,
-  isMonthlyEconomicResultKpi,
+  isMonthlyEconomicKpi,
   monthlyResultDisplayName,
 } from "@/lib/kpi/economics";
 import {
@@ -88,7 +88,7 @@ export default async function KpiDetailPage({
   const archived = isKpiArchived(kpi);
   const history = await getKPIHistory(kpi.id);
   const historyNewestFirst = [...history].reverse();
-  const isMonthlyEconomic = isMonthlyEconomicResultKpi(kpi);
+  const isMonthlyEconomic = isMonthlyEconomicKpi(kpi);
   const today = toDateInputValue(new Date().toISOString());
 
   const chartPoints = history.map((entry) => ({

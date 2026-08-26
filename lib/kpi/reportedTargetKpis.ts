@@ -1,4 +1,5 @@
 import { isExcludedFromVdAttention } from "@/lib/kpi/vdAttentionFilter";
+import { isMonthlyRevenueVsBudgetKpi } from "@/lib/kpi/economics";
 import {
   reportedTargetStatusTone,
   type AreaOperationalStatusKpi,
@@ -112,6 +113,9 @@ export function isBriefingOpenKpiDeviation(
 }
 
 export function isUnreportedTargetKpi(kpi: DashboardTargetKpi): boolean {
+  if (isMonthlyRevenueVsBudgetKpi(kpi)) {
+    return false;
+  }
   return isTargetKpi(kpi) && reportedTargetStatusTone(kpi) == null;
 }
 

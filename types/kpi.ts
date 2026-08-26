@@ -63,6 +63,9 @@ export type KPI = {
   latestActualValue?: string | null;
   latestBudgetValue?: string | null;
   latestIsLegacyDeviation?: boolean;
+  /** Calendar-year sum through latest finalized period; missing months skipped. */
+  latestYtdActualValue?: string | null;
+  latestYtdBudgetValue?: string | null;
   createdAt: string;
   updatedAt: string;
 };

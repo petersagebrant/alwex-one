@@ -25,6 +25,7 @@ import { getKPIs } from "@/services/kpis";
 import { getKpiOverviewData } from "@/services/kpiOverview";
 import { getDashboardReportingContext } from "@/services/kpiReporting";
 import { countTargetKpiStatuses } from "@/lib/kpi/kind";
+import { isMonthlyRevenueVsBudgetKpi } from "@/lib/kpi/economics";
 import { countUnreportedTargetKpis } from "@/lib/kpi/reportedTargetKpis";
 import { getCurrentUser } from "@/lib/auth/require-user";
 import { fetchProfileByUserId } from "@/lib/supabase/profiles";
@@ -195,7 +196,9 @@ export default async function Home({ searchParams }: HomeProps) {
   )?.[1]?.trim();
   const summaryKpiValue = (id: string) =>
     Number(kpis.find((kpi) => kpi.id === id)?.value ?? 0) || 0;
-  const targetStatusCounts = countTargetKpiStatuses(kpiDetails ?? []);
+  const targetStatusCounts = countTargetKpiStatuses(
+    (kpiDetails ?? []).filter((kpi) => !isMonthlyRevenueVsBudgetKpi(kpi)),
+  );
   const reportedTargetCount =
     targetStatusCounts.Grön + targetStatusCounts.Gul + targetStatusCounts.Röd;
   const unreportedTargetCount = countUnreportedTargetKpis(kpiDetails ?? []);

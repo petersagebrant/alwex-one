@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { BeraknadTypeBadge } from "@/components/kpis/BeraknadTypeBadge";
 import { StatistikTypeBadge } from "@/components/kpis/StatistikTypeBadge";
-import { isMonthlyEconomicResultKpi } from "@/lib/kpi/economics";
+import { isMonthlyEconomicKpi } from "@/lib/kpi/economics";
 import type { KPIListItem } from "@/services/kpis";
 import type { KpiKind } from "@/types";
 
@@ -34,7 +34,7 @@ export function KpiAdminFormFields({
   const isStatistic = kind === "STATISTIC";
   const isCalculated = kind === "CALCULATED";
   const isNonTarget = isStatistic || isCalculated;
-  const isMonthlyEconomic = Boolean(kpi && isMonthlyEconomicResultKpi(kpi));
+  const isMonthlyEconomic = Boolean(kpi && isMonthlyEconomicKpi(kpi));
   const isSumDivide = isCalculated && kpi?.calcOperator === "SUM_DIVIDE";
 
   const inputOptions = useMemo(() => {

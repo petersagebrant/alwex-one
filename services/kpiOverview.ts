@@ -3,6 +3,7 @@ import {
   effectiveTargetStatusTone,
   hasValidKpiCurrentValue,
 } from "@/lib/kpi/kind";
+import { isMonthlyRevenueVsBudgetKpi } from "@/lib/kpi/economics";
 import { countKpiSetReportingProgress } from "@/lib/kpi/reportingProgress";
 import { resolveKpiTrend } from "@/lib/kpi/resolveTrend";
 import { selectKeyKpis } from "@/lib/kpi/selectKeyKpis";
@@ -101,7 +102,9 @@ function buildAreaSection(input: {
     );
   });
 
-  const statusCounts = countTargetKpiStatuses(input.kpis);
+  const statusCounts = countTargetKpiStatuses(
+    input.kpis.filter((kpi) => !isMonthlyRevenueVsBudgetKpi(kpi)),
+  );
   const reporting = countKpiSetReportingProgress(input.kpis, input.reportedIds);
 
   return {
@@ -209,7 +212,9 @@ export async function getKpiOverviewData(): Promise<KpiOverviewData> {
       .filter((section) => !section.isAlwexTotalt)
       .sort((a, b) => a.areaName.localeCompare(b.areaName, "sv"));
 
-    const orgStatusCounts = countTargetKpiStatuses(kpis);
+    const orgStatusCounts = countTargetKpiStatuses(
+      kpis.filter((kpi) => !isMonthlyRevenueVsBudgetKpi(kpi)),
+    );
 
     return {
       reportDate,

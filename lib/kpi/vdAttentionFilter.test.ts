@@ -69,4 +69,23 @@ describe("isExcludedFromVdAttention", () => {
       false,
     );
   });
+
+  it("excludes Omsättning mot budget as economic sibling of Resultat", () => {
+    assert.equal(
+      isExcludedFromVdAttention({
+        kind: "TARGET",
+        calcOperator: null,
+        name: "Omsättning mot budget",
+      }),
+      true,
+    );
+    assert.equal(
+      isExcludedFromVdAttention({
+        kind: "TARGET",
+        calcOperator: null,
+        name: "Resultat mot budget",
+      }),
+      false,
+    );
+  });
 });

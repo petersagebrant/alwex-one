@@ -3,6 +3,7 @@ import {
   type KpiKind,
   type KpiStoredStatus,
 } from "@/lib/kpi/kind";
+import { isMonthlyRevenueVsBudgetKpi } from "@/lib/kpi/economics";
 import type { StatusTone } from "@/types/status";
 
 export type AreaOperationalStatus = StatusTone | null;
@@ -14,6 +15,7 @@ export type AreaOperationalStatusKpi = {
   status: KpiStoredStatus | string;
   currentValue?: string | null;
   isPeriodPending?: boolean;
+  name?: string | null;
 };
 
 /**
@@ -35,6 +37,8 @@ export function reportedTargetStatusTone(kpi: AreaOperationalStatusKpi): StatusT
  * Display status for a business area from relevant reported TARGET KPIs.
  * STATISTIC/CALCULATED and unreported/pending TARGET are ignored.
  * RATIO TARGET with a valid value are included (worst-of: Röd > Gul > Grön).
+ * Omsättning mot budget is excluded so Resultat mot budget remains the
+ * economic light (avoids two TARGET economy KPIs double-counting).
  * null = Ej rapporterat — must not count as Grön/Gul/Röd.
  */
 export function computeAreaOperationalStatus(
@@ -42,6 +46,9 @@ export function computeAreaOperationalStatus(
 ): AreaOperationalStatus {
   let worst: StatusTone | null = null;
   for (const kpi of kpis) {
+    if (isMonthlyRevenueVsBudgetKpi(kpi)) {
+      continue;
+    }
     const tone = reportedTargetStatusTone(kpi);
     if (tone == null) {
       continue;

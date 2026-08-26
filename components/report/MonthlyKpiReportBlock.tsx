@@ -10,7 +10,7 @@ import { StatusBadge } from "@/components/ui";
 import { computeKpiStatus } from "@/lib/kpi/computeStatus";
 import { formatKpiDisplayValue } from "@/lib/format/kpi";
 import { isStatusTone } from "@/lib/kpi/kind";
-import { computeEconomicDeviation } from "@/lib/kpi/economics";
+import { computeEconomicDeviation, monthlyEconomicOperandLabels } from "@/lib/kpi/economics";
 import { buildMonthlyResultPresentation } from "@/lib/kpi/monthlyResultPresentation";
 import type { DailyKpiReportItem } from "@/types";
 
@@ -31,6 +31,7 @@ export function MonthlyKpiReportBlock({
   const [saved, setSaved] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
 
+  const labels = monthlyEconomicOperandLabels(item.kpi);
   const deviationValue = computeEconomicDeviation(actualValue, budgetValue);
   const presentation = buildMonthlyResultPresentation({
     kpiName: item.kpi.name,
@@ -58,7 +59,7 @@ export function MonthlyKpiReportBlock({
     setError(null);
     setSaved(null);
     if (!period || !actualValue.trim() || !budgetValue.trim()) {
-      setError("Välj resultatmånad och ange både faktiskt och budgeterat resultat.");
+      setError(`Välj resultatmånad och ange både ${labels.missingPair}.`);
       return;
     }
     if (!status || !isStatusTone(status)) {
@@ -130,13 +131,13 @@ export function MonthlyKpiReportBlock({
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-slate-500">Faktiskt resultat</dt>
+                  <dt className="text-xs text-slate-500">{labels.actual}</dt>
                   <dd className="mt-0.5 font-semibold text-slate-900">
                     {presentation.actualValue}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-slate-500">Budgeterat resultat</dt>
+                  <dt className="text-xs text-slate-500">{labels.budget}</dt>
                   <dd className="mt-0.5 font-semibold text-slate-900">
                     {presentation.budgetValue}
                   </dd>
@@ -233,7 +234,7 @@ export function MonthlyKpiReportBlock({
           />
         </label>
         <label className="block text-xs font-medium text-slate-500">
-          Faktiskt resultat ({item.kpi.unit})
+          {labels.actual} ({item.kpi.unit})
           <input
             type="text"
             value={actualValue}
@@ -244,7 +245,7 @@ export function MonthlyKpiReportBlock({
           />
         </label>
         <label className="block text-xs font-medium text-slate-500">
-          Budgeterat resultat ({item.kpi.unit})
+          {labels.budget} ({item.kpi.unit})
           <input
             type="text"
             value={budgetValue}
@@ -258,7 +259,7 @@ export function MonthlyKpiReportBlock({
           <p className="text-xs font-medium text-slate-500">Avvikelse ({item.kpi.unit})</p>
           <p className="mt-1 text-sm font-semibold text-slate-900">
             {deviationValue === null
-              ? "Inväntar både resultat och budget"
+              ? `Inväntar både ${labels.missingPair}`
               : formatKpiDisplayValue(deviationValue, item.kpi.unit)}
           </p>
         </div>

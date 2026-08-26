@@ -60,13 +60,28 @@ describe("countKpiSetReportingProgress", () => {
   });
 
   it("Kyl & Frys: monthly revenue vs budget is excluded from daily progress", () => {
-    // Standalone: Fyllnadsgrad, Leveransprecision, Antal RC, Körda mil
+    // Standalone: two Fyllnadsgrad splits, Intjänandegrad, Leveransprecision,
+    // Antal RC, Körda mil
     // Ratio block: Sjuktimmar + Ordinarie (+ Sjukfrånvaro result) = 1
     // Not counted: Körda mil per RC (CALCULATED DIVIDE), Resultat/Omsättning MONTHLY
     const kpis = [
       {
-        id: "fyllnadsgrad",
+        id: "fyllnadsgrad-mellan",
         kind: "TARGET" as const,
+        calcOperator: null,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+      },
+      {
+        id: "fyllnadsgrad-dist",
+        kind: "TARGET" as const,
+        calcOperator: null,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+      },
+      {
+        id: "intjanandegrad",
+        kind: "STATISTIC" as const,
         calcOperator: null,
         calcNumeratorKpiId: null,
         calcDenominatorKpiId: null,
@@ -139,12 +154,14 @@ describe("countKpiSetReportingProgress", () => {
     ];
 
     const none = countKpiSetReportingProgress(kpis, new Set());
-    assert.deepEqual(none, { reportedCount: 0, totalCount: 5 });
+    assert.deepEqual(none, { reportedCount: 0, totalCount: 7 });
 
     const allManual = countKpiSetReportingProgress(
       kpis,
       new Set([
-        "fyllnadsgrad",
+        "fyllnadsgrad-mellan",
+        "fyllnadsgrad-dist",
+        "intjanandegrad",
         "leveransprecision",
         "resultat",
         "omsattning-mot-budget",
@@ -156,7 +173,7 @@ describe("countKpiSetReportingProgress", () => {
         "per-rc", // calculated — must not add an extra point
       ]),
     );
-    assert.deepEqual(allManual, { reportedCount: 5, totalCount: 5 });
+    assert.deepEqual(allManual, { reportedCount: 7, totalCount: 7 });
   });
 
   it("Lager & Logistik: monthly revenue vs budget is excluded from daily progress", () => {

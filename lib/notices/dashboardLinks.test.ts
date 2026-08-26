@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 import {
   areaNoticesHref,
   newAreaNoticeHref,
+  newOrgNoticeHref,
+  noticeItemHref,
   noticeSeeAllHref,
 } from "./dashboardLinks";
 
@@ -40,5 +42,18 @@ describe("notice dashboard links", () => {
   it("keeps per-notice Se alla when no own slug (VD/admin)", () => {
     assert.equal(noticeSeeAllHref(OTHER_SLUG), `/areas/${OTHER_SLUG}`);
     assert.equal(noticeSeeAllHref(null), "/areas");
+  });
+
+  it("sends VD/admin Nytt inlägg to existing admin form with area picker", () => {
+    assert.equal(newOrgNoticeHref(), "/admin/aktuellt?new=1");
+    assert.doesNotMatch(newOrgNoticeHref(), /notice=new/);
+  });
+
+  it("links VD notice items to the area page, not other-AO for AO-chef", () => {
+    assert.equal(noticeItemHref(OTHER_SLUG), `/areas/${OTHER_SLUG}`);
+    assert.equal(noticeItemHref(OWN_SLUG, OWN_SLUG), `/areas/${OWN_SLUG}`);
+    assert.equal(noticeItemHref(OTHER_SLUG, OWN_SLUG), null);
+    assert.equal(noticeItemHref(null), null);
+    assert.equal(noticeItemHref(null, OWN_SLUG), null);
   });
 });

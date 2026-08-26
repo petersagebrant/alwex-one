@@ -29,6 +29,8 @@ import { countUnreportedTargetKpis } from "@/lib/kpi/reportedTargetKpis";
 import { getCurrentUser } from "@/lib/auth/require-user";
 import { fetchProfileByUserId } from "@/lib/supabase/profiles";
 import { formatDateTimeSv } from "@/lib/format/date";
+import { newOrgNoticeHref } from "@/lib/notices/dashboardLinks";
+import { canWriteAreaNotices } from "@/lib/notices/permissions";
 import type { StatusTone } from "@/types";
 
 function toUiStatus(status: StatusTone): UiStatus {
@@ -296,6 +298,10 @@ export default async function Home({ searchParams }: HomeProps) {
     })),
   ].filter((hint) => hint.label && hint.href);
 
+  const canCreateOrgNotice = Boolean(
+    profileRow && canWriteAreaNotices(profileRow.role),
+  );
+
   return (
     <div className="flex min-h-full flex-1 flex-col bg-[#eef2f6] font-sans text-slate-800">
       <AppHeader current="home" />
@@ -338,7 +344,11 @@ export default async function Home({ searchParams }: HomeProps) {
           <VdAttentionList items={vdFocus.priorityItems ?? []} maxItems={5} />
         </InfoPanel>
 
-        <OrgNoticesFeed notices={orgNotices} />
+        <OrgNoticesFeed
+          notices={orgNotices}
+          canCreate={canCreateOrgNotice}
+          createHref={canCreateOrgNotice ? newOrgNoticeHref() : undefined}
+        />
 
         {reportingIncomplete && orgReporting ? (
           <Link

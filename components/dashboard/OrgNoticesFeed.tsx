@@ -3,6 +3,7 @@ import { AreaNoticeKindBadge } from "@/components/notices/AreaNoticeKindBadge";
 import { InfoPanel } from "@/components/ui";
 import {
   areaNoticesHref,
+  noticeItemHref,
   noticeSeeAllHref,
 } from "@/lib/notices/dashboardLinks";
 import { truncateNoticeBody } from "@/lib/notices/rank";
@@ -13,7 +14,8 @@ type OrgNoticesFeedProps = {
   notices: AreaNoticeListItem[];
   /** AO-chef own area — heading/Se alla only for this slug. */
   ownAreaSlug?: string;
-  newNoticeHref?: string;
+  canCreate?: boolean;
+  createHref?: string;
 };
 
 /**
@@ -31,7 +33,8 @@ const noticeItemTone: Record<AreaNoticeKind, string> = {
 export function OrgNoticesFeed({
   notices,
   ownAreaSlug,
-  newNoticeHref,
+  canCreate = false,
+  createHref,
 }: OrgNoticesFeedProps) {
   return (
     <InfoPanel
@@ -40,9 +43,9 @@ export function OrgNoticesFeed({
       showLabel={false}
       className="!border-2 !border-slate-300 !bg-white !shadow-[0_10px_28px_rgba(15,23,42,0.08)]"
       action={
-        newNoticeHref ? (
+        canCreate && createHref ? (
           <Link
-            href={newNoticeHref}
+            href={createHref}
             className="inline-flex items-center rounded-xl bg-[#0b1220] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
           >
             Nytt inlägg
@@ -55,9 +58,29 @@ export function OrgNoticesFeed({
       ) : (
         <ul className="space-y-2.5">
           {notices.map((notice) => {
+            const itemHref = noticeItemHref(
+              notice.businessAreaSlug,
+              ownAreaSlug,
+            );
             const seeAllHref = noticeSeeAllHref(
               notice.businessAreaSlug,
               ownAreaSlug,
+            );
+            const body = (
+              <>
+                <div className="flex flex-wrap items-center gap-2">
+                  <AreaNoticeKindBadge kind={notice.kind} />
+                  <p className="text-sm font-semibold text-slate-900">
+                    {notice.businessAreaName}
+                  </p>
+                </div>
+                <p className="mt-1 text-sm font-medium text-slate-800">
+                  {notice.title}
+                </p>
+                <p className="mt-0.5 text-sm text-slate-600">
+                  {truncateNoticeBody(notice.body)}
+                </p>
+              </>
             );
             return (
               <li
@@ -65,20 +88,16 @@ export function OrgNoticesFeed({
                 className={`rounded-xl border border-slate-200/70 border-l-4 px-3.5 py-3 ${noticeItemTone[notice.kind]}`}
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <AreaNoticeKindBadge kind={notice.kind} />
-                      <p className="text-sm font-semibold text-slate-900">
-                        {notice.businessAreaName}
-                      </p>
-                    </div>
-                    <p className="mt-1 text-sm font-medium text-slate-800">
-                      {notice.title}
-                    </p>
-                    <p className="mt-0.5 text-sm text-slate-600">
-                      {truncateNoticeBody(notice.body)}
-                    </p>
-                  </div>
+                  {itemHref ? (
+                    <Link
+                      href={itemHref}
+                      className="min-w-0 flex-1 rounded-lg outline-none transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-slate-300"
+                    >
+                      {body}
+                    </Link>
+                  ) : (
+                    <div className="min-w-0 flex-1">{body}</div>
+                  )}
                   {seeAllHref ? (
                     <Link
                       href={seeAllHref}

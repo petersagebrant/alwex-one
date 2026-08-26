@@ -6,6 +6,8 @@ import { canWriteDecisions } from "../auth/roles";
 import {
   areaNoticesHref,
   newAreaNoticeHref,
+  newOrgNoticeHref,
+  noticeItemHref,
   noticeSeeAllHref,
 } from "./dashboardLinks";
 import { canWriteAreaNoticesForArea } from "./permissions";
@@ -36,9 +38,10 @@ describe("AO-chef dashboard flow (kyl-frys simulation)", () => {
 
   it("shows Nytt inlägg on AoChefDashboard", () => {
     assert.match(aoChef, /<OrgNoticesFeed/);
-    assert.match(aoChef, /newNoticeHref=\{newAreaNoticeHref\(area\.slug\)\}/);
+    assert.match(aoChef, /canCreate/);
+    assert.match(aoChef, /createHref=\{newAreaNoticeHref\(area\.slug\)\}/);
     assert.match(feed, />\s*Nytt inlägg\s*</);
-    assert.match(feed, /newNoticeHref \? \(/);
+    assert.match(feed, /canCreate && createHref \? \(/);
   });
 
   it("sends Nytt inlägg to own area ?notice=new (kyl-frys)", () => {
@@ -47,6 +50,7 @@ describe("AO-chef dashboard flow (kyl-frys simulation)", () => {
       `/areas/${KYL_FRYS}?notice=new`,
     );
     assert.match(aoChef, /newAreaNoticeHref\(area\.slug\)/);
+    assert.doesNotMatch(aoChef, /\/admin\/aktuellt\?new=1/);
     assert.match(areaPage, /noticeQuery === "new"/);
   });
 
@@ -110,8 +114,16 @@ describe("AO-chef dashboard flow (kyl-frys simulation)", () => {
     assert.equal(canWriteDecisions("administrator"), true);
     assert.equal(noticeSeeAllHref(KYL_FRYS), `/areas/${KYL_FRYS}`);
     assert.equal(noticeSeeAllHref(OTHER_AO), `/areas/${OTHER_AO}`);
-    assert.match(page, /<OrgNoticesFeed notices=\{orgNotices\} \/>/);
+    assert.match(page, /canWriteAreaNotices\(profileRow\.role\)/);
+    assert.match(page, /canCreate=\{canCreateOrgNotice\}/);
+    assert.match(page, /createHref=\{canCreateOrgNotice \? newOrgNoticeHref\(\)/);
+    assert.match(page, /newOrgNoticeHref/);
     assert.doesNotMatch(page, /ownAreaSlug=/);
+    assert.doesNotMatch(page, /newAreaNoticeHref/);
+    assert.equal(newOrgNoticeHref(), "/admin/aktuellt?new=1");
+    assert.equal(noticeItemHref(KYL_FRYS), `/areas/${KYL_FRYS}`);
+    assert.equal(noticeItemHref(OTHER_AO, KYL_FRYS), null);
+    assert.match(feed, /noticeItemHref/);
     assert.match(decisionsPage, /Nytt beslut/);
     assert.match(reportKpis, /isLeadership/);
     assert.match(reportKpis, /<VdKpiReportingView/);

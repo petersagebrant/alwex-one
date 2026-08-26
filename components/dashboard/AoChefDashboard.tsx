@@ -118,7 +118,8 @@ export function AoChefDashboard({ data, notices, error }: AoChefDashboardProps) 
         <OrgNoticesFeed
           notices={notices}
           ownAreaSlug={area.slug}
-          newNoticeHref={newAreaNoticeHref(area.slug)}
+          canCreate
+          createHref={newAreaNoticeHref(area.slug)}
         />
 
         <InfoPanel

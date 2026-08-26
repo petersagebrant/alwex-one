@@ -293,15 +293,19 @@ describe("aktuellt module wiring", () => {
     const decisionsPage = read("../../app/admin/decisions/page.tsx");
 
     assert.match(aoChef, /ownAreaSlug=\{area\.slug\}/);
-    assert.match(aoChef, /newNoticeHref=\{newAreaNoticeHref\(area\.slug\)\}/);
+    assert.match(aoChef, /canCreate/);
+    assert.match(aoChef, /createHref=\{newAreaNoticeHref\(area\.slug\)\}/);
+    assert.doesNotMatch(aoChef, /newOrgNoticeHref/);
+    assert.doesNotMatch(aoChef, /\/admin\/aktuellt\?new=1/);
     assert.match(aoChef, /href="\/report\/kpis"/);
     assert.match(aoChef, /Rapportera KPI/);
     assert.doesNotMatch(aoChef, /Lars-Olof/);
 
     assert.match(feed, /noticeSeeAllHref/);
+    assert.match(feed, /noticeItemHref/);
     assert.match(feed, /ownAreaSlug/);
     assert.match(feed, /Nytt inlägg/);
-    assert.match(feed, /newNoticeHref/);
+    assert.match(feed, /canCreate && createHref/);
 
     assert.match(decisionsPage, /canWriteDecisions\(profile\.role\)/);
     const allowIdx = decisionsPage.indexOf("allowDecisionWrite");

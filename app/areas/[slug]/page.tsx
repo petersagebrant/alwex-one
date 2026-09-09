@@ -295,6 +295,13 @@ export default async function AreaDetailPage({
             <AreaNoticesList
               notices={areaNotices}
               canWrite={canWriteNotice}
+              canWriteNotice={(notice) =>
+                canWriteAreaNoticesForArea(
+                  profile.role,
+                  profile.businessAreaId,
+                  notice.businessAreaId,
+                )
+              }
               newNoticeHref={`/areas/${slug}?notice=new`}
               manageHref={`/admin/aktuellt?area=${encodeURIComponent(dbArea.id)}`}
             />

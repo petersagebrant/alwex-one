@@ -90,6 +90,8 @@ function revalidateNoticePaths(areaSlug?: string | null) {
   revalidatePath("/admin/aktuellt");
   if (areaSlug) {
     revalidatePath(`/areas/${areaSlug}`);
+  } else {
+    revalidatePath("/areas", "layout");
   }
 }
 

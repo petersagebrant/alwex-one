@@ -6,6 +6,7 @@ import { parseAreaNoticeFormValues } from "./validateNoticeForm";
 import {
   canWriteAreaNotices,
   canWriteAreaNoticesForArea,
+  canWriteOrganizationWideNotices,
 } from "./permissions";
 import { rankDashboardNotices, truncateNoticeBody } from "./rank";
 import {
@@ -159,6 +160,14 @@ describe("area notice write permissions", () => {
       canWriteAreaNoticesForArea("lasbehorighet", AREA_A, AREA_A),
       false,
     );
+    assert.equal(canWriteOrganizationWideNotices("vd"), true);
+    assert.equal(canWriteOrganizationWideNotices("vice_vd"), true);
+    assert.equal(canWriteOrganizationWideNotices("ao_chef"), false);
+    assert.equal(canWriteOrganizationWideNotices("administrator"), false);
+    assert.equal(canWriteAreaNoticesForArea("vd", null, null), true);
+    assert.equal(canWriteAreaNoticesForArea("vice_vd", null, null), true);
+    assert.equal(canWriteAreaNoticesForArea("ao_chef", AREA_A, null), false);
+    assert.equal(canWriteAreaNoticesForArea("administrator", null, null), false);
   });
 });
 
@@ -208,7 +217,15 @@ describe("parseAreaNoticeFormValues", () => {
       parseAreaNoticeFormValues({ ...base, businessAreaId: "" }).ok,
       false,
     );
-    assert.equal(parseAreaNoticeFormValues({ ...base, kind: "Övrigt" }).ok, false);
+    assert.equal(
+      parseAreaNoticeFormValues({ ...base, kind: "Övrigt" }).ok,
+      false,
+    );
+    const org = parseAreaNoticeFormValues({ ...base, businessAreaId: "org" });
+    assert.equal(org.ok, true);
+    if (org.ok) {
+      assert.equal(org.value.businessAreaId, null);
+    }
   });
 
   it("accepts optional ends_on and enforces title/body max", () => {
@@ -250,6 +267,7 @@ describe("aktuellt module wiring", () => {
     assert.match(aoChef, /notices/);
     assert.match(feed, /Aktuellt i verksamheten/);
     assert.match(feed, /Se alla/);
+    assert.match(feed, /OrganizationWideNoticeBadge/);
 
     const briefingIdx = page.indexOf("<VdBriefingPanel");
     const attentionIdx = page.indexOf("<VdAttentionList");

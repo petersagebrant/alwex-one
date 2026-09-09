@@ -1,9 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
+import { areaNoticeReaderOrFilter } from "@/lib/notices/organizationWide";
 import type { AreaNoticeKind } from "@/types/area-notice";
 
 export type AreaNoticeRow = {
   id: string;
-  business_area_id: string;
+  business_area_id: string | null;
   kind: AreaNoticeKind;
   title: string;
   body: string;
@@ -24,7 +25,7 @@ export type AreaNoticeAreaLabel = {
 };
 
 export type InsertAreaNoticeInput = {
-  business_area_id: string;
+  business_area_id: string | null;
   kind: AreaNoticeKind;
   title: string;
   body: string;
@@ -36,7 +37,7 @@ export type InsertAreaNoticeInput = {
 };
 
 export type UpdateAreaNoticeRowInput = {
-  business_area_id: string;
+  business_area_id: string | null;
   kind: AreaNoticeKind;
   title: string;
   body: string;
@@ -57,7 +58,7 @@ export async function fetchAreaNoticesByBusinessAreaId(
   let query = supabase
     .from("area_notices")
     .select(noticeSelect)
-    .eq("business_area_id", businessAreaId)
+    .or(areaNoticeReaderOrFilter(businessAreaId))
     .order("created_at", { ascending: false });
 
   if (!options?.includeArchived) {

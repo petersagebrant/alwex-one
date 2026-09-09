@@ -1,5 +1,10 @@
 import { parseAreaNoticeKind } from "@/lib/notices/kind";
 import { canWriteAreaNoticesForArea } from "@/lib/notices/permissions";
+import {
+  ORGANIZATION_WIDE_NOTICE_LABEL,
+  areaNoticeAreaLabel,
+  isOrganizationWideNotice,
+} from "@/lib/notices/organizationWide";
 import { rankDashboardNotices } from "@/lib/notices/rank";
 import {
   currentAreaNoticesOnly,
@@ -73,10 +78,17 @@ function attachArea(
   notice: AreaNotice,
   labels: Map<string, AreaNoticeAreaLabel>,
 ): AreaNoticeListItem {
-  const area = labels.get(notice.businessAreaId);
+  if (isOrganizationWideNotice(notice.businessAreaId)) {
+    return {
+      ...notice,
+      businessAreaName: ORGANIZATION_WIDE_NOTICE_LABEL,
+      businessAreaSlug: "",
+    };
+  }
+  const area = labels.get(notice.businessAreaId ?? "");
   return {
     ...notice,
-    businessAreaName: area?.name ?? "Okänt område",
+    businessAreaName: areaNoticeAreaLabel(notice.businessAreaId, area?.name),
     businessAreaSlug: area?.slug ?? "",
   };
 }
@@ -87,7 +99,9 @@ function labelMap(
   return new Map(labels.map((label) => [label.id, label]));
 }
 
-async function requireWritableArea(areaId: string): Promise<AreaNoticeAreaLabel> {
+async function requireWritableArea(
+  areaId: string | null,
+): Promise<AreaNoticeAreaLabel | null> {
   const profile = await requireOperationalWriter();
   if (
     !canWriteAreaNoticesForArea(
@@ -97,6 +111,10 @@ async function requireWritableArea(areaId: string): Promise<AreaNoticeAreaLabel>
     )
   ) {
     throw new Error("Du saknar behörighet att skriva Aktuellt för området.");
+  }
+
+  if (areaId == null) {
+    return null;
   }
 
   const area = await fetchBusinessAreaById(areaId);
@@ -191,7 +209,7 @@ export async function createAreaNotice(
   const area = await requireWritableArea(input.businessAreaId);
   const actor = await actorSnapshot();
   const payload = {
-    business_area_id: area.id,
+    business_area_id: area?.id ?? null,
     kind: parseAreaNoticeKind(input.kind),
     title: input.title.trim(),
     body: input.body.trim(),
@@ -230,7 +248,7 @@ export async function updateAreaNotice(
   const actor = await actorSnapshot();
 
   const next = {
-    business_area_id: area.id,
+    business_area_id: area?.id ?? null,
     kind: parseAreaNoticeKind(input.kind),
     title: input.title.trim(),
     body: input.body.trim(),

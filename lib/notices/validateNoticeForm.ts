@@ -5,6 +5,7 @@ import {
   type AreaNoticeKind,
 } from "@/lib/notices/kind";
 import { parseIsoCalendarDate } from "@/lib/kpi/dailyReportDate";
+import { isOrganizationWideAreaValue } from "@/lib/notices/organizationWide";
 
 export type AreaNoticeFormValues = {
   businessAreaId: string;
@@ -15,7 +16,7 @@ export type AreaNoticeFormValues = {
 };
 
 export type ParsedAreaNoticeForm = {
-  businessAreaId: string;
+  businessAreaId: string | null;
   kind: AreaNoticeKind;
   title: string;
   body: string;
@@ -29,10 +30,11 @@ export type ParseAreaNoticeFormResult =
 export function parseAreaNoticeFormValues(
   input: AreaNoticeFormValues,
 ): ParseAreaNoticeFormResult {
-  const businessAreaId = input.businessAreaId.trim();
-  if (!businessAreaId) {
+  const areaRaw = input.businessAreaId.trim();
+  if (!areaRaw) {
     return { ok: false, error: "Välj ett affärsområde." };
   }
+  const businessAreaId = isOrganizationWideAreaValue(areaRaw) ? null : areaRaw;
 
   const kindRaw = input.kind.trim();
   if (!isAreaNoticeKind(kindRaw)) {

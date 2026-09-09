@@ -36,12 +36,12 @@ describe("notice dashboard links", () => {
       `/areas/${OWN_SLUG}`,
     );
     assert.equal(noticeSeeAllHref(OTHER_SLUG, OWN_SLUG), null);
-    assert.equal(noticeSeeAllHref(null, OWN_SLUG), null);
+    assert.equal(noticeSeeAllHref(null, OWN_SLUG), `/areas/${OWN_SLUG}`);
   });
 
   it("keeps per-notice Se alla when no own slug (VD/admin)", () => {
     assert.equal(noticeSeeAllHref(OTHER_SLUG), `/areas/${OTHER_SLUG}`);
-    assert.equal(noticeSeeAllHref(null), "/areas");
+    assert.equal(noticeSeeAllHref(null), "/admin/aktuellt");
   });
 
   it("sends VD/admin Nytt inlägg to existing admin form with area picker", () => {
@@ -53,7 +53,7 @@ describe("notice dashboard links", () => {
     assert.equal(noticeItemHref(OTHER_SLUG), `/areas/${OTHER_SLUG}`);
     assert.equal(noticeItemHref(OWN_SLUG, OWN_SLUG), `/areas/${OWN_SLUG}`);
     assert.equal(noticeItemHref(OTHER_SLUG, OWN_SLUG), null);
-    assert.equal(noticeItemHref(null), null);
-    assert.equal(noticeItemHref(null, OWN_SLUG), null);
+    assert.equal(noticeItemHref(null), "/admin/aktuellt");
+    assert.equal(noticeItemHref(null, OWN_SLUG), `/areas/${OWN_SLUG}`);
   });
 });

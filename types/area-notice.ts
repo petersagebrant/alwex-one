@@ -9,7 +9,7 @@ export type AreaNoticeKind = (typeof AREA_NOTICE_KINDS)[number];
 
 export type AreaNotice = {
   id: string;
-  businessAreaId: string;
+  businessAreaId: string | null;
   kind: AreaNoticeKind;
   title: string;
   body: string;
@@ -24,7 +24,7 @@ export type AreaNotice = {
 };
 
 export type CreateAreaNoticeInput = {
-  businessAreaId: string;
+  businessAreaId: string | null;
   kind: AreaNoticeKind;
   title: string;
   body: string;
@@ -33,7 +33,7 @@ export type CreateAreaNoticeInput = {
 
 export type UpdateAreaNoticeInput = {
   id: string;
-  businessAreaId: string;
+  businessAreaId: string | null;
   kind: AreaNoticeKind;
   title: string;
   body: string;

@@ -21,7 +21,7 @@ export function noticeItemHref(
   ownAreaSlug?: string | null,
 ): string | null {
   if (!noticeAreaSlug) {
-    return null;
+    return ownAreaSlug ? areaNoticesHref(ownAreaSlug) : "/admin/aktuellt";
   }
   if (ownAreaSlug) {
     return noticeAreaSlug === ownAreaSlug
@@ -40,9 +40,12 @@ export function noticeSeeAllHref(
   ownAreaSlug?: string | null,
 ): string | null {
   if (ownAreaSlug) {
+    if (!noticeAreaSlug) {
+      return areaNoticesHref(ownAreaSlug);
+    }
     return noticeAreaSlug === ownAreaSlug
       ? areaNoticesHref(ownAreaSlug)
       : null;
   }
-  return noticeAreaSlug ? areaNoticesHref(noticeAreaSlug) : "/areas";
+  return noticeAreaSlug ? areaNoticesHref(noticeAreaSlug) : "/admin/aktuellt";
 }

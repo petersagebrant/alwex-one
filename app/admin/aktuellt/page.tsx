@@ -3,10 +3,16 @@ import Link from "next/link";
 import { AreaNoticeArchiveControls } from "@/components/admin/AreaNoticeArchiveControls";
 import { AreaNoticeFormFields } from "@/components/admin/AreaNoticeFormFields";
 import { AreaNoticeKindBadge } from "@/components/notices/AreaNoticeKindBadge";
+import { OrganizationWideNoticeBadge } from "@/components/notices/OrganizationWideNoticeBadge";
 import { AppHeader } from "@/components/layout/AppHeader";
+import { isVdEquivalent, type AppRole } from "@/lib/auth/roles";
 import { requireProfile } from "@/lib/auth/require-user";
 import { formatDateSv } from "@/lib/format/date";
-import { canWriteAreaNotices } from "@/lib/notices/permissions";
+import {
+  canWriteAreaNotices,
+  canWriteAreaNoticesForArea,
+} from "@/lib/notices/permissions";
+import { isOrganizationWideNotice } from "@/lib/notices/organizationWide";
 import {
   isArchivedAreaNotice,
   isCurrentAreaNotice,
@@ -43,6 +49,7 @@ export default async function AdminAktuelltPage({
   const params = await searchParams;
   const profile = await requireProfile();
   const canWrite = canWriteAreaNotices(profile.role);
+  const allowOrganizationWide = isVdEquivalent(profile.role);
   const requestedCreate = params.new === "1";
   const editId = params.edit?.trim() || null;
   const lockedAreaFromQuery = params.area?.trim() || null;
@@ -134,6 +141,7 @@ export default async function AdminAktuelltPage({
               <AreaNoticeFormFields
                 areas={areas}
                 lockedAreaId={lockedAreaId}
+                allowOrganizationWide={allowOrganizationWide && !lockedAreaId}
               />
             </div>
             <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -178,6 +186,9 @@ export default async function AdminAktuelltPage({
                 areas={areas}
                 notice={editingNotice}
                 lockedAreaId={aoChefLockedArea}
+                allowOrganizationWide={
+                  allowOrganizationWide && !aoChefLockedArea
+                }
               />
             </div>
             <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -207,6 +218,8 @@ export default async function AdminAktuelltPage({
           title="Aktuella inlägg"
           notices={currentNotices}
           canWrite={canWrite}
+          writerRole={profile.role}
+          writerBusinessAreaId={profile.businessAreaId}
           emptyText="Inga aktuella inlägg."
         />
 
@@ -215,6 +228,8 @@ export default async function AdminAktuelltPage({
             title="Utgångna inlägg"
             notices={expiredNotices}
             canWrite={canWrite}
+            writerRole={profile.role}
+            writerBusinessAreaId={profile.businessAreaId}
             emptyText="Inga utgångna inlägg."
           />
         ) : null}
@@ -224,6 +239,8 @@ export default async function AdminAktuelltPage({
             title="Arkiverade inlägg"
             notices={archivedNotices}
             canWrite={canWrite}
+            writerRole={profile.role}
+            writerBusinessAreaId={profile.businessAreaId}
             emptyText="Inga arkiverade inlägg."
           />
         ) : null}
@@ -236,11 +253,15 @@ function NoticeAdminListSection({
   title,
   notices,
   canWrite,
+  writerRole,
+  writerBusinessAreaId,
   emptyText,
 }: {
   title: string;
   notices: AreaNoticeListItem[];
   canWrite: boolean;
+  writerRole: AppRole;
+  writerBusinessAreaId: string | null;
   emptyText: string;
 }) {
   return (
@@ -255,12 +276,22 @@ function NoticeAdminListSection({
         <ul className="divide-y divide-neutral-100">
           {notices.map((notice) => {
             const archived = isArchivedAreaNotice(notice);
+            const canManageNotice =
+              canWrite &&
+              canWriteAreaNoticesForArea(
+                writerRole,
+                writerBusinessAreaId,
+                notice.businessAreaId,
+              );
             return (
               <li key={notice.id} className="px-5 py-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <AreaNoticeKindBadge kind={notice.kind} />
+                      {isOrganizationWideNotice(notice.businessAreaId) ? (
+                        <OrganizationWideNoticeBadge />
+                      ) : null}
                       <p className="font-medium text-neutral-900">
                         {notice.title}
                         {archived ? (
@@ -278,7 +309,7 @@ function NoticeAdminListSection({
                     </p>
                     <p className="mt-2 text-sm text-neutral-700">{notice.body}</p>
                   </div>
-                  {canWrite ? (
+                  {canManageNotice ? (
                     <div className="flex flex-col items-end gap-2">
                       <Link
                         href={`/admin/aktuellt?edit=${notice.id}`}

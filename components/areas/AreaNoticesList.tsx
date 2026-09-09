@@ -1,12 +1,15 @@
 import Link from "next/link";
 import { AreaNoticeArchiveControls } from "@/components/admin/AreaNoticeArchiveControls";
 import { AreaNoticeKindBadge } from "@/components/notices/AreaNoticeKindBadge";
+import { OrganizationWideNoticeBadge } from "@/components/notices/OrganizationWideNoticeBadge";
 import { formatDateSv } from "@/lib/format/date";
+import { isOrganizationWideNotice } from "@/lib/notices/organizationWide";
 import type { AreaNoticeListItem } from "@/services/areaNotices";
 
 type AreaNoticesListProps = {
   notices: AreaNoticeListItem[];
   canWrite?: boolean;
+  canWriteNotice?: (notice: AreaNoticeListItem) => boolean;
   newNoticeHref?: string;
   manageHref?: string;
 };
@@ -14,6 +17,7 @@ type AreaNoticesListProps = {
 export function AreaNoticesList({
   notices,
   canWrite = false,
+  canWriteNotice,
   newNoticeHref,
   manageHref,
 }: AreaNoticesListProps) {
@@ -60,6 +64,9 @@ export function AreaNoticesList({
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <AreaNoticeKindBadge kind={notice.kind} />
+                    {isOrganizationWideNotice(notice.businessAreaId) ? (
+                      <OrganizationWideNoticeBadge />
+                    ) : null}
                     <p className="font-medium text-neutral-900">{notice.title}</p>
                   </div>
                   <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-neutral-700">
@@ -72,7 +79,7 @@ export function AreaNoticesList({
                       : null}
                   </p>
                 </div>
-                {canWrite ? (
+                {(canWriteNotice?.(notice) ?? canWrite) ? (
                   <div className="flex flex-col items-end gap-2">
                     <Link
                       href={`/admin/aktuellt?edit=${notice.id}`}

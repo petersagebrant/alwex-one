@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { AreaNoticeKindBadge } from "@/components/notices/AreaNoticeKindBadge";
+import { OrganizationWideNoticeBadge } from "@/components/notices/OrganizationWideNoticeBadge";
 import { InfoPanel } from "@/components/ui";
+import { isOrganizationWideNotice } from "@/lib/notices/organizationWide";
 import {
   areaNoticesHref,
   noticeItemHref,
@@ -70,9 +72,13 @@ export function OrgNoticesFeed({
               <>
                 <div className="flex flex-wrap items-center gap-2">
                   <AreaNoticeKindBadge kind={notice.kind} />
-                  <p className="text-sm font-semibold text-slate-900">
-                    {notice.businessAreaName}
-                  </p>
+                  {isOrganizationWideNotice(notice.businessAreaId) ? (
+                    <OrganizationWideNoticeBadge />
+                  ) : (
+                    <p className="text-sm font-semibold text-slate-900">
+                      {notice.businessAreaName}
+                    </p>
+                  )}
                 </div>
                 <p className="mt-1 text-sm font-medium text-slate-800">
                   {notice.title}

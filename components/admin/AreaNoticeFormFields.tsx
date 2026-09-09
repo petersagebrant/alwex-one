@@ -6,6 +6,11 @@ import {
   AREA_NOTICE_KIND_LABELS,
   AREA_NOTICE_TITLE_MAX,
 } from "@/lib/notices/kind";
+import {
+  ORGANIZATION_WIDE_AREA_VALUE,
+  ORGANIZATION_WIDE_NOTICE_LABEL,
+  isOrganizationWideNotice,
+} from "@/lib/notices/organizationWide";
 import type { AreaNoticeListItem } from "@/services/areaNotices";
 
 type AreaOption = { id: string; name: string };
@@ -14,6 +19,8 @@ type AreaNoticeFormFieldsProps = {
   areas: AreaOption[];
   notice?: AreaNoticeListItem | null;
   lockedAreaId?: string | null;
+  /** Only VD / Vice VD (isVdEquivalent). Never AO-chef or administrator. */
+  allowOrganizationWide?: boolean;
 };
 
 const fieldClassName =
@@ -23,8 +30,14 @@ export function AreaNoticeFormFields({
   areas,
   notice,
   lockedAreaId,
+  allowOrganizationWide = false,
 }: AreaNoticeFormFieldsProps) {
-  const selectedAreaId = lockedAreaId || notice?.businessAreaId || "";
+  const selectedAreaId =
+    lockedAreaId ||
+    (isOrganizationWideNotice(notice?.businessAreaId)
+      ? ORGANIZATION_WIDE_AREA_VALUE
+      : notice?.businessAreaId) ||
+    "";
 
   return (
     <>
@@ -82,6 +95,11 @@ export function AreaNoticeFormFields({
             <option value="" disabled>
               Välj affärsområde
             </option>
+            {allowOrganizationWide ? (
+              <option value={ORGANIZATION_WIDE_AREA_VALUE}>
+                {ORGANIZATION_WIDE_NOTICE_LABEL}
+              </option>
+            ) : null}
             {areas.map((area) => (
               <option key={area.id} value={area.id}>
                 {area.name}

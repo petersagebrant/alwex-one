@@ -61,7 +61,7 @@ describe("AO-chef dashboard flow (kyl-frys simulation)", () => {
       `/areas/${KYL_FRYS}`,
     );
     assert.equal(noticeSeeAllHref(OTHER_AO, KYL_FRYS), null);
-    assert.equal(noticeSeeAllHref(null, KYL_FRYS), null);
+    assert.equal(noticeSeeAllHref(null, KYL_FRYS), `/areas/${KYL_FRYS}`);
     assert.match(aoChef, /ownAreaSlug=\{area\.slug\}/);
     assert.match(feed, /titleHref=\{ownAreaSlug \? areaNoticesHref\(ownAreaSlug\)/);
     assert.match(feed, /noticeSeeAllHref\(\s*notice\.businessAreaSlug,\s*ownAreaSlug/);

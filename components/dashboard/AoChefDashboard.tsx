@@ -14,6 +14,7 @@ import {
 } from "@/components/ui";
 import { formatKpiDisplayValue } from "@/lib/format/kpi";
 import { reportedTargetStatusTone } from "@/lib/kpi/areaOperationalStatus";
+import { formatPersonalGreeting } from "@/lib/auth/greeting";
 import { newAreaNoticeHref } from "@/lib/notices/dashboardLinks";
 import type { AoChefDashboardData } from "@/services/aoChefDashboard";
 import type { AreaNoticeListItem } from "@/services/areaNotices";
@@ -70,9 +71,7 @@ export function AoChefDashboard({ data, notices, error }: AoChefDashboardProps) 
   } = data;
 
   const overviewTitle = `${area.name.toUpperCase()} – ÖVERSIKT`;
-  const greeting = greetingName
-    ? `God morgon ${greetingName}.`
-    : "God morgon.";
+  const greeting = formatPersonalGreeting(greetingName);
   const reportPct =
     reporting.totalCount > 0
       ? Math.round((reporting.reportedCount / reporting.totalCount) * 100)

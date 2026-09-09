@@ -10,7 +10,9 @@ import {
   isMonthlyEconomicKpi,
   monthlyResultDisplayName,
 } from "@/lib/kpi/economics";
+import { givenNameFromProfileFields } from "@/lib/auth/greeting";
 import { fetchBusinessAreaById } from "@/lib/supabase/business-areas";
+import { fetchProfileByUserId } from "@/lib/supabase/profiles";
 import { getActivitiesByBusinessAreaId } from "@/services/activities";
 import {
   getAuditLogSince,
@@ -178,37 +180,37 @@ function isOverdueOpenDecision(input: {
   return input.dueDate < todayDateKeyStockholm();
 }
 
-function firstNameFromEmail(email: string | null): string | null {
-  if (!email) return null;
-  const local = email.split("@")[0]?.trim();
-  if (!local) return null;
-  const token = local.split(/[._-]/)[0]?.trim();
-  if (!token) return null;
-  return token.charAt(0).toUpperCase() + token.slice(1).toLowerCase();
-}
-
 /**
- * Prefer auth user_metadata.full_name; never invent another person's name.
+ * Prefer profile display_name / auth full_name; first given name only.
  */
 async function resolveGreetingName(
+  userId: string,
   email: string | null,
 ): Promise<string | null> {
+  let fullName: string | null = null;
+  let metaDisplayName: string | null = null;
+  let metaName: string | null = null;
   try {
     const supabase = await createClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    const metaName =
-      typeof user?.user_metadata?.full_name === "string"
-        ? user.user_metadata.full_name.trim()
-        : "";
-    if (metaName) {
-      return metaName;
-    }
+    const meta = user?.user_metadata ?? {};
+    fullName =
+      typeof meta.full_name === "string" ? meta.full_name.trim() : null;
+    metaDisplayName =
+      typeof meta.display_name === "string" ? meta.display_name.trim() : null;
+    metaName = typeof meta.name === "string" ? meta.name.trim() : null;
   } catch {
-    // Fall through to email-derived name.
+    // Fall through to profile / email.
   }
-  return firstNameFromEmail(email);
+  const profile = await fetchProfileByUserId(userId).catch(() => null);
+  return givenNameFromProfileFields({
+    fullName,
+    displayName: profile?.display_name || metaDisplayName,
+    name: metaName,
+    email,
+  });
 }
 
 function filterAuditForArea(
@@ -322,7 +324,7 @@ export async function getAoChefDashboardData(
     recentAudit,
     auditSinceYesterday,
   ] = await Promise.all([
-    resolveGreetingName(profile.email),
+    resolveGreetingName(profile.id, profile.email),
     getKPIsByBusinessArea(businessAreaId).catch(() => []),
     getGoalsByBusinessAreaId(businessAreaId).catch(() => []),
     getActivitiesByBusinessAreaId(businessAreaId).catch(() => []),

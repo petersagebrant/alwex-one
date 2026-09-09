@@ -269,25 +269,14 @@ describe("aktuellt module wiring", () => {
     assert.match(feed, /Se alla/);
     assert.match(feed, /OrganizationWideNoticeBadge/);
 
-    const briefingIdx = page.indexOf("<VdBriefingPanel");
-    const attentionIdx = page.indexOf("<VdAttentionList");
-    const orgFeedIdx = page.indexOf("<OrgNoticesFeed");
-    const reportingIdx = page.indexOf('title="Rapporteringsläge"');
-    const kpiOverviewIdx = page.indexOf("<KpiOverviewSection");
-    const yesterdayIdx = page.indexOf('title="Förändrat sedan föregående period"');
-    const foldIdx = page.indexOf(
-      'title="Försenade aktiviteter, öppna beslut och mål"',
-    );
-    const catalogIdx = page.indexOf('aria-labelledby="areas-heading"');
-    const timelineIdx = page.indexOf("<VdDiaryTimeline");
-    assert.ok(briefingIdx >= 0 && attentionIdx > briefingIdx);
-    assert.ok(orgFeedIdx > attentionIdx);
-    assert.ok(reportingIdx > orgFeedIdx);
-    assert.ok(kpiOverviewIdx > reportingIdx);
-    assert.ok(yesterdayIdx > kpiOverviewIdx);
-    assert.ok(foldIdx > yesterdayIdx);
-    assert.ok(catalogIdx > foldIdx);
-    assert.ok(timelineIdx > catalogIdx);
+    const vdDash = read("../../components/dashboard/VdLeadershipDashboard.tsx");
+    const briefingIdx = vdDash.indexOf("<VdBriefingPanel");
+    const orgFeedIdx = vdDash.indexOf("<OrgNoticesFeed");
+    const areaIdx = vdDash.indexOf("<VdAreaOverview");
+    assert.ok(briefingIdx >= 0 && orgFeedIdx > briefingIdx);
+    assert.ok(areaIdx > orgFeedIdx);
+    assert.match(page, /<VdLeadershipDashboard/);
+    assert.match(page, /if \(vdPrincipal\) \{/);
     assert.match(page, /exceptionDriven/);
     assert.doesNotMatch(page, /Sedan du loggade in/);
     assert.doesNotMatch(page, /Kräver ledningens uppmärksamhet/);

@@ -1,4 +1,9 @@
 import Link from "next/link";
+import {
+  formatPersonalGreeting,
+  givenNameFromProfileFields,
+} from "@/lib/auth/greeting";
+import "./VdBriefing.css";
 
 export type VdBriefingStats = {
   areas: number;
@@ -20,6 +25,8 @@ type VdBriefingProps = {
   stats?: VdBriefingStats | null;
   /** Optional targets used to make attention/risk rows clickable. */
   linkHints?: VdBriefingLinkHint[] | null;
+  /** Logged-in user's given name for the heading; never a role label. */
+  givenName?: string | null;
 };
 
 type SectionKind =
@@ -46,6 +53,7 @@ export function VdBriefing({
   content,
   stats = null,
   linkHints = null,
+  givenName,
 }: VdBriefingProps) {
   const blocks = parseBriefingMarkdown(content ?? "");
   const sections = groupBriefingSections(blocks);
@@ -57,14 +65,13 @@ export function VdBriefing({
   const footerMeta = buildFooterMeta(analysis, content ?? "");
   const displayStats = stats ?? footerMeta.stats;
 
-  const cards: Array<{
+  const allCards: Array<{
     kind: Exclude<SectionKind, "analysis" | "other" | "positive">;
     title: string;
     icon: string;
     titleClass: string;
     accentBar: string;
     items: ParsedItem[];
-    empty: string;
   }> = [
     {
       kind: "attention",
@@ -73,7 +80,6 @@ export function VdBriefing({
       titleClass: "text-rose-700",
       accentBar: "bg-rose-500",
       items: itemsForKind(sections, "attention", linkHints).slice(0, 3),
-      empty: "Inga kritiska avvikelser just nu.",
     },
     {
       kind: "risks",
@@ -82,7 +88,6 @@ export function VdBriefing({
       titleClass: "text-amber-700",
       accentBar: "bg-amber-400",
       items: itemsForKind(sections, "risks", linkHints).slice(0, 3),
-      empty: "Inga tydliga risker de kommande 14 dagarna.",
     },
     {
       kind: "recommendations",
@@ -91,33 +96,42 @@ export function VdBriefing({
       titleClass: "text-sky-800",
       accentBar: "bg-sky-500",
       items: itemsForKind(sections, "recommendations", linkHints).slice(0, 3),
-      empty: "Inga rekommendationer just nu.",
     },
   ];
+  const attentionCard = allCards.find((card) => card.kind === "attention");
+  const sideCards = allCards.filter((card) => card.kind !== "attention");
   const positiveItems = itemsForKind(sections, "positive", linkHints).slice(
     0,
     3,
   );
+  const parsedGivenName = greeting.match(
+    /^God (?:morgon|dag|kväll)\s+([^!.]+)/i,
+  )?.[1]?.trim();
+  const headingGreeting = formatPersonalGreeting(
+    givenName !== undefined
+      ? givenName
+      : givenNameFromProfileFields({ displayName: parsedGivenName }),
+  );
 
   return (
-    <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,0.05)] sm:p-5">
+    <section className="vd-briefing-card rounded-xl border border-slate-200/80 bg-white p-3 shadow-[0_6px_18px_rgba(15,23,42,0.05)] sm:p-4">
       <p className="text-[11px] font-medium tracking-wide text-slate-500 uppercase">
         VD Briefing
       </p>
 
-      <div className="mt-2.5 space-y-1.5">
-        <h1 className="text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">
-          {greeting || "God morgon."}
+      <div className="mt-1.5 space-y-1.5">
+        <h1 className="text-lg font-semibold tracking-tight text-slate-900 sm:text-xl">
+          {headingGreeting}
         </h1>
         {summary ? (
-          <p className="max-w-3xl text-sm leading-snug text-slate-600 sm:text-[15px]">
+          <p className="max-w-3xl text-sm leading-normal text-slate-600">
             {summary}
           </p>
         ) : null}
       </div>
 
       {displayStats ? (
-        <ul className="mt-3.5 flex list-none flex-wrap gap-2 p-0">
+        <ul className="mt-3 flex list-none flex-wrap gap-1.5 p-0">
           <li>
             <BriefingStatBadge label={`${displayStats.areas} affärsområden`} />
           </li>
@@ -147,69 +161,50 @@ export function VdBriefing({
         </ul>
       ) : null}
 
-      <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
-        {cards.map((card) => (
-          <article
-            key={card.kind}
-            className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,0.05)] sm:p-5"
-          >
-            <div className="flex items-center gap-2.5">
-              <span
-                aria-hidden
-                className={`h-5 w-1 shrink-0 rounded-full ${card.accentBar}`}
-              />
-              <h2
-                className={`flex min-w-0 items-center gap-1.5 text-sm font-semibold tracking-tight ${card.titleClass}`}
-              >
-                <span aria-hidden className="text-[13px] leading-none">
-                  {card.icon}
-                </span>
-                <span>{card.title}</span>
-              </h2>
-            </div>
-
-            {card.items.length === 0 ? (
-              <p className="mt-3.5 text-sm text-slate-500">{card.empty}</p>
-            ) : (
-              <ul className="mt-3.5 space-y-3.5">
-                {card.items.map((item, index) => (
-                  <li key={`${card.kind}-${index}`}>
-                    <BriefingItemRow item={item} />
-                  </li>
-                ))}
-              </ul>
-            )}
-          </article>
-        ))}
+      <div
+        className="vd-briefing-split mt-3"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1.85fr) minmax(0, 1fr)",
+          alignItems: "start",
+          gap: "0.75rem",
+        }}
+      >
+        <div className="vd-briefing-split__main">
+          {attentionCard ? <BriefingCard card={attentionCard} /> : null}
+        </div>
+        <div className="vd-briefing-split__side">
+          {sideCards.map((card) => (
+            <BriefingCard key={card.kind} card={card} />
+          ))}
+        </div>
       </div>
 
       {positiveItems.length > 0 ? (
-        <details className="mt-3 rounded-2xl border border-slate-200/80 bg-slate-50/60 p-4 sm:p-5">
-          <summary className="flex cursor-pointer items-center gap-2.5 text-sm font-semibold tracking-tight text-emerald-700">
-            <span
-              aria-hidden
-              className="h-5 w-1 shrink-0 rounded-full bg-emerald-500"
-            />
-            <span aria-hidden className="text-[13px] leading-none">
-              🟢
-            </span>
-            <span>Positiv utveckling</span>
-            <span className="text-xs font-medium text-slate-500">
-              {positiveItems.length}{" "}
-              {positiveItems.length === 1 ? "punkt" : "punkter"} · visa
-            </span>
-          </summary>
-          <ul className="mt-3.5 space-y-3.5">
-            {positiveItems.map((item, index) => (
-              <li key={`positive-${index}`}>
-                <BriefingItemRow item={item} />
-              </li>
-            ))}
-          </ul>
-        </details>
+        <div className="mt-3 rounded-xl border border-slate-200/80 bg-slate-50/60 px-3 py-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-4">
+            <h2 className="flex shrink-0 items-center gap-1.5 text-sm font-semibold tracking-tight text-emerald-700">
+              <span
+                aria-hidden
+                className="h-4 w-1 shrink-0 rounded-full bg-emerald-500"
+              />
+              <span aria-hidden className="text-[13px] leading-none">
+                🟢
+              </span>
+              <span>Positiv utveckling</span>
+            </h2>
+            <ul className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-5 gap-y-1">
+              {positiveItems.map((item, index) => (
+                <li key={`positive-${index}`}>
+                  <BriefingPositiveChip item={item} />
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
       ) : null}
 
-      <p className="mt-3.5 text-[11px] leading-relaxed text-slate-400">
+      <p className="mt-2.5 text-[11px] leading-relaxed text-slate-400">
         {footerMeta.basisLine}
         {footerMeta.updatedLabel
           ? ` · Uppdaterad ${footerMeta.updatedLabel}`
@@ -217,6 +212,74 @@ export function VdBriefing({
       </p>
     </section>
   );
+}
+
+function BriefingCard({
+  card,
+}: {
+  card: {
+    kind: string;
+    title: string;
+    icon: string;
+    titleClass: string;
+    accentBar: string;
+    items: ParsedItem[];
+  };
+}) {
+  return (
+    <article className="h-fit rounded-xl border border-slate-200/80 bg-white p-3 shadow-[0_6px_18px_rgba(15,23,42,0.05)]">
+      <div className="flex items-center gap-2">
+        <span
+          aria-hidden
+          className={`h-4 w-1 shrink-0 rounded-full ${card.accentBar}`}
+        />
+        <h2
+          className={`flex min-w-0 items-center gap-1.5 text-sm font-semibold tracking-tight ${card.titleClass}`}
+        >
+          <span aria-hidden className="text-[13px] leading-none">
+            {card.icon}
+          </span>
+          <span>{card.title}</span>
+        </h2>
+      </div>
+
+      {card.items.length > 0 ? (
+        <ul className="mt-2 space-y-2">
+          {card.items.map((item, index) => (
+            <li key={`${card.kind}-${index}`}>
+              <BriefingItemRow item={item} />
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-2 text-sm leading-normal text-slate-500">
+          {card.kind === "risks"
+            ? "Inga risker."
+            : card.kind === "recommendations"
+              ? "Inga rekommendationer."
+              : "Inga avvikelser just nu."}
+        </p>
+      )}
+    </article>
+  );
+}
+
+function BriefingPositiveChip({ item }: { item: ParsedItem }) {
+  const label = item.area ? `${item.area}: ${item.text}` : item.text;
+  const body = (
+    <span className="text-sm leading-normal text-slate-700">{label}</span>
+  );
+  if (item.href) {
+    return (
+      <Link
+        href={item.href}
+        className="group rounded-md outline-none transition hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-300"
+      >
+        {body}
+      </Link>
+    );
+  }
+  return body;
 }
 
 function BriefingStatBadge({
@@ -237,7 +300,7 @@ function BriefingStatBadge({
 
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium whitespace-nowrap ${toneClass}`}
+      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap ${toneClass}`}
     >
       {label}
     </span>
@@ -246,14 +309,14 @@ function BriefingStatBadge({
 
 function BriefingItemRow({ item }: { item: ParsedItem }) {
   const body = (
-    <div className="flex items-start gap-3">
-      <div className="min-w-0 flex-1 space-y-1">
+    <div className="flex items-start gap-2">
+      <div className="min-w-0 flex-1 space-y-0.5">
         {item.area ? (
           <p className="text-[11px] font-medium tracking-wide text-slate-500 uppercase">
             {item.area}
           </p>
         ) : null}
-        <p className="text-sm leading-snug font-medium text-slate-900">
+        <p className="text-sm leading-normal font-medium text-slate-900">
           {item.text}
         </p>
         {(item.owner || item.deadline) && (
@@ -279,7 +342,7 @@ function BriefingItemRow({ item }: { item: ParsedItem }) {
     return (
       <Link
         href={item.href}
-        className="group -mx-2 block rounded-xl px-2 py-1.5 outline-none transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-300"
+        className="group -mx-1.5 block rounded-lg px-1.5 py-1 outline-none transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-300"
       >
         {body}
       </Link>
@@ -377,7 +440,7 @@ function splitIntro(intro: BriefingSection | null): {
     .filter(Boolean);
 
   const greeting =
-    paragraphs.find((text) => /^God morgon\b/i.test(text)) ??
+    paragraphs.find((text) => /^God (morgon|dag|kväll)\b/i.test(text)) ??
     paragraphs[0] ??
     "";
   const summaryParts = paragraphs.filter((text) => text !== greeting);

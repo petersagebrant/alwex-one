@@ -1,0 +1,38 @@
+/* Loaded by VdBriefing.tsx so the split cannot depend on globals/Tailwind winning. */
+.vd-briefing-card {
+  container-type: inline-size;
+  container-name: vd-briefing;
+}
+
+/* Default 65/35. Stack only on a real phone — never treat a laptop as mobile. */
+.vd-briefing-split {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1.85fr) minmax(0, 1fr) !important;
+  align-items: start;
+  gap: 0.75rem;
+}
+
+@media (max-width: 639px) {
+  .vd-briefing-split {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+@container vd-briefing (max-width: 519px) {
+  .vd-briefing-split {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+.vd-briefing-split__main,
+.vd-briefing-split__side {
+  min-width: 0;
+}
+
+.vd-briefing-split__side {
+  display: flex;
+  height: fit-content;
+  flex-direction: column;
+  align-self: start;
+  gap: 0.75rem;
+}

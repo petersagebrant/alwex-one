@@ -1,3 +1,4 @@
+import { formatPersonalGreeting } from "@/lib/auth/greeting";
 import type { StatusTone } from "@/types/status";
 
 export type LocalVdBriefingInput = {
@@ -94,7 +95,7 @@ export function buildLocalVdBriefing(
   input?: LocalVdBriefingInput | null,
 ): string {
   const data = input ?? {};
-  const firstName = data.firstName?.trim() || "Peter";
+  const firstName = data.firstName?.trim() || null;
   const reportedTargetCountInput = data.reportedTargetCount;
   const unreportedTargetCount = data.unreportedTargetCount ?? 0;
   const noReportedTargets = reportedTargetCountInput === 0;
@@ -311,7 +312,7 @@ export function buildLocalVdBriefing(
   const decisionCount = counts.decisions ?? 0;
 
   return [
-    `God morgon ${firstName}.`,
+    formatPersonalGreeting(firstName),
     "",
     summary,
     "",

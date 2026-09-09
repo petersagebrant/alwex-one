@@ -50,4 +50,25 @@ describe("buildLocalVdBriefing", () => {
     assert.match(text, /rapporteringsbrist/i);
     assert.doesNotMatch(text, /enligt plan/);
   });
+
+  it("greets with the given name, not a role label", () => {
+    const named = buildLocalVdBriefing({
+      firstName: "Peter Sagebrant",
+      reportedTargetCount: 1,
+      analyzedAtLabel: "test",
+    });
+    assert.match(named, /God (morgon|dag|kväll) Peter\./);
+    assert.doesNotMatch(named, /God (morgon|dag|kväll) VD\./);
+    assert.doesNotMatch(named, /God morgon VD\./);
+
+    const roleAsName = buildLocalVdBriefing({
+      firstName: "Vd",
+      reportedTargetCount: 1,
+      analyzedAtLabel: "test",
+    });
+    assert.match(roleAsName, /God (morgon|dag|kväll)\./);
+    assert.doesNotMatch(roleAsName, /God (morgon|dag|kväll) VD\./);
+    assert.doesNotMatch(roleAsName, /God morgon VD\./);
+    assert.doesNotMatch(roleAsName, /God morgon Vd/);
+  });
 });

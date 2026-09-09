@@ -7,6 +7,10 @@ import {
   assertRowsInAiScope,
   type AiPrincipal,
 } from "@/lib/ai/security";
+import {
+  formatPersonalGreeting,
+  givenNameFromProfileFields,
+} from "@/lib/auth/greeting";
 import { isVdEquivalent } from "@/lib/auth/roles";
 import {
   buildAiCacheKey,
@@ -56,6 +60,7 @@ import {
   fetchBusinessAreas,
 } from "@/lib/supabase/business-areas";
 import type { BusinessAreaRow } from "@/lib/supabase/business-areas";
+import { fetchProfileByUserId } from "@/lib/supabase/profiles";
 import { getActivities, type ActivityListItem } from "@/services/activities";
 import { getAuditLogSince, type AuditLogListItem } from "@/services/auditLog";
 import { getDashboardData } from "@/services/dashboard";
@@ -272,7 +277,7 @@ export async function buildAssistantContext(
 ): Promise<AssistantContext> {
   const areaId =
     principal.role === "ao_chef" ? principal.businessAreaId : undefined;
-  const [areas, kpis, goals, activities, decisions, dashboard] =
+  const [areas, kpis, goals, activities, decisions, dashboard, greetingProfile] =
     await Promise.all([
       areaId
         ? fetchBusinessAreaById(areaId)
@@ -290,6 +295,7 @@ export async function buildAssistantContext(
       isVdEquivalent(principal.role)
         ? getDashboardData().catch(() => null)
         : Promise.resolve(null),
+      fetchProfileByUserId(principal.userId).catch(() => null),
     ]);
 
   const businessAreas = areas ?? [];
@@ -426,7 +432,10 @@ export async function buildAssistantContext(
       vdPriority: vd?.priority ?? vd?.recommendation ?? "",
       vdPositiveSummary: vd?.positiveSummary ?? "",
       responsiblePersons,
-      firstName: firstNameFromEmail(principal.email),
+      firstName: givenNameFromProfileFields({
+        displayName: greetingProfile?.display_name,
+        email: principal.email,
+      }),
     },
     businessAreas: areasForDisplay,
     kpis: allKpis,
@@ -2580,7 +2589,7 @@ async function generateVdBriefingFromOpenAI(
   const payloadMs = Date.now() - payloadStarted;
   const payloadChars = payloadJson.length;
 
-  const firstName = context.summary.firstName ?? "Peter";
+  const firstName = context.summary.firstName;
   const createdAtLabel = formatDateTimeSv(new Date().toISOString());
 
   console.log(
@@ -2609,7 +2618,10 @@ async function generateVdBriefingFromOpenAI(
         messages: [
           {
             role: "system",
-            content: BRIEFING_SYSTEM_PROMPT.replace("{förnamn}", firstName),
+            content: BRIEFING_SYSTEM_PROMPT.replace(
+              "God morgon {förnamn}.",
+              formatPersonalGreeting(firstName),
+            ),
           },
           {
             role: "user",
@@ -2672,21 +2684,6 @@ async function generateVdBriefingFromOpenAI(
   } finally {
     clearTimeout(timeoutId);
   }
-}
-
-function firstNameFromEmail(email: string | null): string | null {
-  if (!email) {
-    return null;
-  }
-  const local = email.split("@")[0]?.trim();
-  if (!local) {
-    return null;
-  }
-  const token = local.split(/[._-]/)[0] ?? local;
-  if (!token) {
-    return null;
-  }
-  return token.charAt(0).toUpperCase() + token.slice(1).toLowerCase();
 }
 
 function todayDateKey(): string {

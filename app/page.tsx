@@ -5,7 +5,7 @@ import { AoChefDashboard } from "@/components/dashboard/AoChefDashboard";
 import { KpiOverviewSection } from "@/components/dashboard/KpiOverviewSection";
 import { OrgNoticesFeed } from "@/components/dashboard/OrgNoticesFeed";
 import { VdAttentionList } from "@/components/dashboard/VdAttentionList";
-import { VdBriefingPanel } from "@/components/dashboard/VdBriefingPanel";
+import { VdLeadershipDashboard } from "@/components/dashboard/VdLeadershipDashboard";
 import { VdDiaryTimeline } from "../components/dashboard/VdDiaryTimeline";
 import { AreaOperationalStatusBadge } from "@/components/areas/AreaOperationalStatusBadge";
 import {
@@ -27,7 +27,9 @@ import { getDashboardReportingContext } from "@/services/kpiReporting";
 import { countTargetKpiStatuses } from "@/lib/kpi/kind";
 import { isMonthlyRevenueVsBudgetKpi } from "@/lib/kpi/economics";
 import { countUnreportedTargetKpis } from "@/lib/kpi/reportedTargetKpis";
+import { givenNameFromProfileFields } from "@/lib/auth/greeting";
 import { isVdEquivalent } from "@/lib/auth/roles";
+import { buildVdAreaOverviewRows } from "@/lib/kpi/vdAreaOverview";
 import { getCurrentUser } from "@/lib/auth/require-user";
 import { fetchProfileByUserId } from "@/lib/supabase/profiles";
 import { formatDateTimeSv } from "@/lib/format/date";
@@ -130,6 +132,7 @@ export default async function Home({ searchParams }: HomeProps) {
   const businessAreas = data?.businessAreas ?? [];
   const attentionItems = data?.attentionItems ?? [];
   const actionGoals = data?.actionGoals ?? [];
+  const vdActionGoals = data?.vdActionGoals ?? actionGoals;
   const upcomingDecisions = data?.upcomingDecisions ?? [];
   const vdFocus = data?.vdFocus ?? {
     cardTone: "green" as const,
@@ -192,9 +195,10 @@ export default async function Home({ searchParams }: HomeProps) {
   const cachedAiBriefing = vdPrincipal
     ? getCachedVdBriefing(vdPrincipal)
     : null;
-  const firstNameFromGreeting = vdAssistant.greeting?.match(
-    /^God morgon\s+([^!.]+)/i,
-  )?.[1]?.trim();
+  const firstName = givenNameFromProfileFields({
+    displayName: profileRow?.display_name,
+    email: currentUser?.email,
+  });
   const summaryKpiValue = (id: string) =>
     Number(kpis.find((kpi) => kpi.id === id)?.value ?? 0) || 0;
   const targetStatusCounts = countTargetKpiStatuses(
@@ -204,7 +208,7 @@ export default async function Home({ searchParams }: HomeProps) {
     targetStatusCounts.Grön + targetStatusCounts.Gul + targetStatusCounts.Röd;
   const unreportedTargetCount = countUnreportedTargetKpis(kpiDetails ?? []);
   const localBriefing = buildLocalVdBriefing({
-    firstName: firstNameFromGreeting ?? null,
+    firstName,
     summaryText: vdAssistant.situation?.trim() ?? "",
     followUpKpis: (focusKpis ?? []).map((kpi) => ({
       name: kpi?.name ?? "",
@@ -306,21 +310,33 @@ export default async function Home({ searchParams }: HomeProps) {
     profileRow && canWriteAreaNotices(profileRow.role),
   );
 
+  if (vdPrincipal) {
+    return (
+      <VdLeadershipDashboard
+        error={error}
+        initialBriefing={initialBriefing}
+        hasAiCache={Boolean(cachedAiBriefing)}
+        briefingStats={briefingStats}
+        briefingLinkHints={briefingLinkHints}
+        greetingName={firstName}
+        notices={orgNotices}
+        canCreateOrgNotice={canCreateOrgNotice}
+        reportingIncomplete={reportingIncomplete}
+        orgReporting={orgReporting}
+        areaRows={buildVdAreaOverviewRows(businessAreas, kpiDetails ?? [])}
+        delayedActivities={vdFocus.delayedActivities ?? []}
+        upcomingDecisions={upcomingDecisions}
+        actionGoals={vdActionGoals}
+      />
+    );
+  }
+
   return (
     <div className="flex min-h-full flex-1 flex-col bg-[#eef2f6] font-sans text-slate-800">
       <AppHeader current="home" />
 
       <main className="mx-auto w-full max-w-[1440px] flex-1 space-y-6 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         <AuthErrorBanner error={error} />
-
-        {vdPrincipal ? (
-          <VdBriefingPanel
-            initialContent={initialBriefing}
-            hasAiCache={Boolean(cachedAiBriefing)}
-            stats={briefingStats}
-            linkHints={briefingLinkHints}
-          />
-        ) : null}
 
         <InfoPanel
           title="Kräver din uppmärksamhet"

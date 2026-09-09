@@ -17,6 +17,8 @@ type VdBriefingPanelProps = {
   stats?: VdBriefingStats | null;
   /** Link targets for making briefing rows clickable when names match. */
   linkHints?: VdBriefingLinkHint[] | null;
+  /** Logged-in user's given name for the heading. */
+  givenName?: string | null;
 };
 
 /**
@@ -28,6 +30,7 @@ export function VdBriefingPanel({
   hasAiCache = false,
   stats = null,
   linkHints = null,
+  givenName,
 }: VdBriefingPanelProps) {
   const safeInitial = initialContent?.trim() ? initialContent : "";
   const [content, setContent] = useState(safeInitial);
@@ -66,7 +69,12 @@ export function VdBriefingPanel({
 
   return (
     <div>
-      <VdBriefing content={content} stats={stats} linkHints={linkHints} />
+      <VdBriefing
+        content={content}
+        stats={stats}
+        linkHints={linkHints}
+        givenName={givenName}
+      />
       {notice ? (
         <p className="mt-2 text-xs text-amber-700" role="status">
           {notice}

@@ -1,5 +1,12 @@
+import {
+  formatPersonalGreeting,
+  givenNameFromProfileFields,
+} from "@/lib/auth/greeting";
+import { fetchProfileByUserId } from "@/lib/supabase/profiles";
 import { getCurrentUser } from "@/lib/auth/require-user";
 import { isGoalDone, isGoalNeedingAction } from "@/lib/goals/lifecycle";
+import { parseIsoCalendarDate } from "@/lib/kpi/dailyReportDate";
+import type { GoalLifecycle } from "@/types/goal";
 import { fetchBusinessAreas } from "@/lib/supabase/business-areas";
 import { formatDateSv, formatDateTimeSv } from "@/lib/format/date";
 import {
@@ -74,7 +81,9 @@ export type DashboardActionGoal = {
   area: string;
   owner: string;
   deadline: string;
+  deadlineDate: string | null;
   status: StatusTone;
+  lifecycle: GoalLifecycle;
 };
 
 export type DashboardDecisionItem = {
@@ -166,6 +175,8 @@ export type DashboardData = {
   businessAreas: DashboardArea[];
   attentionItems: DashboardAttentionItem[];
   actionGoals: DashboardActionGoal[];
+  /** All operational goals for VD dashboard presentation filter. */
+  vdActionGoals: DashboardActionGoal[];
   upcomingDecisions: DashboardDecisionItem[];
   recentEvents: DashboardRecentEvent[];
   historyEvents: VdDiaryEvent[];
@@ -215,19 +226,17 @@ function isDelayedActivity(activity: ActivityListItem): boolean {
   return deadlineKey < todayDateKey();
 }
 
-function firstNameFromUser(email: string | null): string | null {
-  if (!email) {
-    return null;
-  }
-  const local = email.split("@")[0]?.trim();
-  if (!local) {
-    return null;
-  }
-  const token = local.split(/[._-]/)[0] ?? local;
-  if (!token) {
-    return null;
-  }
-  return token.charAt(0).toUpperCase() + token.slice(1).toLowerCase();
+async function resolveDashboardGivenName(
+  userId: string | undefined,
+  email: string | null,
+): Promise<string | null> {
+  const profile = userId
+    ? await fetchProfileByUserId(userId).catch(() => null)
+    : null;
+  return givenNameFromProfileFields({
+    displayName: profile?.display_name,
+    email,
+  });
 }
 
 function formatKpiStatusCounts(
@@ -324,9 +333,7 @@ export function buildVdAssistant(input: {
   const redAreaNames = input.redAreaNames ?? [];
   const followUpKpis = input.followUpKpis ?? [];
 
-  const greeting = input.firstName
-    ? `God morgon ${input.firstName}.`
-    : "God morgon.";
+  const greeting = formatPersonalGreeting(input.firstName);
 
   const situationParts: string[] = [];
   situationParts.push(
@@ -646,16 +653,22 @@ export async function getDashboardData(): Promise<DashboardData> {
       };
     });
 
+  const toDashboardActionGoal = (goal: (typeof goals)[number]): DashboardActionGoal => ({
+    id: goal.id,
+    goal: goal.title,
+    area: areaNames.get(goal.businessAreaId) ?? goal.businessAreaName,
+    owner: goal.owner ?? "Ej angiven",
+    deadline: goal.deadline ?? "—",
+    deadlineDate: parseIsoCalendarDate(goal.deadline?.slice(0, 10) ?? null),
+    status: goal.status,
+    lifecycle: goal.lifecycle,
+  });
+  const vdActionGoals: DashboardActionGoal[] = (goals ?? []).map(
+    toDashboardActionGoal,
+  );
   const actionGoals: DashboardActionGoal[] = (goals ?? [])
     .filter(isGoalNeedingAction)
-    .map((goal) => ({
-      id: goal.id,
-      goal: goal.title,
-      area: areaNames.get(goal.businessAreaId) ?? goal.businessAreaName,
-      owner: goal.owner ?? "Ej angiven",
-      deadline: goal.deadline ?? "—",
-      status: goal.status,
-    }));
+    .map(toDashboardActionGoal);
 
   const businessAreaCount = (areaRows ?? []).length;
   const goalCount = (goals ?? []).length;
@@ -700,7 +713,10 @@ export async function getDashboardData(): Promise<DashboardData> {
     null;
 
   const vdAssistant = buildVdAssistant({
-    firstName: firstNameFromUser(currentUser?.email ?? null),
+    firstName: await resolveDashboardGivenName(
+      currentUser?.id,
+      currentUser?.email ?? null,
+    ),
     areaCount: businessAreaCount,
     greenKpiCount: greenKpis.length,
     yellowKpiCount: yellowKpis.length,
@@ -911,6 +927,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     })),
     attentionItems,
     actionGoals,
+    vdActionGoals,
     upcomingDecisions: upcoming.map((decision) => {
       const parts = [decision.businessAreaName];
       if (decision.dueDate) {

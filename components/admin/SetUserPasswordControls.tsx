@@ -99,6 +99,8 @@ export function SetUserPasswordControls({
               Detta ersätter det nuvarande lösenordet för{" "}
               <span className="font-medium text-neutral-900">{displayName}</span>
               {email ? ` (${email})` : null}. Användaren får ingen e-post.
+              E-postadressen markeras som bekräftad, så användaren kan logga in
+              direkt även om inbjudan aldrig öppnats.
             </p>
 
             {error ? (
@@ -153,7 +155,8 @@ export function SetUserPasswordControls({
             </h3>
             <p className="mt-2 text-sm text-neutral-600">
               Visas bara en gång. Kopiera och lämna till användaren — det sparas
-              inte.
+              inte. Användaren kan logga in med lösenordet direkt, även om
+              inbjudningsmejlet aldrig öppnades (e-post markerad som bekräftad).
             </p>
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <input

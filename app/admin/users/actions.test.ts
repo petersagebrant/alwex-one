@@ -76,27 +76,34 @@ describe("user admin server actions", () => {
     assert.match(forgot, /resetPasswordForEmail/);
   });
 
-  it("calls updateUserById with password only and never audits the secret", () => {
+  it("calls updateUserById with password and email_confirm: true and never audits the secret", () => {
     const users = read("services/users.ts");
     const start = users.indexOf("export async function setUserTemporaryPassword");
     assert.ok(start >= 0);
     const body = users.slice(start, users.indexOf("async function requireExistingProfile"));
+    assert.match(body, /temporaryPasswordAuthUpdate\(password\)/);
     assert.match(
       body,
-      /updateUserById\(\s*userId,\s*\{\s*password,\s*\}\s*\)/,
+      /updateUserById\(\s*userId,\s*temporaryPasswordAuthUpdate\(password\),?\s*\)/,
     );
+    assert.doesNotMatch(body, /createUser\(/);
     assert.doesNotMatch(body, /ban_duration/);
     assert.doesNotMatch(body, /deleteUser/);
     assert.doesNotMatch(body, /inviteUserByEmail/);
     assert.doesNotMatch(body, /updateProfileRow/);
     assert.doesNotMatch(body, /setProfileDisabledAt/);
+    assert.doesNotMatch(body, /insertProfile/);
     assert.doesNotMatch(body, /console\./);
-    assert.match(body, /Administrativ lösenordsåterställning/);
+    assert.match(
+      body,
+      /Administrativ lösenordsåterställning, e-post bekräftad via admin/,
+    );
 
     const auditStart = body.indexOf("recordAuditLog(");
     assert.ok(auditStart >= 0);
     const auditCall = body.slice(auditStart, body.indexOf("});", auditStart) + 3);
     assert.doesNotMatch(auditCall, /\bpassword\b/);
+    assert.match(auditCall, /e-post bekräftad via admin/);
   });
 
   it("hides the password button from non-VD and never puts the secret in the URL", () => {
@@ -107,6 +114,9 @@ describe("user admin server actions", () => {
 
     const ui = read("components/admin/SetUserPasswordControls.tsx");
     assert.match(ui, /Ange nytt lösenord/);
+    assert.match(ui, /E-postadressen markeras som bekräftad/);
+    assert.match(ui, /Visas bara en gång/);
+    assert.match(ui, /inbjudningsmejlet aldrig öppnades/);
     assert.doesNotMatch(ui, /createServiceRoleClient/);
     assert.doesNotMatch(ui, /SUPABASE_SERVICE_ROLE_KEY/);
   });

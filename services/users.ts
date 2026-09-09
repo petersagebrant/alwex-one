@@ -2,7 +2,10 @@ import "server-only";
 
 import { headers } from "next/headers";
 import { isProtectedUserId } from "@/lib/auth/protected-users";
-import { generateTemporaryPassword } from "@/lib/auth/temporary-password";
+import {
+  generateTemporaryPassword,
+  temporaryPasswordAuthUpdate,
+} from "@/lib/auth/temporary-password";
 import {
   assertActorMayChangeTarget,
   assertActorMaySetPassword,
@@ -361,9 +364,10 @@ export async function setUserTemporaryPassword(
 
   const password = generateTemporaryPassword();
   const admin = createServiceRoleClient();
-  const { error } = await admin.auth.admin.updateUserById(userId, {
-    password,
-  });
+  const { error } = await admin.auth.admin.updateUserById(
+    userId,
+    temporaryPasswordAuthUpdate(password),
+  );
   if (error) {
     throw new Error(`Kunde inte ange nytt lösenord: ${error.message}`);
   }
@@ -374,7 +378,8 @@ export async function setUserTemporaryPassword(
     entityType: "user",
     entityId: userId,
     action: "password_reset",
-    description: "Administrativ lösenordsåterställning",
+    description:
+      "Administrativ lösenordsåterställning, e-post bekräftad via admin",
     actorName,
     businessAreaId: profile.business_area_id,
     changes: {

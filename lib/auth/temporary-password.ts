@@ -22,6 +22,17 @@ function pick(alphabet: string, byte: number): string {
   return alphabet[byte % alphabet.length] ?? alphabet[0]!;
 }
 
+/**
+ * GoTrue Admin `updateUserById` payload: set the password and mark email
+ * confirmed in the same call so invited users can sign in immediately.
+ */
+export function temporaryPasswordAuthUpdate(password: string): {
+  password: string;
+  email_confirm: true;
+} {
+  return { password, email_confirm: true };
+}
+
 /** Cryptographically random temporary password. Never persist the result. */
 export function generateTemporaryPassword(length = DEFAULT_LENGTH): string {
   if (length < MIN_LENGTH) {

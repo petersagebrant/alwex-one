@@ -61,9 +61,10 @@ describe("countKpiSetReportingProgress", () => {
 
   it("Kyl & Frys: monthly revenue vs budget is excluded from daily progress", () => {
     // Standalone: two Fyllnadsgrad splits, Intjänandegrad, Leveransprecision,
-    // Antal RC, Körda mil
+    // Antal RC, Körda mil, Övertid
     // Ratio block: Sjuktimmar + Ordinarie (+ Sjukfrånvaro result) = 1
-    // Not counted: Körda mil per RC (CALCULATED DIVIDE), Resultat/Omsättning MONTHLY
+    // Not counted: Körda mil per RC (CALCULATED DIVIDE), Övertid MTD (CALCULATED),
+    // Resultat/Omsättning MONTHLY
     const kpis = [
       {
         id: "fyllnadsgrad-mellan",
@@ -124,6 +125,20 @@ describe("countKpiSetReportingProgress", () => {
         calcDenominatorKpiId: null,
       },
       {
+        id: "overtid",
+        kind: "STATISTIC" as const,
+        calcOperator: null,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+      },
+      {
+        id: "overtid-mtd",
+        kind: "CALCULATED" as const,
+        calcOperator: "MONTH_TO_DATE_SUM" as const,
+        calcNumeratorKpiId: "overtid",
+        calcDenominatorKpiId: null,
+      },
+      {
         id: "sjuktimmar",
         kind: "STATISTIC" as const,
         calcOperator: null,
@@ -154,7 +169,7 @@ describe("countKpiSetReportingProgress", () => {
     ];
 
     const none = countKpiSetReportingProgress(kpis, new Set());
-    assert.deepEqual(none, { reportedCount: 0, totalCount: 7 });
+    assert.deepEqual(none, { reportedCount: 0, totalCount: 8 });
 
     const allManual = countKpiSetReportingProgress(
       kpis,
@@ -167,13 +182,15 @@ describe("countKpiSetReportingProgress", () => {
         "omsattning-mot-budget",
         "antal-rc",
         "korda-mil",
+        "overtid",
+        "overtid-mtd", // calculated — must not add an extra point
         "sjuktimmar",
         "ordinarie",
         "sjukfranvaro", // system-computed — must not add an extra point
         "per-rc", // calculated — must not add an extra point
       ]),
     );
-    assert.deepEqual(allManual, { reportedCount: 7, totalCount: 7 });
+    assert.deepEqual(allManual, { reportedCount: 8, totalCount: 8 });
   });
 
   it("Lager & Logistik: monthly revenue vs budget is excluded from daily progress", () => {

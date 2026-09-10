@@ -36,7 +36,7 @@ describe("calculated KPI helpers", () => {
       computeSumDivideValue(["1 000", "250,5"], "10"),
       "125,05",
     );
-    // Lager: Kolli OOH + Byggmax / Arbetade timmar
+    // Generic SUM_DIVIDE (A+B)/C — no longer a Lager KPI after Kolli consolidation
     assert.equal(
       computeSumDivideValue(["8000", "2000"], "500"),
       "20",

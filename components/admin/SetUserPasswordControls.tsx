@@ -7,12 +7,16 @@ type SetUserPasswordControlsProps = {
   userId: string;
   displayName: string;
   email: string | null;
+  label?: string;
+  emphasis?: boolean;
 };
 
 export function SetUserPasswordControls({
   userId,
   displayName,
   email,
+  label = "Ange nytt lösenord",
+  emphasis = false,
 }: SetUserPasswordControlsProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [password, setPassword] = useState<string | null>(null);
@@ -68,9 +72,13 @@ export function SetUserPasswordControls({
           setCopied(false);
           setConfirmOpen(true);
         }}
-        className="text-xs font-medium text-neutral-600 underline-offset-2 hover:text-neutral-900 hover:underline"
+        className={
+          emphasis
+            ? "inline-flex items-center justify-center rounded-xl bg-[#111827] px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800"
+            : "text-xs font-medium text-neutral-600 underline-offset-2 hover:text-neutral-900 hover:underline"
+        }
       >
-        Ange nytt lösenord
+        {label}
       </button>
 
       {confirmOpen ? (
@@ -100,7 +108,7 @@ export function SetUserPasswordControls({
               <span className="font-medium text-neutral-900">{displayName}</span>
               {email ? ` (${email})` : null}. Användaren får ingen e-post.
               E-postadressen markeras som bekräftad, så användaren kan logga in
-              direkt även om inbjudan aldrig öppnats.
+              direkt.
             </p>
 
             {error ? (
@@ -155,8 +163,8 @@ export function SetUserPasswordControls({
             </h3>
             <p className="mt-2 text-sm text-neutral-600">
               Visas bara en gång. Kopiera och lämna till användaren — det sparas
-              inte. Användaren kan logga in med lösenordet direkt, även om
-              inbjudningsmejlet aldrig öppnades (e-post markerad som bekräftad).
+              inte. Användaren kan logga in med lösenordet direkt (e-post
+              markerad som bekräftad).
             </p>
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <input

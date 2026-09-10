@@ -48,6 +48,15 @@ describe("deny redirect", () => {
     assert.doesNotMatch(fnBody, /\/login/);
   });
 
+  it("forces must-change-password users to the change-password page", () => {
+    const source = readFileSync(
+      join(process.cwd(), "lib/auth/require-user.ts"),
+      "utf8",
+    );
+    assert.match(source, /mustChangePasswordFromUser\(user\)/);
+    assert.match(source, /redirect\(CHANGE_PASSWORD_PATH\)/);
+  });
+
   it("gates password reset with canSetUserPassword and deny(), not canAdministerUsers", () => {
     const source = readFileSync(
       join(process.cwd(), "lib/auth/require-user.ts"),

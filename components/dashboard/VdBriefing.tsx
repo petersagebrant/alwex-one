@@ -3,6 +3,8 @@ import {
   formatPersonalGreeting,
   givenNameFromProfileFields,
 } from "@/lib/auth/greeting";
+import { VdBriefingCollapsible } from "@/components/dashboard/VdBriefingCollapsible";
+import { isVdBriefingSectionCollapsedOnMobile } from "@/lib/dashboard/vdBriefingPresentation";
 import "./VdBriefing.css";
 
 export type VdBriefingStats = {
@@ -175,33 +177,71 @@ export function VdBriefing({
         </div>
         <div className="vd-briefing-split__side">
           {sideCards.map((card) => (
-            <BriefingCard key={card.kind} card={card} />
+            <div key={card.kind}>
+              <div className="md:hidden">
+                <VdBriefingCollapsible
+                  title={card.title}
+                  icon={card.icon}
+                  titleClass={card.titleClass}
+                  accentBar={card.accentBar}
+                  defaultCollapsed={isVdBriefingSectionCollapsedOnMobile(
+                    card.kind,
+                  )}
+                >
+                  <BriefingCardBody card={card} />
+                </VdBriefingCollapsible>
+              </div>
+              <div className="hidden md:block">
+                <BriefingCard card={card} />
+              </div>
+            </div>
           ))}
         </div>
       </div>
 
       {positiveItems.length > 0 ? (
-        <div className="mt-3 rounded-xl border border-slate-200/80 bg-slate-50/60 px-3 py-2">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-4">
-            <h2 className="flex shrink-0 items-center gap-1.5 text-sm font-semibold tracking-tight text-emerald-700">
-              <span
-                aria-hidden
-                className="h-4 w-1 shrink-0 rounded-full bg-emerald-500"
-              />
-              <span aria-hidden className="text-[13px] leading-none">
-                🟢
-              </span>
-              <span>Positiv utveckling</span>
-            </h2>
-            <ul className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-5 gap-y-1">
-              {positiveItems.map((item, index) => (
-                <li key={`positive-${index}`}>
-                  <BriefingPositiveChip item={item} />
-                </li>
-              ))}
-            </ul>
+        <>
+          <div className="mt-3 md:hidden">
+            <VdBriefingCollapsible
+              title="Positiv utveckling"
+              icon="🟢"
+              titleClass="text-emerald-700"
+              accentBar="bg-emerald-500"
+              defaultCollapsed={isVdBriefingSectionCollapsedOnMobile(
+                "positive",
+              )}
+            >
+              <ul className="flex min-w-0 flex-col gap-1">
+                {positiveItems.map((item, index) => (
+                  <li key={`positive-mobile-${index}`}>
+                    <BriefingPositiveChip item={item} />
+                  </li>
+                ))}
+              </ul>
+            </VdBriefingCollapsible>
           </div>
-        </div>
+          <div className="mt-3 hidden rounded-xl border border-slate-200/80 bg-slate-50/60 px-3 py-2 md:block">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-4">
+              <h2 className="flex shrink-0 items-center gap-1.5 text-sm font-semibold tracking-tight text-emerald-700">
+                <span
+                  aria-hidden
+                  className="h-4 w-1 shrink-0 rounded-full bg-emerald-500"
+                />
+                <span aria-hidden className="text-[13px] leading-none">
+                  🟢
+                </span>
+                <span>Positiv utveckling</span>
+              </h2>
+              <ul className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-5 gap-y-1">
+                {positiveItems.map((item, index) => (
+                  <li key={`positive-${index}`}>
+                    <BriefingPositiveChip item={item} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </>
       ) : null}
 
       <p className="mt-2.5 text-[11px] leading-relaxed text-slate-400">
@@ -211,6 +251,36 @@ export function VdBriefing({
           : ""}
       </p>
     </section>
+  );
+}
+
+function BriefingCardBody({
+  card,
+}: {
+  card: {
+    kind: string;
+    items: ParsedItem[];
+  };
+}) {
+  if (card.items.length > 0) {
+    return (
+      <ul className="space-y-2">
+        {card.items.map((item, index) => (
+          <li key={`${card.kind}-${index}`}>
+            <BriefingItemRow item={item} />
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  return (
+    <p className="text-sm leading-normal text-slate-500">
+      {card.kind === "risks"
+        ? "Inga risker."
+        : card.kind === "recommendations"
+          ? "Inga rekommendationer."
+          : "Inga avvikelser just nu."}
+    </p>
   );
 }
 
@@ -243,23 +313,9 @@ function BriefingCard({
         </h2>
       </div>
 
-      {card.items.length > 0 ? (
-        <ul className="mt-2 space-y-2">
-          {card.items.map((item, index) => (
-            <li key={`${card.kind}-${index}`}>
-              <BriefingItemRow item={item} />
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="mt-2 text-sm leading-normal text-slate-500">
-          {card.kind === "risks"
-            ? "Inga risker."
-            : card.kind === "recommendations"
-              ? "Inga rekommendationer."
-              : "Inga avvikelser just nu."}
-        </p>
-      )}
+      <div className="mt-2">
+        <BriefingCardBody card={card} />
+      </div>
     </article>
   );
 }

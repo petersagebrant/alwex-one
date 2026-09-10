@@ -9,15 +9,14 @@ import { canSetUserPassword } from "@/lib/auth/roles";
 import { getBusinessAreaOptions } from "@/services/businessAreas";
 import { getAdminUsers, type AdminUserListItem } from "@/services/users";
 import {
-  inviteUserAction,
-  sendUserAccessLinkAction,
+  createUserAction,
   setUserDisabledAction,
   updateUserAction,
 } from "./actions";
 
 export const metadata: Metadata = {
-  title: "Administrera användare | LEIR",
-  description: "Bjud in, ändra roll och inaktivera användare",
+  title: "Administrera användare",
+  description: "Skapa användare, ändra roll och inaktivera användare",
 };
 
 type AdminUsersPageProps = {
@@ -26,6 +25,7 @@ type AdminUsersPageProps = {
     edit?: string;
     error?: string;
     message?: string;
+    created?: string;
   }>;
 };
 
@@ -45,6 +45,7 @@ export default async function AdminUsersPage({
   const editId = params.edit?.trim() || null;
   const error = params.error;
   const message = params.message;
+  const createdId = params.created?.trim() || null;
 
   const areas = await getBusinessAreaOptions();
   const areaNames = new Map(areas.map((area) => [area.id, area.name]));
@@ -54,6 +55,9 @@ export default async function AdminUsersPage({
     ? (users.find((user) => user.id === editId) ?? null)
     : null;
   const showEdit = Boolean(editId && editingUser);
+  const createdUser = createdId
+    ? (users.find((user) => user.id === createdId) ?? null)
+    : null;
   const lockRole = Boolean(
     editingUser && (editingUser.isSelf || editingUser.protected),
   );
@@ -75,7 +79,7 @@ export default async function AdminUsersPage({
               Administrera användare
             </h1>
             <p className="mt-1 text-sm text-neutral-500">
-              {users.length} användare · inbjudan via e-post
+              {users.length} användare
             </p>
           </div>
 
@@ -84,15 +88,26 @@ export default async function AdminUsersPage({
               href="/admin/users?new=1"
               className="inline-flex items-center justify-center rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-neutral-800"
             >
-              Bjud in användare
+              Skapa användare
             </Link>
           ) : null}
         </div>
 
         {message && !showCreate && !showEdit ? (
-          <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-            {message}
-          </p>
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+            <p>{message}</p>
+            {createdUser && canSetPassword ? (
+              <div className="mt-3">
+                <SetUserPasswordControls
+                  userId={createdUser.id}
+                  displayName={createdUser.displayName}
+                  email={createdUser.email}
+                  label="Ange tillfälligt lösenord"
+                  emphasis
+                />
+              </div>
+            ) : null}
+          </div>
         ) : null}
 
         {error && !showCreate && !showEdit ? (
@@ -103,14 +118,14 @@ export default async function AdminUsersPage({
 
         {showCreate ? (
           <form
-            action={inviteUserAction}
+            action={createUserAction}
             className="rounded-xl border border-neutral-200 bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-6"
           >
             <h2 className="text-sm font-semibold text-neutral-900">
-              Bjud in användare
+              Skapa användare
             </h2>
             <p className="mt-1 text-sm text-neutral-500">
-              Personen får en e-postlänk och sätter lösenord själv.
+              Ange tillfälligt lösenord efteråt så att personen kan logga in.
             </p>
             {error ? (
               <p className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
@@ -125,7 +140,7 @@ export default async function AdminUsersPage({
                 type="submit"
                 className="inline-flex items-center justify-center rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-neutral-800"
               >
-                Skicka inbjudan
+                Skapa användare
               </button>
               <Link
                 href="/admin/users"
@@ -227,20 +242,6 @@ export default async function AdminUsersPage({
                     >
                       Ändra
                     </Link>
-
-                    {!user.isSelf && user.status === "active" ? (
-                      <form action={sendUserAccessLinkAction}>
-                        <input type="hidden" name="id" value={user.id} />
-                        <button
-                          type="submit"
-                          className="text-xs font-medium text-neutral-600 underline-offset-2 hover:text-neutral-900 hover:underline"
-                        >
-                          {user.invitedPending
-                            ? "Skicka ny inbjudan"
-                            : "Skicka lösenordsåterställning"}
-                        </button>
-                      </form>
-                    ) : null}
 
                     {canSetPassword && !user.isSelf ? (
                       <SetUserPasswordControls

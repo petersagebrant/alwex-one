@@ -6,7 +6,7 @@ import {
   requireUserAdministrator,
 } from "@/lib/auth/require-user";
 import {
-  inviteUser,
+  createUser,
   sendUserAccessLink,
   setUserDisabled,
   setUserTemporaryPassword,
@@ -29,21 +29,28 @@ function fail(path: string, error: unknown, fallback: string): never {
   redirect(`${path}${path.includes("?") ? "&" : "?"}error=${encodeURIComponent(message)}`);
 }
 
-export async function inviteUserAction(formData: FormData) {
+export async function createUserAction(formData: FormData) {
   const actor = await requireUserAdministrator();
 
+  let createdId = "";
   try {
-    await inviteUser(actor.id, {
+    const created = await createUser(actor.id, {
       displayName: formData.get("displayName"),
       email: formData.get("email"),
       role: formData.get("role"),
       businessAreaId: formData.get("businessAreaId"),
     });
+    createdId = created.id;
   } catch (error) {
-    fail(usersPath({ new: "1" }), error, "Kunde inte bjuda in användaren.");
+    fail(usersPath({ new: "1" }), error, "Kunde inte skapa användaren.");
   }
 
-  redirect(usersPath({ message: "Inbjudan skickad." }));
+  redirect(
+    usersPath({
+      created: createdId,
+      message: "Användaren skapad. Ange ett tillfälligt lösenord så att personen kan logga in.",
+    }),
+  );
 }
 
 export async function updateUserAction(formData: FormData) {

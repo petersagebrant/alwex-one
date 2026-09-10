@@ -6,6 +6,8 @@ import { describe, it } from "node:test";
 const authLoggingSources = [
   "app/auth/callback/route.ts",
   "app/auth/recovery-flag/route.ts",
+  "app/auth/change-password/actions.ts",
+  "app/auth/change-password/change-password-form.tsx",
   "app/auth/update-password/actions.ts",
   "app/auth/update-password/update-password-form.tsx",
   "components/auth/AuthRecoveryGate.tsx",

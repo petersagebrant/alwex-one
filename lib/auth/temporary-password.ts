@@ -23,14 +23,20 @@ function pick(alphabet: string, byte: number): string {
 }
 
 /**
- * GoTrue Admin `updateUserById` payload: set the password and mark email
- * confirmed in the same call so invited users can sign in immediately.
+ * GoTrue Admin `updateUserById` payload: set the password, mark email
+ * confirmed, and require a password change on next login. `app_metadata`
+ * is merged by GoTrue — this does not wipe provider/providers.
  */
 export function temporaryPasswordAuthUpdate(password: string): {
   password: string;
   email_confirm: true;
+  app_metadata: { must_change_password: true };
 } {
-  return { password, email_confirm: true };
+  return {
+    password,
+    email_confirm: true,
+    app_metadata: { must_change_password: true },
+  };
 }
 
 /** Cryptographically random temporary password. Never persist the result. */

@@ -62,8 +62,8 @@ export async function generateMetadata({
   const kpi = await getKPIById(id).catch(() => null);
   return {
     title: kpi
-      ? `${kpi.name} | KPI | LEIR`
-      : "KPI | LEIR",
+      ? `${kpi.name} | KPI`
+      : "KPI",
     description: "KPI-detalj med historik",
   };
 }

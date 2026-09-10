@@ -20,7 +20,7 @@ import type { KPIListItem } from "@/services/kpis";
 import { createKpiAction, updateKpiAction } from "./actions";
 
 export const metadata: Metadata = {
-  title: "Administrera KPI | LEIR",
+  title: "Administrera KPI",
   description: "Lista, skapa och uppdatera nyckeltal",
 };
 

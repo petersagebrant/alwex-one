@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { UpdatePasswordForm } from "./update-password-form";
 
 export const metadata: Metadata = {
-  title: "Nytt lösenord | LEIR",
+  title: "Nytt lösenord",
   description: "Välj ett nytt lösenord för ditt LEIR-konto",
 };
 

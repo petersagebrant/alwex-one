@@ -1,6 +1,11 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import {
+  CHANGE_PASSWORD_PATH,
+  isMustChangePasswordAllowedPath,
+  mustChangePasswordFromUnknown,
+} from "@/lib/auth/must-change-password";
+import {
   isRecoveryAllowedPath,
   RECOVERY_COOKIE,
   RECOVERY_UPDATE_PATH,
@@ -20,6 +25,8 @@ function isAssetOrNextInternalPath(pathname: string): boolean {
   return (
     pathname.startsWith("/_next/") ||
     pathname === "/favicon.ico" ||
+    pathname === "/manifest.webmanifest" ||
+    pathname === "/manifest.json" ||
     /\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map|txt|woff2?)$/i.test(pathname)
   );
 }
@@ -149,6 +156,17 @@ export async function updateSession(request: NextRequest) {
   const recoveryPending =
     request.cookies.get(RECOVERY_COOKIE)?.value === "1";
 
+  let mustChangePassword = mustChangePasswordFromUnknown(user);
+  // JWT can be stale after the user clears the flag — re-check Auth.
+  if (mustChangePassword) {
+    try {
+      const { data } = await supabase.auth.getUser();
+      mustChangePassword = mustChangePasswordFromUnknown(data.user);
+    } catch {
+      mustChangePassword = true;
+    }
+  }
+
   // Recovery session must finish on update-password — never Dashboard.
   if (recoveryPending && !isRecoveryAllowedPath(pathname)) {
     const recoveryUrl = request.nextUrl.clone();
@@ -179,11 +197,29 @@ export async function updateSession(request: NextRequest) {
     return redirectResponse;
   }
 
+  // First login after admin temp password — finish change-password before LEIR.
+  if (
+    user &&
+    mustChangePassword &&
+    !recoveryPending &&
+    !isMustChangePasswordAllowedPath(pathname)
+  ) {
+    const changeUrl = request.nextUrl.clone();
+    changeUrl.pathname = CHANGE_PASSWORD_PATH;
+    changeUrl.search = "";
+
+    const redirectResponse = NextResponse.redirect(changeUrl);
+    copyCookies(supabaseResponse, redirectResponse);
+    return redirectResponse;
+  }
+
   // Already signed in — leave the login page (unless recovery is pending).
   if (user && publicAuth && pathname.startsWith("/login")) {
     const nextPath = recoveryPending
       ? RECOVERY_UPDATE_PATH
-      : safeInternalPath(request.nextUrl.searchParams.get("next"));
+      : mustChangePassword
+        ? CHANGE_PASSWORD_PATH
+        : safeInternalPath(request.nextUrl.searchParams.get("next"));
     // nextPath may include ?query (e.g. /report/kpis?area=<uuid>) — preserve it.
     const target = new URL(nextPath, request.nextUrl.origin);
 

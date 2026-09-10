@@ -18,7 +18,7 @@ import { fetchActiveProfilesForAssignment } from "@/lib/supabase/profiles";
 import { createGoalAction, updateGoalAction } from "./actions";
 
 export const metadata: Metadata = {
-  title: "Administrera mål | LEIR",
+  title: "Administrera mål",
   description: "Lista, skapa och uppdatera mål",
 };
 

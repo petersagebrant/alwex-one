@@ -1,35 +1,22 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { CHANGE_PASSWORD_PATH } from "@/lib/auth/must-change-password";
 import { getCurrentUser } from "@/lib/auth/require-user";
-import { canAdministerUsers, isVdEquivalent } from "@/lib/auth/roles";
+import { formatVdRoleDisplay } from "@/lib/auth/roles";
+import {
+  visibleAppNavItems,
+  type AppNavKey,
+} from "@/lib/layout/appNav";
 import { fetchProfileByUserId } from "@/lib/supabase/profiles";
 import { signOutAction } from "@/app/login/actions";
+import { AppBottomNav } from "@/components/layout/AppBottomNav";
 
-export type AppNavKey =
-  | "home"
-  | "areas"
-  | "goals"
-  | "activities"
-  | "decisions"
-  | "kpis"
-  | "users"
-  | "assistant";
+export type { AppNavKey };
 
 type AppHeaderProps = {
   current?: AppNavKey;
 };
-
-const navItems: { key: AppNavKey; href: string; label: string }[] = [
-  { key: "home", href: "/", label: "Dashboard" },
-  { key: "areas", href: "/areas", label: "Affärsområden" },
-  { key: "goals", href: "/admin/goals", label: "Mål" },
-  { key: "activities", href: "/admin/activities", label: "Aktiviteter" },
-  { key: "decisions", href: "/admin/decisions", label: "Beslut" },
-  { key: "kpis", href: "/report/kpis", label: "KPI" },
-  { key: "users", href: "/admin/users", label: "Användare" },
-  { key: "assistant", href: "/assistant", label: "AI-assistent" },
-];
 
 function initialsFromEmail(email: string | null): string {
   if (!email) {
@@ -48,77 +35,87 @@ export async function AppHeader({ current = "home" }: AppHeaderProps) {
   const profile = user
     ? await fetchProfileByUserId(user.id).catch(() => null)
     : null;
-  const label =
-    profile?.display_name.trim() || user?.email || "Ej inloggad";
+  const label = formatVdRoleDisplay(
+    profile?.display_name.trim() || user?.email || "Ej inloggad",
+  );
   const initials = initialsFromEmail(user?.email ?? null);
-  const visibleNavItems = navItems.filter((item) => {
-    if (item.key === "assistant") {
-      return (
-        Boolean(profile && isVdEquivalent(profile.role)) ||
-        (profile?.role === "ao_chef" && Boolean(profile.business_area_id))
-      );
-    }
-    if (item.key === "users") {
-      return Boolean(profile && canAdministerUsers(profile.role));
-    }
-    return true;
-  });
+  const visibleNavItems = visibleAppNavItems(profile);
 
   return (
-    <header className="sticky top-0 z-30 border-b border-[#1f2430] bg-[#111827] text-white">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:gap-4 lg:px-8 lg:py-0 lg:h-14">
-        <div className="flex min-w-0 flex-1 flex-col gap-3 lg:flex-row lg:items-center lg:gap-6">
-          <Link href="/" className="inline-flex shrink-0 items-center">
-            <Image
-              src="/leir-logo.png"
-              alt="LEIR"
-              width={113}
-              height={40}
-              className="h-9 w-auto"
-              fetchPriority="high"
-            />
-          </Link>
+    <>
+      <header
+        className="sticky top-0 z-30 border-b border-[#1f2430] bg-[#111827] text-white"
+        style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
+      >
+        <div className="mx-auto flex w-full max-w-7xl flex-row items-center justify-between gap-2 px-3 py-1 sm:px-6 md:flex-col md:items-stretch md:gap-3 md:py-3 lg:h-14 lg:flex-row lg:items-center lg:justify-between lg:gap-4 lg:px-8 lg:py-0">
+          <div className="flex min-w-0 items-center md:flex-1 md:flex-col md:gap-3 lg:flex-row lg:items-center lg:gap-6">
+            <Link href="/" className="inline-flex shrink-0 items-center">
+              <Image
+                src="/leir-logo.png"
+                alt="LEIR"
+                width={113}
+                height={40}
+                className="h-7 w-auto md:h-9"
+                fetchPriority="high"
+              />
+            </Link>
 
-          <nav
-            aria-label="Huvudnavigation"
-            className="-mx-1 flex items-center gap-1 overflow-x-auto px-1 pb-0.5 lg:pb-0"
-          >
-            {visibleNavItems.map((item) => (
-              <NavLink
-                key={item.key}
-                href={item.href}
-                active={current === item.key}
-              >
-                {item.label}
-              </NavLink>
-            ))}
-          </nav>
-        </div>
-
-        <div className="inline-flex max-w-full items-center gap-2.5 self-start rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 lg:self-auto">
-          <span
-            aria-hidden
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[#5b5bd6]/20 text-[11px] font-semibold text-[#c7c7ff]"
-          >
-            {initials}
-          </span>
-          <div className="min-w-0">
-            <p className="truncate text-xs font-medium text-white">{label}</p>
-            <p className="text-[10px] text-slate-400">Inloggad</p>
+            <nav
+              aria-label="Huvudnavigation"
+              className="-mx-1 hidden w-full min-w-0 items-center gap-1 overflow-x-auto px-1 pb-0.5 md:flex lg:w-auto lg:pb-0"
+            >
+              {visibleNavItems.map((item) => (
+                <NavLink
+                  key={item.key}
+                  href={item.href}
+                  active={current === item.key}
+                >
+                  {item.label}
+                </NavLink>
+              ))}
+            </nav>
           </div>
-          {user ? (
-            <form action={signOutAction}>
-              <button
-                type="submit"
-                className="shrink-0 rounded-md px-2 py-1 text-[11px] font-medium text-slate-300 transition hover:bg-white/10 hover:text-white"
-              >
-                Logga ut
-              </button>
-            </form>
-          ) : null}
+
+          <div className="inline-flex max-w-full items-center gap-2 self-auto rounded-lg border border-white/10 bg-white/5 px-2 py-1 md:gap-2.5 md:self-start md:px-2.5 md:py-1.5 lg:self-auto">
+            <span
+              aria-hidden
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#5b5bd6]/20 text-[10px] font-semibold text-[#c7c7ff] md:h-7 md:w-7 md:text-[11px]"
+            >
+              {initials}
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-xs font-medium text-white">{label}</p>
+              <p className="hidden text-[10px] text-slate-400 md:block">
+                Inloggad
+              </p>
+            </div>
+            {user ? (
+              <>
+                <Link
+                  href={CHANGE_PASSWORD_PATH}
+                  className="hidden shrink-0 rounded-md px-2 py-1 text-[11px] font-medium text-slate-300 transition hover:bg-white/10 hover:text-white md:block"
+                >
+                  Byt lösenord
+                </Link>
+                <form action={signOutAction} className="hidden md:block">
+                  <button
+                    type="submit"
+                    className="shrink-0 rounded-md px-2 py-1 text-[11px] font-medium text-slate-300 transition hover:bg-white/10 hover:text-white"
+                  >
+                    Logga ut
+                  </button>
+                </form>
+              </>
+            ) : null}
+          </div>
         </div>
-      </div>
-    </header>
+      </header>
+      <AppBottomNav
+        current={current}
+        items={visibleNavItems}
+        signedIn={Boolean(user)}
+      />
+    </>
   );
 }
 

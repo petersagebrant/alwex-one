@@ -31,7 +31,7 @@ export async function generateMetadata({
   const { id } = await params;
   const goal = await getGoalById(id).catch(() => null);
   return {
-    title: goal ? `${goal.title} | Mål | LEIR` : "Mål | LEIR",
+    title: goal ? `${goal.title} | Mål` : "Mål",
     description: "Måldetalj",
   };
 }

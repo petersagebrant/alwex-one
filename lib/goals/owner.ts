@@ -1,4 +1,4 @@
-import { APP_ROLE_LABELS, type AppRole } from "@/lib/auth/roles";
+import { APP_ROLE_LABELS, formatVdRoleDisplay, type AppRole } from "@/lib/auth/roles";
 
 export type GoalOwnerOption = {
   id: string;
@@ -12,7 +12,7 @@ export function profileAssignmentLabel(profile: {
 }): string {
   const name = profile.display_name.trim();
   if (name) {
-    return name;
+    return formatVdRoleDisplay(name);
   }
   return APP_ROLE_LABELS[profile.role];
 }

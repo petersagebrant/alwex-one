@@ -2,6 +2,7 @@ import "server-only";
 
 import { headers } from "next/headers";
 import { isProtectedUserId } from "@/lib/auth/protected-users";
+import { clearMustChangePasswordAuthUpdate } from "@/lib/auth/must-change-password";
 import {
   generateTemporaryPassword,
   temporaryPasswordAuthUpdate,
@@ -13,7 +14,7 @@ import {
   parseUpdateUserInput,
   type InviteUserInput,
 } from "@/lib/auth/user-admin";
-import { APP_ROLE_LABELS, type AppRole } from "@/lib/auth/roles";
+import { APP_ROLE_LABELS, formatVdRoleDisplay, type AppRole } from "@/lib/auth/roles";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { recordAuditLog } from "@/services/auditLog";
 import { resolveActorName } from "@/services/changeHistory";
@@ -142,7 +143,9 @@ function toListItem(
 
   return {
     id: profile.id,
-    displayName: profile.display_name.trim() || authUser?.email || "Namnlös",
+    displayName: formatVdRoleDisplay(
+      profile.display_name.trim() || authUser?.email || "Namnlös",
+    ),
     rawDisplayName: profile.display_name,
     email: authUser?.email ?? null,
     role: profile.role,
@@ -158,7 +161,7 @@ function toListItem(
   };
 }
 
-export async function inviteUser(
+export async function createUser(
   _actorId: string,
   raw: {
     displayName: unknown;
@@ -166,7 +169,7 @@ export async function inviteUser(
     role: unknown;
     businessAreaId: unknown;
   },
-): Promise<void> {
+): Promise<{ id: string }> {
   const parsed = parseInviteUserInput(raw);
   if (!parsed.ok) {
     throw new Error(parsed.error);
@@ -184,11 +187,10 @@ export async function inviteUser(
       businessAreaId: parsed.value.businessAreaId,
       displayName: parsed.value.displayName,
     });
-    await sendInviteOrRecoveryLink(existing);
-    return;
+    return { id: existing.id };
   }
 
-  const userId = await inviteAuthUser(parsed.value);
+  const userId = await createAuthUser(parsed.value);
   try {
     await insertProfile({
       id: userId,
@@ -200,28 +202,45 @@ export async function inviteUser(
     throw new Error(
       error instanceof Error
         ? `${error.message} Auth-kontot skapades; komplettera profilen eller försök igen.`
-        : "Kunde inte spara profil efter inbjudan.",
+        : "Kunde inte spara profil efter skapande.",
     );
   }
+
+  return { id: userId };
 }
 
-async function inviteAuthUser(input: InviteUserInput): Promise<string> {
-  const admin = createServiceRoleClient();
-  const redirectTo = await authRedirectTo();
-  const { data, error } = await admin.auth.admin.inviteUserByEmail(input.email, {
-    data: { display_name: input.displayName },
-    redirectTo,
-  });
+function passwordRequiredByGoTrue(message: string): boolean {
+  return /password/i.test(message) && /required|måste|must/i.test(message);
+}
 
-  if (error || !data.user?.id) {
+async function createAuthUser(input: InviteUserInput): Promise<string> {
+  const admin = createServiceRoleClient();
+  const attributes = {
+    email: input.email,
+    email_confirm: true as const,
+    user_metadata: {
+      name: input.displayName,
+      display_name: input.displayName,
+    },
+  };
+
+  let result = await admin.auth.admin.createUser(attributes);
+  if (result.error && passwordRequiredByGoTrue(result.error.message)) {
+    result = await admin.auth.admin.createUser({
+      ...attributes,
+      password: generateTemporaryPassword(24),
+    });
+  }
+
+  if (result.error || !result.data.user?.id) {
     throw new Error(
-      error?.message
-        ? `Kunde inte skicka inbjudan: ${error.message}`
-        : "Kunde inte skicka inbjudan.",
+      result.error?.message
+        ? `Kunde inte skapa användaren: ${result.error.message}`
+        : "Kunde inte skapa användaren.",
     );
   }
 
-  return data.user.id;
+  return result.data.user.id;
 }
 
 async function sendInviteOrRecoveryLink(user: AuthUserSummary): Promise<void> {
@@ -392,6 +411,18 @@ export async function setUserTemporaryPassword(
   });
 
   return { password, email: targetEmail };
+}
+
+/** Clear `app_metadata.must_change_password` after the user sets their own password. */
+export async function clearMustChangePasswordFlag(userId: string): Promise<void> {
+  const admin = createServiceRoleClient();
+  const { error } = await admin.auth.admin.updateUserById(
+    userId,
+    clearMustChangePasswordAuthUpdate(),
+  );
+  if (error) {
+    throw new Error(`Kunde inte rensa lösenordsflagga: ${error.message}`);
+  }
 }
 
 async function requireExistingProfile(userId: string): Promise<ProfileRow> {

@@ -40,6 +40,37 @@ body {
   font-family: var(--font-geist-sans), ui-sans-serif, sans-serif;
 }
 
+/* Clickable controls: pointer. Text fields keep the I-beam. Unlayered so this beats Tailwind cursor-default. */
+button:not(:disabled):not([aria-disabled="true"]),
+a[href]:not([aria-disabled="true"]),
+[role="button"]:not([aria-disabled="true"]):not([disabled]),
+[role="link"]:not([aria-disabled="true"]),
+[role="menuitem"]:not([aria-disabled="true"]):not([disabled]),
+[role="tab"]:not([aria-disabled="true"]):not([disabled]),
+[role="option"]:not([aria-disabled="true"]):not([disabled]),
+[role="switch"]:not([aria-disabled="true"]):not([disabled]),
+[role="checkbox"]:not([aria-disabled="true"]):not([disabled]),
+summary,
+label[for],
+select:not(:disabled),
+input[type="button"]:not(:disabled),
+input[type="submit"]:not(:disabled),
+input[type="reset"]:not(:disabled),
+input[type="checkbox"]:not(:disabled),
+input[type="radio"]:not(:disabled),
+input[type="file"]:not(:disabled) {
+  cursor: pointer;
+}
+
+button:disabled,
+button[aria-disabled="true"],
+select:disabled,
+input:disabled,
+[role="button"][disabled],
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
 /* Default 65/35. Stack only below phone width — 1024px treated laptops as mobile. */
 .vd-briefing-card {
   container-type: inline-size;
@@ -76,4 +107,10 @@ body {
   flex-direction: column;
   align-self: start;
   gap: 0.75rem;
+}
+
+@media (max-width: 767px) {
+  body:has([data-mobile-bottom-nav]) {
+    padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
+  }
 }

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { requestPasswordResetAction } from "./actions";
 
 export const metadata: Metadata = {
-  title: "Glömt lösenord | LEIR",
+  title: "Glömt lösenord",
   description: "Begär en länk för att återställa ditt lösenord",
 };
 

@@ -10,7 +10,7 @@ import { ActivityFormFields } from "./ActivityFormFields";
 import { createActivityAction, updateActivityAction } from "./actions";
 
 export const metadata: Metadata = {
-  title: "Administrera aktiviteter | LEIR",
+  title: "Administrera aktiviteter",
   description: "Lista, skapa och uppdatera aktiviteter",
 };
 

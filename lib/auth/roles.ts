@@ -1,3 +1,5 @@
+import { givenNameFromProfileFields } from "@/lib/auth/greeting";
+
 export const APP_ROLES = [
   "vd",
   "vice_vd",
@@ -15,6 +17,18 @@ export const APP_ROLE_LABELS: Record<AppRole, string> = {
   administrator: "Administratör",
   lasbehorighet: "Läsbehörighet",
 };
+
+/** User-visible role spelling: Vd → VD, Vice Vd → Vice VD. */
+export function formatVdRoleDisplay(text: string): string {
+  return text
+    .replace(/\bVice Vd\b/g, "Vice VD")
+    .replace(/\bVd\b/g, "VD");
+}
+
+/** First given name for greetings. Role labels are never used as a name. */
+export function formatGreetingGivenName(name: string): string {
+  return givenNameFromProfileFields({ displayName: name }) ?? "";
+}
 
 export function isAppRole(value: string): value is AppRole {
   return (APP_ROLES as readonly string[]).includes(value);

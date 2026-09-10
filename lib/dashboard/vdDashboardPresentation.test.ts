@@ -77,6 +77,7 @@ describe("VD dashboard presentation", () => {
   it("renders Rapporteringsläge as a compact status row without changing progress totals", () => {
     assert.match(vdDash, /KPI rapporterade idag/);
     assert.match(vdDash, /återstår/);
+    assert.match(vdDash, /orgReporting\.reported\}\/\{orgReporting\.total\}/);
     assert.match(vdDash, /orgReporting\.total - orgReporting\.reported/);
     assert.doesNotMatch(vdDash, /title="Rapporteringsläge"/);
     assert.match(kpiKind, /export function isDailyManualReportableKpi/);
@@ -140,5 +141,40 @@ describe("VD dashboard presentation", () => {
     assert.match(page, /greetingName=\{firstName\}/);
     assert.doesNotMatch(briefing, /God morgon Vd/);
     assert.doesNotMatch(briefing, /God morgon VD/);
+  });
+
+  it("uses compact mobile chrome below md without changing desktop header nav", () => {
+    const header = read("../../components/layout/AppHeader.tsx");
+    const bottomNav = read("../../components/layout/AppBottomNav.tsx");
+    const layout = read("../../app/layout.tsx");
+    const areaOverview = read("../../components/dashboard/VdAreaOverview.tsx");
+
+    assert.match(header, /visibleAppNavItems/);
+    assert.match(header, /\bhidden\b/);
+    assert.match(header, /\bmd:flex\b/);
+    assert.match(header, /<AppBottomNav/);
+    assert.match(header, /env\(safe-area-inset-top/);
+    assert.match(header, /hidden md:block/);
+    assert.match(header, /\bpx-3 py-1\b/);
+    assert.match(header, /\bh-7 w-auto md:h-9\b/);
+    assert.match(header, /\bmd:py-3\b/);
+    assert.match(header, /\blg:h-14\b/);
+    assert.doesNotMatch(header, /<aside\b/);
+    assert.doesNotMatch(header, /\bw-64\b/);
+    assert.match(bottomNav, /md:hidden/);
+    assert.match(bottomNav, /data-mobile-bottom-nav/);
+    assert.match(bottomNav, /env\(safe-area-inset-bottom/);
+    assert.match(bottomNav, />Mer</);
+    assert.match(bottomNav, /Logga ut/);
+    assert.doesNotMatch(bottomNav, /<aside\b/);
+    assert.doesNotMatch(bottomNav, /\bw-64\b/);
+    assert.match(layout, /viewportFit:\s*"cover"/);
+    assert.match(globalsCss, /max-width: 767px/);
+    assert.match(briefing, /VdBriefingCollapsible/);
+    assert.match(briefing, /isVdBriefingSectionCollapsedOnMobile/);
+    assert.match(briefing, /className="md:hidden"/);
+    assert.match(briefing, /hidden md:block/);
+    assert.match(areaOverview, /md:grid md:grid-cols-/);
+    assert.match(areaOverview, /row\.href/);
   });
 });

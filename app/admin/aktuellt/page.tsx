@@ -30,7 +30,7 @@ import {
 } from "@/services/areaNotices";
 
 export const metadata: Metadata = {
-  title: "Administrera Aktuellt | LEIR",
+  title: "Administrera Aktuellt",
   description: "Lista, skapa och uppdatera Aktuellt-inlägg",
 };
 

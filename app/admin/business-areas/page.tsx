@@ -11,7 +11,7 @@ import {
 } from "@/services/businessAreas";
 
 export const metadata: Metadata = {
-  title: "Administrera affärsområden | LEIR",
+  title: "Administrera affärsområden",
   description: "Skapa och uppdatera affärsområden",
 };
 

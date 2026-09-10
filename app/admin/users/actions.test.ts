@@ -12,7 +12,7 @@ describe("user admin server actions", () => {
     assert.match(actions, /^"use server";/m);
 
     const exported = [
-      "inviteUserAction",
+      "createUserAction",
       "updateUserAction",
       "setUserDisabledAction",
       "sendUserAccessLinkAction",
@@ -26,7 +26,7 @@ describe("user admin server actions", () => {
       const requireIndex = fn[0]!.indexOf("requireUserAdministrator()");
       assert.ok(requireIndex >= 0, `${name} lacks requireUserAdministrator()`);
       const mutateIndex = Math.min(
-        ...["inviteUser(", "updateUser(", "setUserDisabled(", "sendUserAccessLink("]
+        ...["createUser(", "updateUser(", "setUserDisabled(", "sendUserAccessLink("]
           .map((token) => fn[0]!.indexOf(token))
           .filter((index) => index >= 0),
       );
@@ -43,6 +43,7 @@ describe("user admin server actions", () => {
     assert.match(page, /requireUserAdministrator\(\)/);
     assert.doesNotMatch(page, /createServiceRoleClient/);
     assert.doesNotMatch(page, /inviteUserByEmail/);
+    assert.doesNotMatch(page, /admin\.auth\.admin\.createUser/);
   });
 
   it("disables local public signup in config.toml", () => {
@@ -53,7 +54,7 @@ describe("user admin server actions", () => {
     );
     assert.match(
       config,
-      /# Allow\/disallow new user signups via email to your project\.\nenable_signup = false/,
+      /Public signup stays off via \[auth\] enable_signup = false/,
     );
   });
 
@@ -67,6 +68,45 @@ describe("user admin server actions", () => {
     assert.doesNotMatch(fn[0]!, /requireUserAdministrator\(\)/);
     assert.match(fn[0]!, /setUserTemporaryPassword\(/);
     assert.doesNotMatch(fn[0]!, /redirect\(/);
+  });
+
+  it("creates users with Auth Admin createUser, not invite email", () => {
+    const users = read("services/users.ts");
+    const start = users.indexOf("export async function createUser");
+    assert.ok(start >= 0);
+    const body = users.slice(
+      start,
+      users.indexOf("async function sendInviteOrRecoveryLink"),
+    );
+    assert.match(body, /admin\.auth\.admin\.createUser\(/);
+    assert.match(body, /email_confirm:\s*true/);
+    assert.match(body, /user_metadata/);
+    assert.match(body, /display_name:/);
+    assert.match(body, /parseInviteUserInput/);
+    assert.doesNotMatch(body, /inviteUserByEmail/);
+    assert.doesNotMatch(body, /generateLink/);
+    assert.doesNotMatch(body, /sendInviteOrRecoveryLink/);
+
+    const actions = read("app/admin/users/actions.ts");
+    assert.match(actions, /createUserAction/);
+    assert.match(actions, /createUser\(/);
+    assert.doesNotMatch(actions, /inviteUserByEmail/);
+    assert.doesNotMatch(actions, /inviteUserAction/);
+  });
+
+  it("does not render password recovery or invite-email actions", () => {
+    const page = read("app/admin/users/page.tsx");
+    assert.match(page, /Skapa användare/);
+    assert.match(page, /createUserAction/);
+    assert.match(page, /Ange tillfälligt lösenord/);
+    assert.match(page, /SetUserPasswordControls/);
+    assert.doesNotMatch(page, /Bjud in användare/);
+    assert.doesNotMatch(page, /Skicka inbjudan/);
+    assert.doesNotMatch(page, /Skicka lösenordsåterställning/);
+    assert.doesNotMatch(page, /Skicka ny inbjudan/);
+    assert.doesNotMatch(page, /sendUserAccessLinkAction/);
+    assert.doesNotMatch(page, /e-postlänk/);
+    assert.doesNotMatch(page, /inbjudan via e-post/);
   });
 
   it("keeps generateLink and forgot-password resetPasswordForEmail", () => {
@@ -86,6 +126,9 @@ describe("user admin server actions", () => {
       body,
       /updateUserById\(\s*userId,\s*temporaryPasswordAuthUpdate\(password\),?\s*\)/,
     );
+    const helper = read("lib/auth/temporary-password.ts");
+    assert.match(helper, /must_change_password:\s*true/);
+    assert.match(helper, /email_confirm:\s*true/);
     assert.doesNotMatch(body, /createUser\(/);
     assert.doesNotMatch(body, /ban_duration/);
     assert.doesNotMatch(body, /deleteUser/);
@@ -114,14 +157,15 @@ describe("user admin server actions", () => {
 
     const ui = read("components/admin/SetUserPasswordControls.tsx");
     assert.match(ui, /Ange nytt lösenord/);
+    assert.match(ui, /setUserPasswordAction/);
     assert.match(ui, /E-postadressen markeras som bekräftad/);
     assert.match(ui, /Visas bara en gång/);
-    assert.match(ui, /inbjudningsmejlet aldrig öppnades/);
+    assert.doesNotMatch(ui, /inbjudningsmejlet/);
     assert.doesNotMatch(ui, /createServiceRoleClient/);
     assert.doesNotMatch(ui, /SUPABASE_SERVICE_ROLE_KEY/);
   });
 
-  it("lists Vice VD in the invite dropdown and keeps Inget for non-AO-chef", () => {
+  it("lists Vice VD in the create-user dropdown and keeps Inget for non-AO-chef", () => {
     const fields = read("components/admin/UserFormFields.tsx");
     assert.match(fields, /APP_ROLES\.map/);
     assert.match(fields, /roleRequiresBusinessArea/);

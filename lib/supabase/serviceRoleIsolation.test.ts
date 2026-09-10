@@ -86,7 +86,8 @@ describe("service role isolation", () => {
     assert.match(profiles, /\.from\("profiles"\)/);
     assert.doesNotMatch(profiles, /createServiceRoleClient/);
     assert.doesNotMatch(admin, /\.from\(["']profiles["']\)/);
-    assert.match(users, /inviteUserByEmail/);
+    assert.match(users, /admin\.auth\.admin\.createUser/);
+    assert.doesNotMatch(users, /inviteUserByEmail/);
     assert.match(users, /generateLink/);
     assert.match(users, /ban_duration/);
   });

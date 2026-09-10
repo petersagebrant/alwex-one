@@ -51,7 +51,7 @@ export async function generateMetadata({
   const dbArea = await fetchBusinessAreaBySlug(slug).catch(() => null);
 
   return {
-    title: dbArea ? `${dbArea.name} | LEIR` : "Affärsområde | LEIR",
+    title: dbArea ? dbArea.name : "Affärsområde",
     description: dbArea?.description ?? undefined,
   };
 }

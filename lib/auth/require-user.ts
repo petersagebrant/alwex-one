@@ -4,6 +4,10 @@ import {
   loginRedirectHref,
 } from "@/lib/auth/deny-redirect";
 import {
+  CHANGE_PASSWORD_PATH,
+  mustChangePasswordFromUser,
+} from "@/lib/auth/must-change-password";
+import {
   canAdministerUsers,
   canManageBusinessAreas,
   canSetUserPassword,
@@ -39,6 +43,10 @@ export async function requireUser(): Promise<AuthUser> {
     redirect(loginRedirectHref());
   }
 
+  if (mustChangePasswordFromUser(user)) {
+    redirect(CHANGE_PASSWORD_PATH);
+  }
+
   return {
     id: user.id,
     email: user.email ?? null,
@@ -54,6 +62,10 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
 
   if (!user) {
     return null;
+  }
+
+  if (mustChangePasswordFromUser(user)) {
+    redirect(CHANGE_PASSWORD_PATH);
   }
 
   return {

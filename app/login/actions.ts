@@ -2,6 +2,10 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import {
+  CHANGE_PASSWORD_PATH,
+  mustChangePasswordFromUser,
+} from "@/lib/auth/must-change-password";
 import { RECOVERY_COOKIE } from "@/lib/auth/recovery";
 import { createClient } from "@/lib/supabase/server";
 
@@ -52,6 +56,14 @@ export async function signInAction(formData: FormData) {
 
   // Normal login must not keep a stale recovery gate.
   await clearRecoveryCookie();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (mustChangePasswordFromUser(user)) {
+    redirect(CHANGE_PASSWORD_PATH);
+  }
+
   redirect(next);
 }
 

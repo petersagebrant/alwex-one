@@ -32,9 +32,7 @@ export async function generateMetadata({
   const activity = await getActivityById(id).catch(() => null);
 
   return {
-    title: activity
-      ? `${activity.title} | LEIR`
-      : "Aktivitet | LEIR",
+    title: activity ? activity.title : "Aktivitet",
   };
 }
 

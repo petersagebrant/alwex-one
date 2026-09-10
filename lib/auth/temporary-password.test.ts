@@ -4,6 +4,7 @@ import {
   generateTemporaryPassword,
   temporaryPasswordAuthUpdate,
 } from "./temporary-password";
+import { MUST_CHANGE_PASSWORD_KEY } from "./must-change-password";
 
 describe("generateTemporaryPassword", () => {
   it("returns at least 12 mixed characters", () => {
@@ -23,9 +24,16 @@ describe("generateTemporaryPassword", () => {
 });
 
 describe("temporaryPasswordAuthUpdate", () => {
-  it("calls mocked updateUserById with password and email_confirm: true", async () => {
+  it("calls mocked updateUserById with password, email_confirm, and must_change_password", async () => {
     const updateUserById = mock.fn(
-      async (_uid: string, attributes: { password: string; email_confirm: boolean }) => {
+      async (
+        _uid: string,
+        attributes: {
+          password: string;
+          email_confirm: boolean;
+          app_metadata: { must_change_password: boolean };
+        },
+      ) => {
         return { data: { user: { id: _uid } }, error: null };
       },
     );
@@ -42,9 +50,14 @@ describe("temporaryPasswordAuthUpdate", () => {
     assert.equal(uid, "user-id");
     assert.equal(attributes.password, password);
     assert.equal(attributes.email_confirm, true);
+    assert.equal(attributes.app_metadata[MUST_CHANGE_PASSWORD_KEY], true);
     assert.deepEqual(Object.keys(attributes).sort(), [
+      "app_metadata",
       "email_confirm",
       "password",
+    ]);
+    assert.deepEqual(Object.keys(attributes.app_metadata), [
+      MUST_CHANGE_PASSWORD_KEY,
     ]);
   });
 });

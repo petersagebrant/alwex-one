@@ -14,7 +14,7 @@ import {
 } from "./actions";
 
 export const metadata: Metadata = {
-  title: "Administrera beslut | LEIR",
+  title: "Administrera beslut",
   description: "Lista, skapa och uppdatera beslut",
 };
 

@@ -32,12 +32,61 @@ const noticeItemTone: Record<AreaNoticeKind, string> = {
   Behov: "border-l-teal-600 bg-teal-50/55",
 };
 
+function NoticeCreateLink({ href }: { href: string }) {
+  return (
+    <Link
+      href={href}
+      className="inline-flex items-center rounded-xl bg-[#0b1220] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+    >
+      Nytt inlägg
+    </Link>
+  );
+}
+
 export function OrgNoticesFeed({
   notices,
   ownAreaSlug,
   canCreate = false,
   createHref,
 }: OrgNoticesFeedProps) {
+  if (notices.length === 0) {
+    return (
+      <>
+        <section
+          aria-label="Aktuellt i verksamheten"
+          className="flex items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-white px-3 py-2 shadow-[0_6px_18px_rgba(15,23,42,0.05)] md:hidden"
+        >
+          <p className="min-w-0 truncate text-sm text-slate-600">
+            Aktuellt · Inget just nu.
+          </p>
+          {canCreate && createHref ? (
+            <Link
+              href={createHref}
+              className="inline-flex shrink-0 items-center rounded-lg bg-[#0b1220] px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+            >
+              Nytt inlägg
+            </Link>
+          ) : null}
+        </section>
+        <div className="hidden md:block">
+          <InfoPanel
+            title="Aktuellt i verksamheten"
+            titleHref={ownAreaSlug ? areaNoticesHref(ownAreaSlug) : undefined}
+            showLabel={false}
+            className="!border-2 !border-slate-300 !bg-white !shadow-[0_10px_28px_rgba(15,23,42,0.08)]"
+            action={
+              canCreate && createHref ? (
+                <NoticeCreateLink href={createHref} />
+              ) : undefined
+            }
+          >
+            <p className="text-sm text-slate-600">Inget aktuellt just nu.</p>
+          </InfoPanel>
+        </div>
+      </>
+    );
+  }
+
   return (
     <InfoPanel
       title="Aktuellt i verksamheten"
@@ -46,18 +95,10 @@ export function OrgNoticesFeed({
       className="!border-2 !border-slate-300 !bg-white !shadow-[0_10px_28px_rgba(15,23,42,0.08)]"
       action={
         canCreate && createHref ? (
-          <Link
-            href={createHref}
-            className="inline-flex items-center rounded-xl bg-[#0b1220] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
-          >
-            Nytt inlägg
-          </Link>
+          <NoticeCreateLink href={createHref} />
         ) : undefined
       }
     >
-      {notices.length === 0 ? (
-        <p className="text-sm text-slate-600">Inget aktuellt just nu.</p>
-      ) : (
         <ul className="space-y-2.5">
           {notices.map((notice) => {
             const itemHref = noticeItemHref(
@@ -117,7 +158,6 @@ export function OrgNoticesFeed({
             );
           })}
         </ul>
-      )}
     </InfoPanel>
   );
 }

@@ -99,15 +99,13 @@ export function VdLeadershipDashboard({
         {reportingIncomplete && orgReporting ? (
           <Link
             href="/report/kpis"
-            className="group flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 rounded-xl border border-amber-200/80 bg-amber-50/50 px-3 py-2 outline-none transition hover:brightness-[0.99] focus-visible:ring-2 focus-visible:ring-slate-300"
+            className="group flex items-center justify-between gap-3 rounded-xl border border-amber-200/80 bg-amber-50/50 px-3 py-2 outline-none transition hover:brightness-[0.99] focus-visible:ring-2 focus-visible:ring-slate-300"
           >
-            <p className="text-sm leading-snug text-slate-700">
-              <span className="font-medium text-slate-500">
-                Rapporteringsläge
-              </span>
+            <p className="min-w-0 flex-1 text-sm leading-snug text-slate-700">
+              <span className="font-medium text-slate-500">Rapportering</span>
               <span className="text-slate-400"> · </span>
               <span className="font-semibold text-slate-900">
-                {orgReporting.reported} av {orgReporting.total}
+                {orgReporting.reported}/{orgReporting.total}
               </span>{" "}
               KPI rapporterade idag
               {remainingReports > 0 ? (
@@ -117,7 +115,7 @@ export function VdLeadershipDashboard({
                 </>
               ) : null}
             </p>
-            <span className="inline-flex items-center rounded-lg bg-[#0b1220] px-3 py-1.5 text-sm font-semibold text-white transition group-hover:bg-slate-800">
+            <span className="inline-flex shrink-0 items-center rounded-lg bg-[#0b1220] px-3 py-1.5 text-sm font-semibold text-white transition group-hover:bg-slate-800">
               Rapportera KPI
             </span>
           </Link>

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { signInAction } from "./actions";
 
 export const metadata: Metadata = {
-  title: "Logga in | LEIR",
+  title: "Logga in",
   description: "Logga in till LEIR",
 };
 

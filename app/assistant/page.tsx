@@ -4,7 +4,7 @@ import { requireAiPrincipal } from "@/lib/auth/ai-principal";
 import { AssistantChat } from "./AssistantChat";
 
 export const metadata: Metadata = {
-  title: "AI-assistent | LEIR",
+  title: "AI-assistent",
   description: "Ställ frågor om verksamheten utifrån aktuell data",
 };
 

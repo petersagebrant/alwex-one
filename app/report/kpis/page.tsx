@@ -22,7 +22,7 @@ import {
 import type { MyKpisForTodayReporting } from "@/types";
 
 export const metadata: Metadata = {
-  title: "KPI-rapportering | LEIR",
+  title: "KPI-rapportering",
   description: "Daglig KPI-rapportering för affärsområdeschef",
 };
 

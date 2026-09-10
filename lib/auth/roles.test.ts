@@ -8,6 +8,8 @@ import {
   canSetUserPassword,
   canWriteDecisions,
   canWriteOperational,
+  formatGreetingGivenName,
+  formatVdRoleDisplay,
   isVdEquivalent,
   roleRequiresBusinessArea,
 } from "./roles";
@@ -55,9 +57,17 @@ describe("isVdEquivalent", () => {
     assert.equal(canSetUserPassword("vice_vd"), canSetUserPassword("vd"));
   });
 
-  it("labels vice_vd as Vice VD in the role catalog", () => {
+  it("labels vd and vice_vd as VD and Vice VD in the role catalog", () => {
+    assert.ok(APP_ROLES.includes("vd"));
     assert.ok(APP_ROLES.includes("vice_vd"));
+    assert.equal(APP_ROLE_LABELS.vd, "VD");
     assert.equal(APP_ROLE_LABELS.vice_vd, "Vice VD");
+    assert.equal(formatVdRoleDisplay("Vice Vd"), "Vice VD");
+    assert.equal(formatVdRoleDisplay("Vd"), "VD");
+    assert.equal(formatGreetingGivenName("Peter Sagebrant"), "Peter");
+    assert.equal(formatGreetingGivenName("Peter"), "Peter");
+    assert.equal(formatGreetingGivenName("Vd"), "");
+    assert.equal(formatGreetingGivenName("vd"), "");
   });
 
   it("requires a business area only for ao_chef", () => {

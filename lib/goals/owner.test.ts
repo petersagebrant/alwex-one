@@ -9,6 +9,10 @@ describe("profileAssignmentLabel", () => {
       "Lars-Olof",
     );
     assert.equal(
+      profileAssignmentLabel({ display_name: "Vd", role: "vd" }),
+      "VD",
+    );
+    assert.equal(
       profileAssignmentLabel({ display_name: "", role: "vd" }),
       "VD",
     );

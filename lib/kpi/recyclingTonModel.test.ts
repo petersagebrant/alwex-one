@@ -84,7 +84,7 @@ describe("Recycling ton volume model", () => {
   it("keeps daily progress stable and excludes ton statistics from G/Y/R", () => {
     const kpis = [
       {
-        id: "ton-idag",
+        id: "ton-in",
         kind: "STATISTIC" as const,
         calcOperator: null,
         reportingFrequency: "DAILY" as const,
@@ -92,20 +92,54 @@ describe("Recycling ton volume model", () => {
         currentValue: "12",
       },
       {
-        id: "ton-mtd",
+        id: "ton-in-mtd",
         kind: "CALCULATED" as const,
         calcOperator: "MONTH_TO_DATE_SUM" as const,
-        calcNumeratorKpiId: "ton-idag",
+        calcNumeratorKpiId: "ton-in",
         reportingFrequency: "DAILY" as const,
         status: "Statistik" as const,
         currentValue: "120",
       },
       {
-        id: "omsattning",
+        id: "ton-ut",
         kind: "STATISTIC" as const,
         calcOperator: null,
         reportingFrequency: "DAILY" as const,
         status: "Statistik" as const,
+        currentValue: "8",
+      },
+      {
+        id: "ton-ut-mtd",
+        kind: "CALCULATED" as const,
+        calcOperator: "MONTH_TO_DATE_SUM" as const,
+        calcNumeratorKpiId: "ton-ut",
+        reportingFrequency: "DAILY" as const,
+        status: "Statistik" as const,
+        currentValue: "80",
+      },
+      {
+        id: "overtid",
+        kind: "STATISTIC" as const,
+        calcOperator: null,
+        reportingFrequency: "DAILY" as const,
+        status: "Statistik" as const,
+        currentValue: "2",
+      },
+      {
+        id: "overtid-mtd",
+        kind: "CALCULATED" as const,
+        calcOperator: "MONTH_TO_DATE_SUM" as const,
+        calcNumeratorKpiId: "overtid",
+        reportingFrequency: "DAILY" as const,
+        status: "Statistik" as const,
+        currentValue: "20",
+      },
+      {
+        id: "omsattning-mot-budget",
+        kind: "TARGET" as const,
+        calcOperator: null,
+        reportingFrequency: "MONTHLY" as const,
+        status: "Gul" as const,
         currentValue: "1000",
       },
       {
@@ -145,15 +179,22 @@ describe("Recycling ton volume model", () => {
       },
     ];
     const reported = new Set([
-      "ton-idag",
-      "omsattning",
+      "ton-in",
+      "ton-in-mtd",
+      "ton-ut",
+      "ton-ut-mtd",
+      "overtid",
+      "overtid-mtd",
+      "omsattning-mot-budget",
       "sjuktimmar",
       "ordinarie",
+      "sjukfranvaro",
+      "resultat",
     ]);
 
     assert.deepEqual(countKpiSetReportingProgress(kpis, reported), {
-      reportedCount: 3,
-      totalCount: 3,
+      reportedCount: 4,
+      totalCount: 4,
     });
     assert.deepEqual(
       countTargetKpiStatuses(kpis.slice(0, 2)),

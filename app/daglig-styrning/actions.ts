@@ -4,7 +4,10 @@ import { revalidatePath } from "next/cache";
 import { requireProfile } from "@/lib/auth/require-user";
 import { parseIsoCalendarDate, stockholmCalendarDate } from "@/lib/kpi/dailyReportDate";
 import { isSteeringBoardActivityStatus } from "@/lib/operational-reports/boardPresentation";
-import { canWriteOperationalForArea } from "@/lib/operational-reports/permissions";
+import {
+  canAnswerEscalation,
+  canWriteOperationalForArea,
+} from "@/lib/operational-reports/permissions";
 import {
   isOperationalReportStatus,
   statusAfterCreatingLinkedAction,
@@ -13,6 +16,10 @@ import {
   createSteeringActivity,
   patchSteeringActivity,
 } from "@/services/activities";
+import {
+  answerActivityEscalation,
+  recordActivityEscalation,
+} from "@/services/activityEscalations";
 import {
   getKPIById,
 } from "@/services/kpis";
@@ -29,6 +36,7 @@ function firstParam(value: FormDataEntryValue | null): string {
 
 function revalidateSteering() {
   revalidatePath("/daglig-styrning");
+  revalidatePath("/");
 }
 
 export async function updateOperationalReportStatusAction(formData: FormData) {
@@ -224,26 +232,23 @@ export async function patchSteeringActivityAction(formData: FormData) {
     if (!escalationNote) {
       return;
     }
-    await patchSteeringActivity(
-      {
-        id,
-        requiresEscalation: true,
-        escalationNote,
-      },
-      profile,
-    );
+    await recordActivityEscalation(id, escalationNote, profile);
     revalidateSteering();
+  }
+}
+
+export async function answerEscalationAction(formData: FormData) {
+  const profile = await requireProfile();
+  if (!canAnswerEscalation(profile.role)) {
     return;
   }
 
-  if (intent === "end-escalation") {
-    await patchSteeringActivity(
-      {
-        id,
-        requiresEscalation: false,
-      },
-      profile,
-    );
-    revalidateSteering();
+  const id = firstParam(formData.get("id")).trim();
+  const reply = firstParam(formData.get("reply")).trim();
+  if (!id || !reply) {
+    return;
   }
+
+  await answerActivityEscalation(id, reply, profile);
+  revalidateSteering();
 }

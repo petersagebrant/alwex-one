@@ -1,5 +1,10 @@
+import { updateOperationalReportStatusAction } from "@/app/daglig-styrning/actions";
 import type { GoalOwnerOption } from "@/lib/goals/owner";
 import type { OperationalReportStatus } from "@/types/operational-report";
+import {
+  boardActionClusterClass,
+  boardGhostButtonClass,
+} from "./boardStyles";
 import { CreateLinkedActionControls } from "./CreateLinkedActionControls";
 import { ReportStatusControls } from "./ReportStatusControls";
 
@@ -20,22 +25,35 @@ export function ReportRowActions({
   defaultDeadline,
   owners,
 }: ReportRowActionsProps) {
+  const statusControls = (
+    <ReportStatusControls
+      reportId={reportId}
+      status={status}
+      canUpdate={canUpdate}
+    />
+  );
+
+  if (!canUpdate) {
+    return <div className={boardActionClusterClass}>{statusControls}</div>;
+  }
+
   return (
-    <div className="flex flex-col items-end gap-1.5">
-      <ReportStatusControls
-        reportId={reportId}
-        status={status}
-        canUpdate={canUpdate}
-      />
-      {canUpdate ? (
-        <CreateLinkedActionControls
-          sourceType="report"
-          sourceId={reportId}
-          businessAreaId={businessAreaId}
-          defaultDeadline={defaultDeadline}
-          owners={owners}
-        />
-      ) : null}
-    </div>
+    <CreateLinkedActionControls
+      sourceType="report"
+      sourceId={reportId}
+      businessAreaId={businessAreaId}
+      defaultDeadline={defaultDeadline}
+      owners={owners}
+      leading={statusControls}
+      extraOverflow={
+        <form action={updateOperationalReportStatusAction} className="inline-flex">
+          <input type="hidden" name="id" value={reportId} />
+          <input type="hidden" name="status" value="klar" />
+          <button type="submit" className={boardGhostButtonClass}>
+            Stäng
+          </button>
+        </form>
+      }
+    />
   );
 }

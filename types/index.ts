@@ -21,6 +21,11 @@ export type {
   UpdateActivityInput,
 } from "./activity";
 export type {
+  ActivityEscalation,
+  ActivityEscalationStatus,
+  LeadershipEscalationItem,
+} from "./activity-escalation";
+export type {
   ActivityComment,
   CreateActivityCommentInput,
 } from "./activity-comment";

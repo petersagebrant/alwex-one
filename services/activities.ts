@@ -12,6 +12,10 @@ import {
   updateActivitySteeringRow,
 } from "@/lib/supabase/activities";
 import {
+  loadEscalationsByActivityIds,
+  recordActivityEscalation,
+} from "@/services/activityEscalations";
+import {
   fetchAllGoals,
   fetchGoalsByBusinessAreaId,
 } from "@/lib/supabase/goals";
@@ -142,6 +146,7 @@ function mapActivityRow(row: {
     requiresEscalation: Boolean(row.requires_escalation),
     escalatedAt: row.escalated_at ?? null,
     escalationNote: row.escalation_note ?? null,
+    escalations: [],
   };
 }
 
@@ -172,8 +177,13 @@ export async function getActivities(options?: {
   const areaNames = new Map(areas.map((area) => [area.id, area.name]));
   const goalTitles = new Map(goals.map((goal) => [goal.id, goal.title]));
 
+  const escalationsByActivity = await loadEscalationsByActivityIds(
+    rows.map((row) => row.id),
+  ).catch(() => new Map());
+
   return rows.map((row) => ({
     ...mapActivityRow(row),
+    escalations: escalationsByActivity.get(row.id) ?? [],
     businessAreaName: areaNames.get(row.business_area_id) ?? "Okänt område",
     goalTitle: row.goal_id ? (goalTitles.get(row.goal_id) ?? null) : null,
   }));
@@ -266,8 +276,13 @@ export async function getActivityById(
   const areaNames = new Map(areas.map((area) => [area.id, area.name]));
   const goalTitles = new Map(goals.map((goal) => [goal.id, goal.title]));
 
+  const escalationsByActivity = await loadEscalationsByActivityIds([
+    row.id,
+  ]).catch(() => new Map());
+
   return {
     ...mapActivityRow(row),
+    escalations: escalationsByActivity.get(row.id) ?? [],
     businessAreaName: areaNames.get(row.business_area_id) ?? "Okänt område",
     goalTitle: row.goal_id ? (goalTitles.get(row.goal_id) ?? null) : null,
   };
@@ -383,7 +398,23 @@ export async function createSteeringActivity(
   profile: AuthProfile,
 ): Promise<Activity> {
   assertCanWriteActivityArea(profile, input.businessAreaId);
-  return createActivity(input);
+  const created = await createActivity(input);
+  const note = input.escalationNote?.trim();
+  if (input.requiresEscalation && note) {
+    const escalation = await recordActivityEscalation(
+      created.id,
+      note,
+      profile,
+    );
+    return {
+      ...created,
+      requiresEscalation: true,
+      escalatedAt: escalation.askedAt,
+      escalationNote: escalation.question,
+      escalations: [escalation],
+    };
+  }
+  return created;
 }
 
 export async function patchSteeringActivity(

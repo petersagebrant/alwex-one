@@ -24,18 +24,45 @@ describe("VD dashboard presentation", () => {
   const dashboardService = read("../../services/dashboard.ts");
   const kpiKind = read("../../lib/kpi/kind.ts");
 
-  it("isolates compact VD layout from AO-chef and keeps briefing then Aktuellt", () => {
+  it("isolates compact VD layout from AO-chef and keeps briefing then Daglig styrning then Aktuellt", () => {
     assert.match(page, /if \(vdPrincipal\) \{/);
     assert.match(page, /<VdLeadershipDashboard/);
     assert.match(page, /<AoChefDashboard data=\{aoData\} notices=\{orgNotices\}/);
     assert.doesNotMatch(vdDash, /AoChefDashboard/);
 
     const briefingIdx = vdDash.indexOf("<VdBriefingPanel");
+    const escalationIdx = vdDash.indexOf("<LeadershipEscalationsSection");
     const orgFeedIdx = vdDash.indexOf("<OrgNoticesFeed");
     const areaIdx = vdDash.indexOf("<VdAreaOverview");
     assert.ok(briefingIdx >= 0);
-    assert.ok(orgFeedIdx > briefingIdx);
+    assert.ok(escalationIdx > briefingIdx);
+    assert.ok(orgFeedIdx > escalationIdx);
     assert.ok(areaIdx > orgFeedIdx);
+    assert.match(vdDash, /openEscalations/);
+    assert.match(page, /getOpenLeadershipEscalations/);
+    assert.match(page, /openEscalations=\{openEscalations\}/);
+    assert.doesNotMatch(aoChef, /Eskalerat till ledningen/);
+    assert.doesNotMatch(aoChef, /Från Daglig styrning/);
+    assert.doesNotMatch(aoChef, /getOpenLeadershipEscalations/);
+    assert.doesNotMatch(aoChef, /LeadershipEscalationsSection/);
+  });
+
+  it("shows unanswered Daily Steering escalations only when items exist", () => {
+    const section = read(
+      "../../components/dashboard/LeadershipEscalationsSection.tsx",
+    );
+    assert.match(section, /Från Daglig styrning – kräver ditt beslut/);
+    assert.match(section, /Från Daglig styrning/);
+    assert.match(section, /if \(items\.length === 0\)/);
+    assert.match(section, /return null/);
+    assert.match(section, /border-l-amber-500/);
+    assert.match(section, /bg-amber-50/);
+    assert.match(section, /LeadershipEscalationReply/);
+    assert.match(section, /activityTitle/);
+    assert.match(section, /businessAreaName/);
+    assert.match(section, /askedByName/);
+    assert.match(section, /formatDateTimeSv\(item\.askedAt\)/);
+    assert.doesNotMatch(section, /Eskalerat till ledningen/);
   });
 
   it("hides large KPI overview, yesterday block, empty activity/decision buckets, and Historik on VD dashboard only", () => {

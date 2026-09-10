@@ -26,7 +26,7 @@ export async function submitOperationalReportAction(formData: FormData) {
     businessAreaId: firstParam(formData.get("businessAreaId")),
     body: firstParam(formData.get("body")),
     priority: firstParam(formData.get("priority")),
-    category: firstParam(formData.get("category")),
+    category: firstParam(formData.get("category")) || "ovrigt",
     honeypot: firstParam(formData.get(OPERATIONAL_REPORT_HONEYPOT_FIELD)),
   };
 

@@ -1,3 +1,5 @@
+import type { ActivityEscalation } from "./activity-escalation";
+
 export type ActivityStatus =
   | "Ej påbörjad"
   | "Pågår"
@@ -25,6 +27,7 @@ export type Activity = {
   requiresEscalation: boolean;
   escalatedAt: string | null;
   escalationNote: string | null;
+  escalations: ActivityEscalation[];
 };
 
 export type CreateActivityInput = {

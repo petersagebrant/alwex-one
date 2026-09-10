@@ -16,6 +16,7 @@ type AdHocActionFormProps = {
   defaultDeadline: string;
   lockedAreaId?: string | null;
   owners: GoalOwnerOption[];
+  className?: string;
 };
 
 export function AdHocActionForm({
@@ -23,6 +24,7 @@ export function AdHocActionForm({
   defaultDeadline,
   lockedAreaId,
   owners,
+  className,
 }: AdHocActionFormProps) {
   const [open, setOpen] = useState(false);
   const singleArea = lockedAreaId
@@ -33,7 +35,7 @@ export function AdHocActionForm({
 
   if (!open) {
     return (
-      <div className="mt-3">
+      <div className={className ?? "mt-3"}>
         <button
           type="button"
           onClick={() => setOpen(true)}
@@ -51,7 +53,7 @@ export function AdHocActionForm({
         await createAdHocSteeringActivityAction(formData);
         setOpen(false);
       }}
-      className="mt-3 space-y-2 rounded-xl border border-slate-200 bg-white px-3 py-3"
+      className={`${className ?? "mt-3"} space-y-2 rounded-xl border border-slate-200 bg-white px-3 py-3`}
     >
       <div className="flex flex-wrap items-end gap-2">
         {singleArea ? (

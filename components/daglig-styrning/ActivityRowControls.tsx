@@ -3,16 +3,17 @@
 import { useState } from "react";
 import { patchSteeringActivityAction } from "@/app/daglig-styrning/actions";
 import {
-  isSteeringBoardStatusSelected,
-  STEERING_BOARD_STATUS_ACTIONS,
+  nextSteeringBoardStatus,
   steeringBoardStatusLabel,
 } from "@/lib/operational-reports/boardPresentation";
 import type { ActivityStatus } from "@/types/activity";
 import {
+  boardActionClusterClass,
   boardCancelButtonClass,
   boardEscalateButtonClass,
   boardFieldClass,
   boardGhostButtonClass,
+  boardStatusBadgeClass,
 } from "./boardStyles";
 
 type ActivityRowControlsProps = {
@@ -29,56 +30,39 @@ export function ActivityRowControls({
   canUpdate,
 }: ActivityRowControlsProps) {
   const [escalateOpen, setEscalateOpen] = useState(false);
+  const currentLabel = steeringBoardStatusLabel(status);
+  const nextStatus = nextSteeringBoardStatus(status);
 
   if (!canUpdate) {
     return (
-      <p className="text-xs font-medium text-slate-500">
-        {steeringBoardStatusLabel(status)}
-      </p>
+      <div className={boardActionClusterClass}>
+        <span className={boardStatusBadgeClass}>{currentLabel}</span>
+      </div>
     );
   }
 
   return (
-    <div className="flex flex-col items-end gap-1.5">
-      <div className="inline-flex flex-wrap justify-end gap-1">
-        {STEERING_BOARD_STATUS_ACTIONS.map((item) => {
-          const selected = isSteeringBoardStatusSelected(status, item.value);
-          return (
-            <form key={item.value} action={patchSteeringActivityAction}>
-              <input type="hidden" name="id" value={activityId} />
-              <input type="hidden" name="intent" value="status" />
-              <input type="hidden" name="status" value={item.value} />
-              <button
-                type="submit"
-                disabled={selected}
-                className={`rounded-md px-2 py-1 text-xs font-semibold transition ${
-                  selected
-                    ? "bg-[#0b1220] text-white"
-                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                } disabled:cursor-default`}
-              >
-                {item.label}
-              </button>
-            </form>
-          );
-        })}
+    <div className="flex shrink-0 flex-col items-end gap-1">
+      <div className={boardActionClusterClass}>
+        <span className={boardStatusBadgeClass}>{currentLabel}</span>
+        {nextStatus ? (
+          <form action={patchSteeringActivityAction} className="inline-flex">
+            <input type="hidden" name="id" value={activityId} />
+            <input type="hidden" name="intent" value="status" />
+            <input type="hidden" name="status" value={nextStatus.value} />
+            <button type="submit" className={boardGhostButtonClass}>
+              {nextStatus.label}
+            </button>
+          </form>
+        ) : null}
         {!requiresEscalation && !escalateOpen ? (
           <button
             type="button"
             onClick={() => setEscalateOpen(true)}
-            className={boardEscalateButtonClass}
+            className={boardGhostButtonClass}
           >
             Eskalera
           </button>
-        ) : null}
-        {requiresEscalation ? (
-          <form action={patchSteeringActivityAction}>
-            <input type="hidden" name="id" value={activityId} />
-            <input type="hidden" name="intent" value="end-escalation" />
-            <button type="submit" className={boardGhostButtonClass}>
-              Besvarad
-            </button>
-          </form>
         ) : null}
       </div>
       {escalateOpen && !requiresEscalation ? (

@@ -12,8 +12,10 @@ import { hashClientIp } from "./client-ip";
 import { filterDailySteeringNotices } from "./notices";
 import { draftDailySteeringSummary } from "./meetingSummary";
 import {
+  followUpReportSourceLabel,
   formatAttentionKpiTitle,
   isSteeringBoardStatusSelected,
+  nextSteeringBoardStatus,
   STEERING_BOARD_STATUS_ACTIONS,
   steeringBoardStatusLabel,
 } from "./boardPresentation";
@@ -28,8 +30,12 @@ import {
   sortOpenActivities,
 } from "./openActivities";
 import {
+  canAnswerEscalation,
+  canEscalateActivity,
+  canReadActivityEscalation,
   canReadOperationalReport,
   canUpdateOperationalReportStatus,
+  canViewLeadershipEscalations,
   canWriteOperationalForArea,
 } from "./permissions";
 import {
@@ -170,6 +176,29 @@ describe("operational report permissions", () => {
     assert.equal(canReadOperationalReport("ao_chef", AREA_A, AREA_B), false);
     assert.equal(canReadOperationalReport("vd", null, AREA_B), true);
   });
+
+  it("lets AO-chef escalate own area only and never answer", () => {
+    assert.equal(canEscalateActivity("ao_chef", AREA_A, AREA_A), true);
+    assert.equal(canEscalateActivity("ao_chef", AREA_A, AREA_B), false);
+    assert.equal(canAnswerEscalation("ao_chef"), false);
+    assert.equal(canViewLeadershipEscalations("ao_chef"), false);
+    assert.equal(canReadActivityEscalation("ao_chef", AREA_A, AREA_A), true);
+    assert.equal(canReadActivityEscalation("ao_chef", AREA_A, AREA_B), false);
+  });
+
+  it("lets VD and Vice VD see and answer all escalations", () => {
+    assert.equal(canViewLeadershipEscalations("vd"), true);
+    assert.equal(canViewLeadershipEscalations("vice_vd"), true);
+    assert.equal(canAnswerEscalation("vd"), true);
+    assert.equal(canAnswerEscalation("vice_vd"), true);
+    assert.equal(canEscalateActivity("vd", null, AREA_B), true);
+    assert.equal(canReadActivityEscalation("vd", null, AREA_B), true);
+    assert.equal(canReadActivityEscalation("vice_vd", null, AREA_A), true);
+    assert.equal(canViewLeadershipEscalations("administrator"), false);
+    assert.equal(canAnswerEscalation("administrator"), true);
+    assert.equal(canViewLeadershipEscalations("lasbehorighet"), false);
+    assert.equal(canAnswerEscalation("lasbehorighet"), false);
+  });
 });
 
 describe("report vs activity status isolation", () => {
@@ -291,6 +320,92 @@ describe("operational report status and sort", () => {
     assert.equal(statusAfterCreatingLinkedAction("ny"), "hanteras");
     assert.equal(statusAfterCreatingLinkedAction("hanteras"), "hanteras");
     assert.equal(statusAfterCreatingLinkedAction("klar"), "klar");
+  });
+
+  it("hides a report from incoming once any activity is linked, without deleting it", () => {
+    const reports = [
+      { id: "rep-open", status: "ny" as const },
+      { id: "rep-linked", status: "hanteras" as const },
+      { id: "rep-other", status: "ny" as const },
+      { id: "rep-closed", status: "klar" as const },
+    ];
+    const incoming = filterActiveMorningReports(reports, {
+      linkedReportIds: ["rep-linked", null, ""],
+    });
+    assert.deepEqual(
+      incoming.map((row) => row.id),
+      ["rep-open", "rep-other"],
+    );
+    assert.equal(
+      reports.find((row) => row.id === "rep-linked")?.status,
+      "hanteras",
+    );
+    assert.equal(reports.length, 4);
+  });
+
+  it("keeps the FK when creating an action and then drops the source from incoming", () => {
+    const unlinked = {
+      id: "rep-new",
+      status: "ny" as "ny" | "hanteras" | "klar",
+      body: "Ny avvikelse",
+    };
+    const report = {
+      id: "rep-1",
+      status: "ny" as "ny" | "hanteras" | "klar",
+      body: "Lastbil stannade",
+    };
+    const storedReports = [{ ...unlinked }, { ...report }];
+    const createdActivity = {
+      id: "act-1",
+      status: "Ej påbörjad" as const,
+      operationalReportId: report.id,
+    };
+    const nextStatus = statusAfterCreatingLinkedAction(report.status);
+    storedReports[1] = { ...report, status: nextStatus };
+
+    const incoming = filterActiveMorningReports(storedReports, {
+      linkedReportIds: [createdActivity.operationalReportId],
+    });
+    const followUp = filterOpenActivities([createdActivity]);
+
+    assert.equal(createdActivity.operationalReportId, "rep-1");
+    assert.equal(nextStatus, "hanteras");
+    assert.notEqual(nextStatus, "klar");
+    assert.deepEqual(
+      incoming.map((row) => row.id),
+      ["rep-new"],
+    );
+    assert.deepEqual(
+      followUp.map((row) => row.id),
+      ["act-1"],
+    );
+    assert.equal(storedReports[1]?.id, "rep-1");
+    assert.equal(storedReports[1]?.body, "Lastbil stannade");
+    assert.equal(storedReports[1]?.status, "hanteras");
+  });
+
+  it("still hides linked reports from incoming when escalation history cannot load", () => {
+    const reports = [
+      { id: "rep-open", status: "ny" as const },
+      { id: "rep-linked", status: "hanteras" as const },
+    ];
+    const activities = [
+      {
+        id: "act-1",
+        operationalReportId: "rep-linked",
+        escalations: [],
+      },
+    ];
+    const incoming = filterActiveMorningReports(reports, {
+      linkedReportIds: activities.map((activity) => activity.operationalReportId),
+    });
+
+    assert.equal(activities.length, 1);
+    assert.deepEqual(activities[0]?.escalations, []);
+    assert.deepEqual(
+      incoming.map((row) => row.id),
+      ["rep-open"],
+    );
   });
 
   it("sorts urgent before follow_up before info", () => {
@@ -473,6 +588,31 @@ describe("daily steering compact presentation", () => {
     assert.equal(steeringBoardStatusLabel("Klar"), "Klar");
     assert.equal(isSteeringBoardStatusSelected("Försenad", "Ej påbörjad"), true);
     assert.equal(isSteeringBoardStatusSelected("Pågår", "Ej påbörjad"), false);
+    assert.deepEqual(nextSteeringBoardStatus("Ej påbörjad"), {
+      value: "Pågår",
+      label: "Starta",
+    });
+    assert.deepEqual(nextSteeringBoardStatus("Försenad"), {
+      value: "Pågår",
+      label: "Starta",
+    });
+    assert.deepEqual(nextSteeringBoardStatus("Pågår"), {
+      value: "Klar",
+      label: "Klar",
+    });
+    assert.equal(nextSteeringBoardStatus("Klar"), null);
+    assert.equal(
+      followUpReportSourceLabel({
+        operationalReportId: "rep-1",
+        haulierName: "Åkeri AB",
+      }),
+      "Från rapport · Åkeri AB",
+    );
+    assert.equal(
+      followUpReportSourceLabel({ operationalReportId: "rep-1" }),
+      "Från rapport",
+    );
+    assert.equal(followUpReportSourceLabel({ operationalReportId: null }), null);
   });
 });
 
@@ -512,6 +652,35 @@ describe("daily steering board migration", () => {
     assert.match(steeringNormalized, /requires_escalation boolean not null default false/);
     assert.doesNotMatch(steeringNormalized, /create table public\.\w*action/);
     assert.doesNotMatch(steeringNormalized, /create table public\.steering_/);
+  });
+});
+
+describe("activity escalation history migration", () => {
+  it("adds activity_escalations with area-scoped RLS and VD-only answers", () => {
+    const extra = readFileSync(
+      fileURLToPath(
+        new URL(
+          "../../supabase/migrations/20260910200000_activity_escalations.sql",
+          import.meta.url,
+        ),
+      ),
+      "utf8",
+    )
+      .replace(/\s+/g, " ")
+      .toLowerCase();
+    assert.match(extra, /create table public\.activity_escalations/);
+    assert.match(extra, /question text not null/);
+    assert.match(extra, /asked_by uuid/);
+    assert.match(extra, /asked_by_name text not null/);
+    assert.match(extra, /reply text null/);
+    assert.match(extra, /replied_by uuid/);
+    assert.match(extra, /status text not null default 'open'/);
+    assert.match(extra, /activity_escalations_one_open_per_activity/);
+    assert.match(extra, /can_read_business_area\(a\.business_area_id\)/);
+    assert.match(extra, /can_write_operational\(a\.business_area_id\)/);
+    assert.match(extra, /public\.is_vd_equivalent\(\)/);
+    assert.match(extra, /array\['administrator'\]/);
+    assert.doesNotMatch(extra, /for delete/);
   });
 });
 

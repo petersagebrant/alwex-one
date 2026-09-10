@@ -3,6 +3,7 @@ import { AuthErrorBanner } from "@/components/auth/AuthErrorBanner";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { OrgNoticesFeed } from "@/components/dashboard/OrgNoticesFeed";
 import { VdAreaOverview } from "@/components/dashboard/VdAreaOverview";
+import { LeadershipEscalationsSection } from "@/components/dashboard/LeadershipEscalationsSection";
 import { VdBriefingPanel } from "@/components/dashboard/VdBriefingPanel";
 import { InfoPanel, StatusBadge, type UiStatus } from "@/components/ui";
 import {
@@ -23,6 +24,7 @@ import type {
   VdBriefingLinkHint,
   VdBriefingStats,
 } from "@/components/dashboard/VdBriefing";
+import type { LeadershipEscalationItem } from "@/types/activity-escalation";
 
 function toUiStatus(status: StatusTone): UiStatus {
   return status;
@@ -43,6 +45,7 @@ type VdLeadershipDashboardProps = {
   upcomingDecisions: DashboardDecisionItem[];
   actionGoals: DashboardActionGoal[];
   greetingName?: string | null;
+  openEscalations?: LeadershipEscalationItem[];
 };
 
 /**
@@ -64,6 +67,7 @@ export function VdLeadershipDashboard({
   upcomingDecisions,
   actionGoals,
   greetingName,
+  openEscalations = [],
 }: VdLeadershipDashboardProps) {
   const delayed = delayedActivities ?? [];
   const decisions = upcomingDecisions ?? [];
@@ -89,6 +93,8 @@ export function VdLeadershipDashboard({
           linkHints={briefingLinkHints}
           givenName={greetingName}
         />
+
+        <LeadershipEscalationsSection items={openEscalations} />
 
         <OrgNoticesFeed
           notices={notices}

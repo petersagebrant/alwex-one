@@ -19,6 +19,7 @@ import {
   getCachedVdBriefing,
 } from "@/services/assistant";
 import { getAoChefDashboardData } from "@/services/aoChefDashboard";
+import { getOpenLeadershipEscalations } from "@/services/activityEscalations";
 import { getDashboardData } from "@/services/dashboard";
 import { getDashboardAreaNotices } from "@/services/areaNotices";
 import { getKPIs } from "@/services/kpis";
@@ -102,7 +103,7 @@ export default async function Home({ searchParams }: HomeProps) {
     );
   }
 
-  const [data, kpiDetails, reportingContext, kpiOverview, orgNotices] =
+  const [data, kpiDetails, reportingContext, kpiOverview, orgNotices, openEscalations] =
     await Promise.all([
       getDashboardData(),
       getKPIs().catch(() => []),
@@ -127,6 +128,14 @@ export default async function Home({ searchParams }: HomeProps) {
         areas: [],
       })),
       getDashboardAreaNotices().catch(() => []),
+      vdPrincipal && currentUser && profileRow
+        ? getOpenLeadershipEscalations({
+            id: currentUser.id,
+            email: currentUser.email,
+            role: profileRow.role,
+            businessAreaId: profileRow.business_area_id,
+          }).catch(() => [])
+        : Promise.resolve([]),
     ]);
   const kpis = data?.kpis ?? [];
   const businessAreas = data?.businessAreas ?? [];
@@ -327,6 +336,7 @@ export default async function Home({ searchParams }: HomeProps) {
         delayedActivities={vdFocus.delayedActivities ?? []}
         upcomingDecisions={upcomingDecisions}
         actionGoals={vdActionGoals}
+        openEscalations={openEscalations}
       />
     );
   }

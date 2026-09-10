@@ -111,6 +111,26 @@ export async function insertActivity(
   return data;
 }
 
+export async function fetchActivitiesByIds(
+  ids: string[],
+): Promise<ActivityRow[]> {
+  if (ids.length === 0) {
+    return [];
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("activities")
+    .select(activitySelect)
+    .in("id", ids);
+
+  if (error) {
+    throw new Error(`Kunde inte hämta activities: ${error.message}`);
+  }
+
+  return data ?? [];
+}
+
 export async function fetchActivityById(
   id: string,
 ): Promise<ActivityRow | null> {

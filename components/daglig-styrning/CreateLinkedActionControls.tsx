@@ -1,12 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import {
-  createSteeringActivityAction,
-} from "@/app/daglig-styrning/actions";
+import { useState, type ReactNode } from "react";
+import { createSteeringActivityAction } from "@/app/daglig-styrning/actions";
 import type { GoalOwnerOption } from "@/lib/goals/owner";
 import { OwnerSelect } from "./OwnerSelect";
 import {
+  boardActionClusterClass,
   boardCancelButtonClass,
   boardEscalateButtonClass,
   boardFieldClass,
@@ -20,6 +19,8 @@ type CreateLinkedActionControlsProps = {
   businessAreaId: string;
   defaultDeadline: string;
   owners: GoalOwnerOption[];
+  leading?: ReactNode;
+  extraOverflow?: ReactNode;
 };
 
 export function CreateLinkedActionControls({
@@ -28,6 +29,8 @@ export function CreateLinkedActionControls({
   businessAreaId,
   defaultDeadline,
   owners,
+  leading,
+  extraOverflow,
 }: CreateLinkedActionControlsProps) {
   const [mode, setMode] = useState<"idle" | "create" | "escalate">("idle");
 
@@ -132,18 +135,20 @@ export function CreateLinkedActionControls({
   }
 
   return (
-    <div className="flex flex-wrap items-center justify-end gap-1.5">
+    <div className={boardActionClusterClass}>
+      {leading}
       <button
         type="button"
         onClick={() => setMode("create")}
         className={boardGhostButtonClass}
       >
-        Skapa åtgärd
+        Åtgärd
       </button>
+      {extraOverflow}
       <button
         type="button"
         onClick={() => setMode("escalate")}
-        className={boardEscalateButtonClass}
+        className={boardGhostButtonClass}
       >
         Eskalera
       </button>

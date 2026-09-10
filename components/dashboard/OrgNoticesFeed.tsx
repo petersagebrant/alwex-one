@@ -18,6 +18,8 @@ type OrgNoticesFeedProps = {
   ownAreaSlug?: string;
   canCreate?: boolean;
   createHref?: string;
+  /** Skip the large empty InfoPanel; one discreet line instead. */
+  compactEmpty?: boolean;
 };
 
 /**
@@ -48,8 +50,14 @@ export function OrgNoticesFeed({
   ownAreaSlug,
   canCreate = false,
   createHref,
+  compactEmpty = false,
 }: OrgNoticesFeedProps) {
   if (notices.length === 0) {
+    if (compactEmpty) {
+      return (
+        <p className="text-sm text-slate-500">Inget aktuellt just nu.</p>
+      );
+    }
     return (
       <>
         <section

@@ -32,12 +32,20 @@ describe("daglig styrning page", () => {
     assert.match(page, /getDashboardAreaNotices/);
     assert.match(page, /filterDailySteeringNotices/);
     assert.match(page, /OrgNoticesFeed/);
+    assert.match(page, /compactEmpty/);
     assert.match(page, /Säkerhet/);
-    assert.match(page, /Drift idag/);
     assert.match(page, /KPI som kräver uppmärksamhet/);
     assert.match(page, /Inkommet från verksamheten/);
-    assert.match(page, /Öppna åtgärder/);
-    assert.match(page, /Eskalerat \/ kräver beslut/);
+    assert.match(page, /Att följa upp/);
+    assert.match(page, /Aktuellt i verksamheten/);
+    assert.match(page, /filterOpenActivities/);
+    assert.match(page, /filterEscalatedOpenActivities/);
+    assert.match(page, /sortOpenActivities/);
+    assert.match(page, /sortEscalatedActivities/);
+    assert.match(page, /AdHocActionForm/);
+    assert.doesNotMatch(page, /Drift idag/);
+    assert.doesNotMatch(page, /Öppna åtgärder/);
+    assert.doesNotMatch(page, /Eskalerat \/ kräver beslut/);
     assert.match(page, /draftDailySteeringSummary/);
     assert.match(page, /fetchActiveProfilesForAssignment/);
     assert.match(page, /toGoalOwnerOptions/);
@@ -45,20 +53,20 @@ describe("daglig styrning page", () => {
     assert.doesNotMatch(page, /service_role|SERVICE_ROLE/);
     assert.doesNotMatch(actions, /createDecision|insertDecision/);
     const safetyAt = page.indexOf("Säkerhet");
-    const driftAt = page.indexOf("Drift idag");
     const kpiAt = page.indexOf("KPI som kräver uppmärksamhet");
     const incomingAt = page.indexOf("Inkommet från verksamheten");
-    const actionsAt = page.indexOf("Öppna åtgärder");
-    const escalationAt = page.indexOf("Eskalerat / kräver beslut");
-    assert.ok(safetyAt > 0 && safetyAt < driftAt);
-    assert.ok(driftAt < kpiAt && kpiAt < incomingAt);
-    assert.ok(incomingAt < actionsAt && actionsAt < escalationAt);
+    const followUpAt = page.indexOf("Att följa upp");
+    const aktuelltAt = page.indexOf("Aktuellt i verksamheten");
+    assert.ok(safetyAt > 0 && safetyAt < kpiAt);
+    assert.ok(kpiAt < incomingAt && incomingAt < followUpAt);
+    assert.ok(followUpAt < aktuelltAt);
   });
 
-  it("keeps KPI and report rows compact until Skapa åtgärd or Eskalera", () => {
+  it("keeps KPI and report rows compact until Åtgärd or Eskalera", () => {
     const page = read("./page.tsx");
     const actions = read("./actions.ts");
     const linked = read("../../components/daglig-styrning/CreateLinkedActionControls.tsx");
+    const rowActions = read("../../components/daglig-styrning/ReportRowActions.tsx");
     const adHoc = read("../../components/daglig-styrning/AdHocActionForm.tsx");
     const ownerSelect = read("../../components/daglig-styrning/OwnerSelect.tsx");
     const activityControls = read(
@@ -67,12 +75,43 @@ describe("daglig styrning page", () => {
     const boardPresentation = read(
       "../../lib/operational-reports/boardPresentation.ts",
     );
+    const boardStyles = read("../../components/daglig-styrning/boardStyles.ts");
     assert.match(page, /kpi\.titleLabel/);
-    assert.match(linked, /Skapa åtgärd/);
+    assert.match(linked, />\s*Åtgärd\s*</);
+    assert.doesNotMatch(linked, /Skapa åtgärd/);
+    assert.match(linked, /createSteeringActivityAction/);
+    assert.doesNotMatch(linked, /BoardOverflowMenu/);
+    assert.doesNotMatch(linked, /•••/);
+    assert.match(linked, /extraOverflow/);
     assert.match(linked, /Eskalera/);
     assert.match(linked, /Vad behöver du hjälp\/beslut med\?/);
     assert.match(linked, /OwnerSelect/);
     assert.match(linked, /Klart senast/);
+    assert.match(boardStyles, /boardActionClusterClass/);
+    assert.match(boardStyles, /boardRowClass/);
+    assert.match(boardStyles, /boardCardPadClass/);
+    assert.match(boardStyles, /px-4 py-1\.5/);
+    assert.match(boardStyles, /items-center justify-between gap-2/);
+    assert.match(
+      boardStyles,
+      /boardActionClusterClass =\s*"flex shrink-0 items-center justify-end gap-1"/,
+    );
+    assert.doesNotMatch(
+      boardStyles,
+      /boardActionClusterClass =\s*"flex w-full/,
+    );
+    assert.match(page, /boardRowClass/);
+    assert.match(page, /boardCardPadClass/);
+    assert.doesNotMatch(page, /items-start justify-between gap-3/);
+    assert.doesNotMatch(page, /px-4 py-2\.5/);
+    assert.match(linked, /boardActionClusterClass/);
+    assert.match(activityControls, /boardActionClusterClass/);
+    assert.match(rowActions, /boardActionClusterClass/);
+    assert.match(rowActions, /name="status" value="klar"/);
+    assert.match(rowActions, />\s*Stäng\s*</);
+    assert.doesNotMatch(rowActions, /Stäng rapport/);
+    assert.doesNotMatch(rowActions, /BoardOverflowMenu/);
+    assert.match(rowActions, /updateOperationalReportStatusAction/);
     assert.match(ownerSelect, /name = "ownerId"/);
     assert.doesNotMatch(linked, /placeholder="Ansvarig"/);
     assert.doesNotMatch(linked, /Kräver beslut/);
@@ -81,22 +120,90 @@ describe("daglig styrning page", () => {
     assert.match(boardPresentation, /label: "Öppen"/);
     assert.match(boardPresentation, /label: "Pågår"/);
     assert.match(boardPresentation, /label: "Klar"/);
-    assert.match(activityControls, /STEERING_BOARD_STATUS_ACTIONS/);
+    assert.match(boardPresentation, /label: "Starta"/);
+    assert.match(boardPresentation, /nextSteeringBoardStatus/);
+    assert.match(activityControls, /nextSteeringBoardStatus/);
+    assert.match(activityControls, /patchSteeringActivityAction/);
+    assert.doesNotMatch(activityControls, /BoardOverflowMenu/);
     assert.match(activityControls, /Eskalera/);
-    assert.match(activityControls, /Besvarad/);
-    assert.match(activityControls, /end-escalation/);
+    assert.doesNotMatch(activityControls, /Besvarad/);
+    assert.doesNotMatch(activityControls, /end-escalation/);
+    assert.doesNotMatch(activityControls, /STEERING_BOARD_STATUS_ACTIONS\.map/);
     assert.doesNotMatch(activityControls, /name="owner"/);
     assert.match(actions, /ownerId/);
     assert.match(actions, /statusAfterCreatingLinkedAction/);
     assert.match(actions, /nextStatus !== linkedReportStatus/);
-    assert.match(actions, /intent === "end-escalation"/);
-    assert.match(actions, /requiresEscalation: false/);
+    assert.match(actions, /recordActivityEscalation/);
+    assert.match(actions, /answerEscalationAction/);
+    assert.match(actions, /canAnswerEscalation/);
+    assert.doesNotMatch(actions, /end-escalation/);
     assert.doesNotMatch(
       actions,
-      /intent === "end-escalation"[\s\S]*status: "Klar"/,
+      /answerActivityEscalation[\s\S]*status: "Klar"/,
     );
     assert.doesNotMatch(actions, /formData\.get\("owner"\)/);
     assert.match(page, /countSafetyIncidentsForDay\(reports\.active/);
+    assert.match(page, /filterActiveMorningReports\(reports\.active/);
+    assert.match(page, /linkedReportIds/);
+    assert.match(
+      page,
+      /linkedReportIds:\s*activities\.map\(\(activity\) => activity\.operationalReportId\)/,
+    );
+    assert.match(page, /incomingReports\.map\(\(report\) =>/);
+    assert.doesNotMatch(page, /reports\.active\.map\(\(report\) =>/);
+    assert.match(page, /followUpActivities\.map\(\(activity\) =>/);
+    assert.match(page, /ActivityEscalationHistory/);
+    assert.match(page, /followUpReportSourceLabel/);
+    assert.match(page, /Hanterade idag/);
+    assert.doesNotMatch(page, /<details[^>]*\sopen/);
+  });
+
+  it("keeps activities when activity_escalations cannot be loaded", () => {
+    const getActivities = sliceExport(
+      read("../../services/activities.ts"),
+      "getActivities",
+    );
+    const page = read("./page.tsx");
+    assert.match(getActivities, /loadEscalationsByActivityIds/);
+    assert.match(getActivities, /\.catch\(\(\) => new Map\(\)\)/);
+    assert.match(
+      page,
+      /linkedReportIds:\s*activities\.map\(\(activity\) => activity\.operationalReportId\)/,
+    );
+  });
+
+  it("links Åtgärd via operational_report_id and never deletes or auto-klars the report", () => {
+    const actions = read("./actions.ts");
+    const create = sliceExport(actions, "createSteeringActivityAction");
+    assert.match(create, /operationalReportId = report\.id/);
+    assert.match(create, /operationalReportId,/);
+    assert.match(create, /statusAfterCreatingLinkedAction\(linkedReportStatus\)/);
+    assert.doesNotMatch(create, /status:\s*"klar"/);
+    assert.doesNotMatch(create, /\.delete\(/);
+    assert.doesNotMatch(create, /from\("operational_reports"\)/);
+    assert.match(
+      read("../../lib/operational-reports/status.ts"),
+      /current === "ny" \? "hanteras" : current/,
+    );
+  });
+
+  it("keeps empty Aktuellt and Att följa upp compact without a large box", () => {
+    const page = read("./page.tsx");
+    const feed = read("../../components/dashboard/OrgNoticesFeed.tsx");
+    const adHoc = read("../../components/daglig-styrning/AdHocActionForm.tsx");
+    assert.match(page, /filterDailySteeringNotices/);
+    assert.match(page, /<OrgNoticesFeed notices=\{relevantNotices\} compactEmpty/);
+    assert.match(page, /Inget att följa upp just nu/);
+    assert.match(page, /followUpActivities\.length === 0/);
+    assert.match(adHoc, /\+ Lägg till åtgärd/);
+    const compactAt = feed.indexOf("if (compactEmpty)");
+    assert.ok(compactAt >= 0);
+    const compactReturn = feed.indexOf("return (", compactAt);
+    const nextReturn = feed.indexOf("return (", compactReturn + 1);
+    const compactBranch = feed.slice(compactAt, nextReturn);
+    assert.match(compactBranch, /Inget aktuellt just nu/);
+    assert.doesNotMatch(compactBranch, /InfoPanel/);
+    assert.doesNotMatch(compactBranch, /rounded-2xl|border-2|shadow-\[0_10px/);
   });
 
   it("labels report close as Stäng rapport while activity Klar stays on actions", () => {
@@ -104,11 +211,20 @@ describe("daglig styrning page", () => {
     const controls = read(
       "../../components/daglig-styrning/ReportStatusControls.tsx",
     );
+    const rowActions = read(
+      "../../components/daglig-styrning/ReportRowActions.tsx",
+    );
     assert.match(labels, /klar: "Stäng rapport"/);
     assert.match(labels, /\["ny", "hanteras", "klar"\]/);
-    assert.match(controls, /OPERATIONAL_REPORT_STATUS_LABELS\[next\]/);
-    assert.match(controls, /name="status" value=\{next\}/);
+    assert.match(controls, /OPERATIONAL_REPORT_STATUS_LABELS\[status\]/);
+    assert.match(controls, /name="status" value="hanteras"/);
+    assert.match(controls, /updateOperationalReportStatusAction/);
+    assert.doesNotMatch(controls, /OPERATIONAL_REPORT_STATUSES\.map/);
     assert.doesNotMatch(controls, />Klar</);
+    assert.doesNotMatch(controls, /value="ny"/);
+    assert.match(rowActions, /name="status" value="klar"/);
+    assert.match(rowActions, />\s*Stäng\s*</);
+    assert.doesNotMatch(rowActions, /Stäng rapport/);
     assert.match(
       read("../../lib/operational-reports/boardPresentation.ts"),
       /label: "Klar"/,
@@ -152,8 +268,15 @@ describe("rapportera page", () => {
       page,
       /Rapportera något som Alwex behöver känna till eller följa upp/,
     );
-    assert.match(form, /Vad gäller det\?/);
-    assert.match(form, /PUBLIC_REPORT_CATEGORY_OPTIONS/);
+    assert.doesNotMatch(form, /Vad gäller det\?/);
+    assert.doesNotMatch(form, /PUBLIC_REPORT_CATEGORY_OPTIONS/);
+    assert.doesNotMatch(form, /name="category"/);
+    assert.match(form, /Åkeri/);
+    assert.match(form, /Affärsområde/);
+    assert.match(form, /Vad har hänt\?/);
+    assert.match(form, /Prioritet/);
+    assert.match(form, /Skicka/);
+    assert.match(actions, /category: firstParam\(formData\.get\("category"\)\) \|\| "ovrigt"/);
     assert.match(
       form,
       /Vid akut fara eller olycka – kontakta alltid ansvarig på Alwex/,

@@ -60,3 +60,29 @@ export function isSteeringBoardActivityStatus(
 ): value is (typeof STEERING_BOARD_STATUS_ACTIONS)[number]["value"] {
   return STEERING_BOARD_STATUS_ACTIONS.some((item) => item.value === value);
 }
+
+export function followUpReportSourceLabel(input: {
+  operationalReportId?: string | null;
+  haulierName?: string | null;
+}): string | null {
+  if (!input.operationalReportId) {
+    return null;
+  }
+  const haulier = input.haulierName?.trim();
+  return haulier ? `Från rapport · ${haulier}` : "Från rapport";
+}
+
+export function nextSteeringBoardStatus(
+  current: ActivityStatus,
+): {
+  value: (typeof STEERING_BOARD_STATUS_ACTIONS)[number]["value"];
+  label: string;
+} | null {
+  if (current === "Klar") {
+    return null;
+  }
+  if (current === "Pågår") {
+    return { value: "Klar", label: "Klar" };
+  }
+  return { value: "Pågår", label: "Starta" };
+}

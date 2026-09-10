@@ -1,4 +1,8 @@
-import { canWriteOperational, type AppRole } from "@/lib/auth/roles";
+import {
+  canWriteOperational,
+  isVdEquivalent,
+  type AppRole,
+} from "@/lib/auth/roles";
 
 /**
  * Matches RLS can_read_business_area: VD / Vice VD / admin / läsbehörighet
@@ -47,5 +51,39 @@ export function canUpdateOperationalReportStatus(
     role,
     profileBusinessAreaId,
     reportBusinessAreaId,
+  );
+}
+
+/** AO-chef own area; VD / Vice VD / admin all areas. */
+export function canEscalateActivity(
+  role: AppRole,
+  profileBusinessAreaId: string | null,
+  areaId: string,
+): boolean {
+  return canWriteOperationalForArea(role, profileBusinessAreaId, areaId);
+}
+
+/**
+ * Only VD / Vice VD, plus admin via existing write-all-areas pattern.
+ * AO-chef cannot answer.
+ */
+export function canAnswerEscalation(role: AppRole): boolean {
+  return isVdEquivalent(role) || role === "administrator";
+}
+
+/** Company-wide unanswered list: VD and Vice VD only. Not AO-chef or admin. */
+export function canViewLeadershipEscalations(role: AppRole): boolean {
+  return isVdEquivalent(role);
+}
+
+export function canReadActivityEscalation(
+  role: AppRole,
+  profileBusinessAreaId: string | null,
+  activityBusinessAreaId: string,
+): boolean {
+  return canReadOperationalReport(
+    role,
+    profileBusinessAreaId,
+    activityBusinessAreaId,
   );
 }

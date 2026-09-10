@@ -9,7 +9,6 @@ import {
   OPERATIONAL_REPORT_PRIORITIES,
   type OperationalReportAreaOption,
 } from "@/types/operational-report";
-import { PUBLIC_REPORT_CATEGORY_OPTIONS } from "@/lib/operational-reports/category";
 import { OPERATIONAL_REPORT_HONEYPOT_FIELD } from "@/lib/operational-reports/validate";
 import { submitOperationalReportAction } from "@/app/rapportera/actions";
 
@@ -137,30 +136,6 @@ export function PublicReportForm({
           className="mt-1.5 w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-base text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
         />
       </div>
-
-      <fieldset>
-        <legend className="block text-xs font-medium text-neutral-500">
-          Vad gäller det?
-        </legend>
-        <div className="mt-2 space-y-2">
-          {PUBLIC_REPORT_CATEGORY_OPTIONS.map((option) => (
-            <label
-              key={option.value}
-              className="flex items-center gap-2.5 rounded-lg border border-neutral-200 px-3 py-2.5 text-sm text-neutral-800"
-            >
-              <input
-                type="radio"
-                name="category"
-                value={option.value}
-                required
-                defaultChecked={option.value === "ovrigt"}
-                className="h-4 w-4"
-              />
-              {option.label}
-            </label>
-          ))}
-        </div>
-      </fieldset>
 
       <fieldset>
         <legend className="block text-xs font-medium text-neutral-500">

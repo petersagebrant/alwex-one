@@ -28,9 +28,28 @@ export function statusAfterCreatingLinkedAction(
 }
 
 export function filterActiveMorningReports<
-  T extends { status: OperationalReportStatus },
->(reports: T[]): T[] {
-  return reports.filter((report) => isActiveMorningReport(report.status));
+  T extends { status: OperationalReportStatus; id?: string },
+>(
+  reports: T[],
+  options?: { linkedReportIds?: Iterable<string | null | undefined> },
+): T[] {
+  const linkedIds = options?.linkedReportIds
+    ? new Set(
+        [...options.linkedReportIds].filter(
+          (id): id is string => typeof id === "string" && id.length > 0,
+        ),
+      )
+    : null;
+
+  return reports.filter((report) => {
+    if (!isActiveMorningReport(report.status)) {
+      return false;
+    }
+    if (linkedIds && report.id && linkedIds.has(report.id)) {
+      return false;
+    }
+    return true;
+  });
 }
 
 export function nextOperationalReportStatuses(

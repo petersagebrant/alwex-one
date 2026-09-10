@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ActivityEscalationHistory } from "@/components/daglig-styrning/ActivityEscalationHistory";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { formatDateSv } from "@/lib/format/date";
 import { getActivityById } from "@/services/activities";
@@ -123,6 +124,17 @@ export default async function ActivityDetailPage({
             </div>
           </dl>
         </section>
+
+        {activity.escalations.length > 0 ? (
+          <section className="rounded-xl border border-neutral-200 bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-6">
+            <h2 className="text-sm font-semibold text-neutral-900">
+              Eskaleringshistorik
+            </h2>
+            <div className="mt-3">
+              <ActivityEscalationHistory escalations={activity.escalations} />
+            </div>
+          </section>
+        ) : null}
 
         <section className="rounded-xl border border-neutral-200 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
           <div className="border-b border-neutral-200 px-5 py-4">

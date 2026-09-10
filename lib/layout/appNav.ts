@@ -2,6 +2,7 @@ import { canAdministerUsers, isVdEquivalent, type AppRole } from "@/lib/auth/rol
 
 export type AppNavKey =
   | "home"
+  | "daily"
   | "areas"
   | "goals"
   | "activities"
@@ -24,6 +25,7 @@ export type AppNavVisibilityProfile = {
 /** Same labels and hrefs as the desktop header. */
 export const APP_NAV_ITEMS: readonly AppNavItem[] = [
   { key: "home", href: "/", label: "Dashboard" },
+  { key: "daily", href: "/daglig-styrning", label: "Daglig styrning" },
   { key: "areas", href: "/areas", label: "Affärsområden" },
   { key: "goals", href: "/admin/goals", label: "Mål" },
   { key: "activities", href: "/admin/activities", label: "Aktiviteter" },

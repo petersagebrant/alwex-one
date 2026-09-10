@@ -12,11 +12,13 @@ import {
 } from "@/lib/auth/recovery";
 import { getSupabaseEnv } from "./env";
 
-function isPublicAuthPath(pathname: string): boolean {
+export function isPublicAuthPath(pathname: string): boolean {
   return (
     pathname === "/login" ||
     pathname.startsWith("/login/") ||
-    pathname.startsWith("/auth/")
+    pathname.startsWith("/auth/") ||
+    pathname === "/rapportera" ||
+    pathname.startsWith("/rapportera/")
   );
 }
 

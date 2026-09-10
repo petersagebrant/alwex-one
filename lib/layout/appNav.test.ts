@@ -15,6 +15,7 @@ describe("visibleAppNavItems", () => {
       vd.map((item) => item.key),
       [
         "home",
+        "daily",
         "areas",
         "goals",
         "activities",
@@ -58,7 +59,7 @@ describe("visibleAppNavItems", () => {
     });
     assert.deepEqual(
       reader.map((item) => item.key),
-      ["home", "areas", "goals", "activities", "decisions", "kpis"],
+      ["home", "daily", "areas", "goals", "activities", "decisions", "kpis"],
     );
   });
 
@@ -83,9 +84,28 @@ describe("splitMobileAppNav", () => {
     );
     assert.deepEqual(
       more.map((item) => item.label),
-      ["Mål", "Aktiviteter", "Beslut", "Användare", "AI-assistent"],
+      [
+        "Daglig styrning",
+        "Mål",
+        "Aktiviteter",
+        "Beslut",
+        "Användare",
+        "AI-assistent",
+      ],
     );
     assert.equal(isMobileMoreNavActive("goals", more), true);
+    assert.equal(isMobileMoreNavActive("daily", more), true);
     assert.equal(isMobileMoreNavActive("home", more), false);
+  });
+
+  it("keeps Daglig styrning out of primary tabs and never lists /rapportera", () => {
+    assert.equal(
+      APP_NAV_ITEMS.some((item) => item.href === "/rapportera"),
+      false,
+    );
+    assert.equal(
+      APP_NAV_ITEMS.some((item) => item.key === "daily"),
+      true,
+    );
   });
 });

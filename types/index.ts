@@ -58,6 +58,14 @@ export type {
   RatioPercentReportGroup,
   TodayOrgReportingStats,
 } from "./kpi-reporting";
+export type {
+  OperationalReport,
+  OperationalReportPriority,
+  OperationalReportStatus,
+  OperationalReportCategory,
+  OperationalReportIncidentKind,
+  CreateOperationalReportInput,
+} from "./operational-report";
 export type { HistoryEvent } from "./history";
 export type { VdDiaryEvent, VdDiaryTone } from "./vd-diary";
 

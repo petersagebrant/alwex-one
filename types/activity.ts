@@ -13,12 +13,18 @@ export type Activity = {
   title: string;
   description: string | null;
   owner: string | null;
+  ownerId: string | null;
   status: ActivityStatus;
   priority: ActivityPriority;
   deadline: string | null;
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  operationalReportId: string | null;
+  sourceKpiId: string | null;
+  requiresEscalation: boolean;
+  escalatedAt: string | null;
+  escalationNote: string | null;
 };
 
 export type CreateActivityInput = {
@@ -27,9 +33,14 @@ export type CreateActivityInput = {
   title: string;
   description?: string;
   owner?: string;
+  ownerId?: string | null;
   status: ActivityStatus;
   priority: ActivityPriority;
   deadline?: string;
+  operationalReportId?: string | null;
+  sourceKpiId?: string | null;
+  requiresEscalation?: boolean;
+  escalationNote?: string | null;
 };
 
 export type UpdateActivityInput = {

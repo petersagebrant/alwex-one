@@ -122,19 +122,20 @@ describe("buildVdAttentionItems sjukfrånvaro filter", () => {
     assert.doesNotMatch(items[0]?.metrics ?? "", /mål 0/i);
   });
 
-  it("includes a red system-computed Lager productivity TARGET", () => {
+  it("does not alert on STATISTIC Kolli even with a reported value", () => {
     const items = buildVdAttentionItems({
       kpis: [
         kpi({
-          id: "lager-productivity",
-          name: "Kolli per arbetad timme",
+          id: "lager-kolli",
+          name: "Kolli",
           businessAreaName: "Lager & Logistik",
-          calcOperator: "SUM_DIVIDE",
-          direction: "HIGHER_IS_BETTER",
-          status: "Röd",
-          currentValue: "20",
-          targetValue: "100",
-          unit: "kolli/timme",
+          kind: "STATISTIC",
+          calcOperator: null,
+          direction: null,
+          status: "Statistik",
+          currentValue: "1200",
+          targetValue: null,
+          unit: "kolli",
         }),
       ],
       delayedActivities: [],
@@ -144,9 +145,7 @@ describe("buildVdAttentionItems sjukfrånvaro filter", () => {
       limit: 10,
     });
 
-    assert.equal(items.length, 1);
-    assert.equal(items[0]?.title, "Kolli per arbetad timme");
-    assert.match(items[0]?.metrics ?? "", /20 kolli\/timme mot mål 100/);
+    assert.equal(items.length, 0);
   });
 
   it("does not treat unreported TARGET or stored area Gul/Röd as attention", () => {

@@ -57,12 +57,12 @@ describe("buildVdAreaOverviewRows", () => {
           targetValue: "90",
         }),
         kpi({
-          id: "kolli",
+          id: "belaggning",
           businessAreaId: "lager",
-          name: "Kolli per arbetad timme",
+          name: "Beläggningsgrad",
           status: "Grön",
-          currentValue: "110",
-          targetValue: "100",
+          currentValue: "92",
+          targetValue: "90",
         }),
       ],
     );
@@ -87,10 +87,10 @@ describe("buildVdAreaOverviewRows", () => {
         kpi({
           id: "missing",
           businessAreaId: "lager",
-          name: "Kolli per arbetad timme",
+          name: "Beläggningsgrad",
           status: "Gul",
           currentValue: null,
-          targetValue: "100",
+          targetValue: "90",
         }),
       ],
     );

@@ -66,7 +66,10 @@ describe("user admin server actions", () => {
     assert.ok(fn, "missing setUserPasswordAction");
     assert.match(fn[0]!, /requireCanSetUserPassword\(\)/);
     assert.doesNotMatch(fn[0]!, /requireUserAdministrator\(\)/);
+    assert.match(fn[0]!, /actor\.id === id/);
+    assert.match(fn[0]!, /setOwnAccountPassword\(/);
     assert.match(fn[0]!, /setUserTemporaryPassword\(/);
+    assert.match(fn[0]!, /signInWithPassword\(/);
     assert.doesNotMatch(fn[0]!, /redirect\(/);
   });
 
@@ -120,7 +123,10 @@ describe("user admin server actions", () => {
     const users = read("services/users.ts");
     const start = users.indexOf("export async function setUserTemporaryPassword");
     assert.ok(start >= 0);
-    const body = users.slice(start, users.indexOf("async function requireExistingProfile"));
+    const body = users.slice(
+      start,
+      users.indexOf("export async function setOwnAccountPassword"),
+    );
     assert.match(body, /temporaryPasswordAuthUpdate\(password\)/);
     assert.match(
       body,
@@ -149,15 +155,59 @@ describe("user admin server actions", () => {
     assert.match(auditCall, /e-post bekräftad via admin/);
   });
 
+  it("sets own VD password via updateUserById without must_change_password", () => {
+    const users = read("services/users.ts");
+    const start = users.indexOf("export async function setOwnAccountPassword");
+    assert.ok(start >= 0);
+    const body = users.slice(
+      start,
+      users.indexOf("export async function clearMustChangePasswordFlag"),
+    );
+    assert.match(body, /ownAccountPasswordAuthUpdate\(/);
+    assert.match(
+      body,
+      /updateUserById\(\s*actorId,\s*ownAccountPasswordAuthUpdate\(parsed\.value\),?\s*\)/,
+    );
+    assert.match(body, /parseOwnAccountPassword/);
+    assert.match(body, /assertActorMaySetPassword/);
+    assert.match(body, /targetId: actorId/);
+    assert.doesNotMatch(body, /temporaryPasswordAuthUpdate/);
+    assert.doesNotMatch(body, /must_change_password\s*:/);
+    assert.doesNotMatch(body, /generateTemporaryPassword/);
+    assert.doesNotMatch(body, /updateProfileRow/);
+    assert.doesNotMatch(body, /setProfileDisabledAt/);
+    assert.doesNotMatch(body, /insertProfile/);
+    assert.doesNotMatch(body, /console\./);
+
+    const helper = read("lib/auth/temporary-password.ts");
+    const ownStart = helper.indexOf("export function ownAccountPasswordAuthUpdate");
+    assert.ok(ownStart >= 0);
+    const ownHelper = helper.slice(ownStart, ownStart + 500);
+    assert.match(ownHelper, /email_confirm:\s*true/);
+    assert.doesNotMatch(ownHelper, /app_metadata/);
+    assert.doesNotMatch(ownHelper, /must_change_password/);
+
+    const auditStart = body.indexOf("recordAuditLog(");
+    assert.ok(auditStart >= 0);
+    const auditCall = body.slice(auditStart, body.indexOf("});", auditStart) + 3);
+    assert.doesNotMatch(auditCall, /\bpassword\b/);
+    assert.match(auditCall, /eget konto/);
+  });
+
   it("hides the password button from non-VD and never puts the secret in the URL", () => {
     const page = read("app/admin/users/page.tsx");
     assert.match(page, /canSetUserPassword\(actor\.role\)/);
     assert.match(page, /SetUserPasswordControls/);
+    assert.match(page, /isSelf=\{user\.isSelf\}/);
+    assert.doesNotMatch(page, /canSetPassword && !user\.isSelf/);
     assert.doesNotMatch(page, /password=/);
 
     const ui = read("components/admin/SetUserPasswordControls.tsx");
     assert.match(ui, /Ange nytt lösenord/);
     assert.match(ui, /setUserPasswordAction/);
+    assert.match(ui, /isSelf/);
+    assert.match(ui, /Byt lösenord på ditt konto/);
+    assert.match(ui, /inte\s+ett tillfälligt lösenord/);
     assert.match(ui, /E-postadressen markeras som bekräftad/);
     assert.match(ui, /Visas bara en gång/);
     assert.doesNotMatch(ui, /inbjudningsmejlet/);
@@ -175,5 +225,25 @@ describe("user admin server actions", () => {
     const roles = read("lib/auth/roles.ts");
     assert.match(roles, /"vice_vd"/);
     assert.match(roles, /vice_vd: "Vice VD"/);
+  });
+
+  it("keeps disable hidden for self and protected accounts", () => {
+    const page = read("app/admin/users/page.tsx");
+    assert.match(page, /!user\.isSelf && !user\.protected/);
+    assert.match(page, /Inaktivera/);
+
+    const userAdmin = read("lib/auth/user-admin.ts");
+    assert.match(
+      userAdmin,
+      /Du kan inte ändra status på ditt eget konto/,
+    );
+    assert.doesNotMatch(
+      userAdmin,
+      /Du kan inte ange nytt lösenord för ditt eget konto/,
+    );
+
+    const protectedUsers = read("lib/auth/protected-users.ts");
+    assert.match(protectedUsers, /Skyddat systemkonto kan inte inaktiveras/);
+    assert.match(protectedUsers, /VD-kontot kan inte nedgraderas/);
   });
 });

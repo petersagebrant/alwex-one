@@ -243,11 +243,12 @@ export default async function AdminUsersPage({
                       Ändra
                     </Link>
 
-                    {canSetPassword && !user.isSelf ? (
+                    {canSetPassword ? (
                       <SetUserPasswordControls
                         userId={user.id}
                         displayName={user.displayName}
                         email={user.email}
+                        isSelf={user.isSelf}
                       />
                     ) : null}
 

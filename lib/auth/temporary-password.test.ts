@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import {
   generateTemporaryPassword,
+  ownAccountPasswordAuthUpdate,
   temporaryPasswordAuthUpdate,
 } from "./temporary-password";
 import { MUST_CHANGE_PASSWORD_KEY } from "./must-change-password";
@@ -59,5 +60,20 @@ describe("temporaryPasswordAuthUpdate", () => {
     assert.deepEqual(Object.keys(attributes.app_metadata), [
       MUST_CHANGE_PASSWORD_KEY,
     ]);
+  });
+});
+
+describe("ownAccountPasswordAuthUpdate", () => {
+  it("sets password and email_confirm without touching app_metadata", () => {
+    const password = generateTemporaryPassword();
+    const attributes = ownAccountPasswordAuthUpdate(password);
+
+    assert.equal(attributes.password, password);
+    assert.equal(attributes.email_confirm, true);
+    assert.deepEqual(Object.keys(attributes).sort(), [
+      "email_confirm",
+      "password",
+    ]);
+    assert.equal("app_metadata" in attributes, false);
   });
 });

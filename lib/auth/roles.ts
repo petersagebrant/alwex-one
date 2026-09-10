@@ -63,7 +63,7 @@ export function canAdministerUsers(role: AppRole): boolean {
   return isVdEquivalent(role) || role === "administrator";
 }
 
-/** VD / Vice VD — ange tillfälligt lösenord. Inte administratör eller AO-chef. */
+/** VD / Vice VD — ange lösenord (eget eller andras). Inte administratör eller AO-chef. */
 export function canSetUserPassword(role: AppRole): boolean {
   return isVdEquivalent(role);
 }

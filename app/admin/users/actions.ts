@@ -5,9 +5,11 @@ import {
   requireCanSetUserPassword,
   requireUserAdministrator,
 } from "@/lib/auth/require-user";
+import { createClient } from "@/lib/supabase/server";
 import {
   createUser,
   sendUserAccessLink,
+  setOwnAccountPassword,
   setUserDisabled,
   setUserTemporaryPassword,
   updateUser,
@@ -108,11 +110,13 @@ export async function sendUserAccessLinkAction(formData: FormData) {
 }
 
 export type SetUserPasswordResult =
-  | { ok: true; password: string; email: string | null }
+  | { ok: true; mode: "temporary"; password: string; email: string | null }
+  | { ok: true; mode: "own"; email: string | null }
   | { ok: false; error: string };
 
 export async function setUserPasswordAction(
   userId: string,
+  ownPassword?: string,
 ): Promise<SetUserPasswordResult> {
   const actor = await requireCanSetUserPassword();
   const id = userId.trim();
@@ -121,8 +125,29 @@ export async function setUserPasswordAction(
   }
 
   try {
+    if (actor.id === id) {
+      const result = await setOwnAccountPassword(actor.id, ownPassword);
+      if (actor.email && typeof ownPassword === "string") {
+        try {
+          const supabase = await createClient();
+          await supabase.auth.signInWithPassword({
+            email: actor.email,
+            password: ownPassword,
+          });
+        } catch {
+          // Password is already saved. Admin updateUserById can revoke sessions.
+        }
+      }
+      return { ok: true, mode: "own", email: result.email };
+    }
+
     const result = await setUserTemporaryPassword(actor.id, id);
-    return { ok: true, password: result.password, email: result.email };
+    return {
+      ok: true,
+      mode: "temporary",
+      password: result.password,
+      email: result.email,
+    };
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Kunde inte ange nytt lösenord.";

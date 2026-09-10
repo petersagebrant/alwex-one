@@ -39,6 +39,20 @@ export function temporaryPasswordAuthUpdate(password: string): {
   };
 }
 
+/**
+ * GoTrue Admin payload when VD / Vice VD sets their own password.
+ * Omits `app_metadata` so existing flags (including must_change_password) stay.
+ */
+export function ownAccountPasswordAuthUpdate(password: string): {
+  password: string;
+  email_confirm: true;
+} {
+  return {
+    password,
+    email_confirm: true,
+  };
+}
+
 /** Cryptographically random temporary password. Never persist the result. */
 export function generateTemporaryPassword(length = DEFAULT_LENGTH): string {
   if (length < MIN_LENGTH) {

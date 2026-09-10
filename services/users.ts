@@ -5,12 +5,14 @@ import { isProtectedUserId } from "@/lib/auth/protected-users";
 import { clearMustChangePasswordAuthUpdate } from "@/lib/auth/must-change-password";
 import {
   generateTemporaryPassword,
+  ownAccountPasswordAuthUpdate,
   temporaryPasswordAuthUpdate,
 } from "@/lib/auth/temporary-password";
 import {
   assertActorMayChangeTarget,
   assertActorMaySetPassword,
   parseInviteUserInput,
+  parseOwnAccountPassword,
   parseUpdateUserInput,
   type InviteUserInput,
 } from "@/lib/auth/user-admin";
@@ -411,6 +413,60 @@ export async function setUserTemporaryPassword(
   });
 
   return { password, email: targetEmail };
+}
+
+export async function setOwnAccountPassword(
+  actorId: string,
+  rawPassword: unknown,
+): Promise<{ email: string | null }> {
+  const parsed = parseOwnAccountPassword(rawPassword);
+  if (!parsed.ok) {
+    throw new Error(parsed.error);
+  }
+
+  const allowed = assertActorMaySetPassword({
+    actorId,
+    targetId: actorId,
+  });
+  if (!allowed.ok) {
+    throw new Error(allowed.error);
+  }
+
+  const profile = await requireExistingProfile(actorId);
+  const authUsers = await listAuthUsers();
+  const authUser = authUsers.find((user) => user.id === actorId);
+  if (!authUser) {
+    throw new Error("Auth-kontot hittades inte.");
+  }
+
+  const admin = createServiceRoleClient();
+  const { error } = await admin.auth.admin.updateUserById(
+    actorId,
+    ownAccountPasswordAuthUpdate(parsed.value),
+  );
+  if (error) {
+    throw new Error(`Kunde inte ange nytt lösenord: ${error.message}`);
+  }
+
+  const actorName = await resolveActorName();
+  const targetEmail = authUser.email;
+  await recordAuditLog({
+    entityType: "user",
+    entityId: actorId,
+    action: "password_reset",
+    description: "VD satte nytt lösenord på eget konto",
+    actorName,
+    businessAreaId: profile.business_area_id,
+    changes: {
+      fields: [
+        { field: "actor_id", from: null, to: actorId },
+        { field: "target_user_id", from: null, to: actorId },
+        { field: "target_email", from: null, to: targetEmail },
+      ],
+    },
+  });
+
+  return { email: targetEmail };
 }
 
 /** Clear `app_metadata.must_change_password` after the user sets their own password. */

@@ -1,12 +1,13 @@
+import { MIN_PASSWORD_LENGTH } from "@/lib/auth/must-change-password";
+import {
+  isProtectedUserId,
+  protectedUserMutationError,
+} from "@/lib/auth/protected-users";
 import {
   isAppRole,
   roleRequiresBusinessArea,
   type AppRole,
 } from "@/lib/auth/roles";
-import {
-  isProtectedUserId,
-  protectedUserMutationError,
-} from "@/lib/auth/protected-users";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const UUID_PATTERN =
@@ -189,12 +190,22 @@ export function assertActorMaySetPassword(options: {
   actorId: string;
   targetId: string;
 }): ParseResult<true> {
-  if (options.actorId === options.targetId) {
-    return {
-      ok: false,
-      error: "Du kan inte ange nytt lösenord för ditt eget konto.",
-    };
+  if (!options.actorId.trim() || !options.targetId.trim()) {
+    return { ok: false, error: "Saknar användar-id." };
   }
 
   return { ok: true, value: true };
+}
+
+export function parseOwnAccountPassword(value: unknown): ParseResult<string> {
+  if (typeof value !== "string" || value.length === 0) {
+    return { ok: false, error: "Ange ett nytt lösenord." };
+  }
+  if (value.length < MIN_PASSWORD_LENGTH) {
+    return {
+      ok: false,
+      error: `Lösenordet måste vara minst ${MIN_PASSWORD_LENGTH} tecken.`,
+    };
+  }
+  return { ok: true, value };
 }

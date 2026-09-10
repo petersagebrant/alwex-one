@@ -10,6 +10,7 @@ import {
   assertActorMayChangeTarget,
   assertActorMaySetPassword,
   parseInviteUserInput,
+  parseOwnAccountPassword,
   parseUpdateUserInput,
 } from "./user-admin";
 
@@ -251,12 +252,18 @@ describe("protected system UUIDs", () => {
 });
 
 describe("assertActorMaySetPassword", () => {
-  it("blocks setting your own password", () => {
+  it("allows VD to set their own password, including on a protected account", () => {
     const self = assertActorMaySetPassword({
       actorId: ACTOR_ID,
       targetId: ACTOR_ID,
     });
-    assert.equal(self.ok, false);
+    assert.equal(self.ok, true);
+
+    const protectedSelf = assertActorMaySetPassword({
+      actorId: PROTECTED_VD_USER_ID,
+      targetId: PROTECTED_VD_USER_ID,
+    });
+    assert.equal(protectedSelf.ok, true);
   });
 
   it("allows VD to set another user's password, including protected accounts", () => {
@@ -271,5 +278,48 @@ describe("assertActorMaySetPassword", () => {
       targetId: PROTECTED_VD_USER_ID,
     });
     assert.equal(protectedVd.ok, true);
+  });
+
+  it("still blocks disable and role downgrade on protected accounts", () => {
+    const disableProtected = assertActorMayChangeTarget({
+      actorId: ACTOR_ID,
+      targetId: PROTECTED_VD_USER_ID,
+      changingRole: false,
+      changingArea: false,
+      disabling: true,
+    });
+    assert.equal(disableProtected.ok, false);
+
+    const disableSelf = assertActorMayChangeTarget({
+      actorId: ACTOR_ID,
+      targetId: ACTOR_ID,
+      changingRole: false,
+      changingArea: false,
+      disabling: true,
+    });
+    assert.equal(disableSelf.ok, false);
+
+    const demoteProtected = assertActorMayChangeTarget({
+      actorId: ACTOR_ID,
+      targetId: PROTECTED_VD_USER_ID,
+      changingRole: true,
+      changingArea: false,
+      disabling: false,
+    });
+    assert.equal(demoteProtected.ok, false);
+  });
+});
+
+describe("parseOwnAccountPassword", () => {
+  it("requires a password of at least MIN_PASSWORD_LENGTH", () => {
+    assert.equal(parseOwnAccountPassword("").ok, false);
+    assert.equal(parseOwnAccountPassword("short").ok, false);
+    assert.equal(parseOwnAccountPassword(null).ok, false);
+
+    const parsed = parseOwnAccountPassword("abcdefgh");
+    assert.equal(parsed.ok, true);
+    if (parsed.ok) {
+      assert.equal(parsed.value, "abcdefgh");
+    }
   });
 });

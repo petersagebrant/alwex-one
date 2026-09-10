@@ -293,9 +293,9 @@ describe("countKpiSetReportingProgress", () => {
   });
 
   it("Fjärr & Miljö: monthly revenue vs budget is excluded from daily progress", () => {
-    // Standalone daily: Körda mil
+    // Standalone daily: Kr per mil – Elit, Kr per mil – Fjärr, Övertid
     // Ratio block: Sjuktimmar + Ordinarie = 1
-    // Not counted: Resultat/Omsättning MONTHLY, Kr per mil (CALCULATED DIVIDE)
+    // Not counted: Resultat/Omsättning MONTHLY, Övertid MTD (CALCULATED)
     const kpis = [
       {
         id: "omsattning-mot-budget",
@@ -306,7 +306,7 @@ describe("countKpiSetReportingProgress", () => {
         reportingFrequency: "MONTHLY" as const,
       },
       {
-        id: "korda-mil",
+        id: "kr-per-mil-elit",
         kind: "STATISTIC" as const,
         calcOperator: null,
         calcNumeratorKpiId: null,
@@ -314,11 +314,27 @@ describe("countKpiSetReportingProgress", () => {
         reportingFrequency: "DAILY" as const,
       },
       {
-        id: "kr-per-mil",
+        id: "kr-per-mil-fjarr",
+        kind: "STATISTIC" as const,
+        calcOperator: null,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+        reportingFrequency: "DAILY" as const,
+      },
+      {
+        id: "overtid",
+        kind: "STATISTIC" as const,
+        calcOperator: null,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+        reportingFrequency: "DAILY" as const,
+      },
+      {
+        id: "overtid-mtd",
         kind: "CALCULATED" as const,
-        calcOperator: "DIVIDE" as const,
-        calcNumeratorKpiId: "omsattning",
-        calcDenominatorKpiId: "korda-mil",
+        calcOperator: "MONTH_TO_DATE_SUM" as const,
+        calcNumeratorKpiId: "overtid",
+        calcDenominatorKpiId: null,
         reportingFrequency: "DAILY" as const,
       },
       {
@@ -356,21 +372,23 @@ describe("countKpiSetReportingProgress", () => {
     ];
 
     const none = countKpiSetReportingProgress(kpis, new Set());
-    assert.deepEqual(none, { reportedCount: 0, totalCount: 2 });
+    assert.deepEqual(none, { reportedCount: 0, totalCount: 4 });
 
     const allDaily = countKpiSetReportingProgress(
       kpis,
       new Set([
         "omsattning-mot-budget",
-        "korda-mil",
-        "kr-per-mil", // calculated — must not add
+        "kr-per-mil-elit",
+        "kr-per-mil-fjarr",
+        "overtid",
+        "overtid-mtd", // calculated — must not add
         "resultat", // monthly — must not add
         "sjuktimmar",
         "ordinarie",
         "sjukfranvaro",
       ]),
     );
-    assert.deepEqual(allDaily, { reportedCount: 2, totalCount: 2 });
+    assert.deepEqual(allDaily, { reportedCount: 4, totalCount: 4 });
   });
 
   it("Mark & Anläggning: monthly revenue vs budget is excluded from daily progress", () => {

@@ -392,10 +392,12 @@ describe("countKpiSetReportingProgress", () => {
   });
 
   it("Mark & Anläggning: monthly revenue vs budget is excluded from daily progress", () => {
-    // Standalone daily: Ton ut Snugge, Kubik ut Betongstationen, Antal enheter i drift
+    // Standalone daily: Antal enheter i drift, Kubik ut Betongstationen,
+    // Ton ut Snugge, Ton in Tunatorp, Ton ut Tunatorp, Övertid
     // Separate daily inputs: Sjuktimmar + Ordinarie arbetstid = 2
+    // (MONTH_TO_DATE_RATIO_PERCENT + SEPARATE_INPUTS — not one grouped block)
     // Calculated Sjukfrånvaro remains excluded.
-    // Not counted: Resultat mot budget / Omsättning mot budget (MONTHLY)
+    // Not counted: Resultat/Omsättning MONTHLY; Övertid MTD / Tunatorp MTD (CALCULATED)
     const kpis = [
       {
         id: "resultat",
@@ -414,7 +416,7 @@ describe("countKpiSetReportingProgress", () => {
         reportingFrequency: "MONTHLY" as const,
       },
       {
-        id: "ton-snugge",
+        id: "enheter-drift",
         kind: "STATISTIC" as const,
         calcOperator: null,
         calcNumeratorKpiId: null,
@@ -430,10 +432,58 @@ describe("countKpiSetReportingProgress", () => {
         reportingFrequency: "DAILY" as const,
       },
       {
-        id: "enheter-drift",
+        id: "ton-snugge",
         kind: "STATISTIC" as const,
         calcOperator: null,
         calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+        reportingFrequency: "DAILY" as const,
+      },
+      {
+        id: "ton-in-tunatorp",
+        kind: "STATISTIC" as const,
+        calcOperator: null,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+        reportingFrequency: "DAILY" as const,
+      },
+      {
+        id: "ton-in-tunatorp-mtd",
+        kind: "CALCULATED" as const,
+        calcOperator: "MONTH_TO_DATE_SUM" as const,
+        calcNumeratorKpiId: "ton-in-tunatorp",
+        calcDenominatorKpiId: null,
+        reportingFrequency: "DAILY" as const,
+      },
+      {
+        id: "ton-ut-tunatorp",
+        kind: "STATISTIC" as const,
+        calcOperator: null,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+        reportingFrequency: "DAILY" as const,
+      },
+      {
+        id: "ton-ut-tunatorp-mtd",
+        kind: "CALCULATED" as const,
+        calcOperator: "MONTH_TO_DATE_SUM" as const,
+        calcNumeratorKpiId: "ton-ut-tunatorp",
+        calcDenominatorKpiId: null,
+        reportingFrequency: "DAILY" as const,
+      },
+      {
+        id: "overtid",
+        kind: "STATISTIC" as const,
+        calcOperator: null,
+        calcNumeratorKpiId: null,
+        calcDenominatorKpiId: null,
+        reportingFrequency: "DAILY" as const,
+      },
+      {
+        id: "overtid-mtd",
+        kind: "CALCULATED" as const,
+        calcOperator: "MONTH_TO_DATE_SUM" as const,
+        calcNumeratorKpiId: "overtid",
         calcDenominatorKpiId: null,
         reportingFrequency: "DAILY" as const,
       },
@@ -456,7 +506,7 @@ describe("countKpiSetReportingProgress", () => {
       {
         id: "sjukfranvaro",
         kind: "TARGET" as const,
-        calcOperator: "RATIO_PERCENT" as const,
+        calcOperator: "MONTH_TO_DATE_RATIO_PERCENT" as const,
         calcNumeratorKpiId: "sjuktimmar",
         calcDenominatorKpiId: "ordinarie",
         ratioReportingMode: "SEPARATE_INPUTS" as const,
@@ -465,28 +515,34 @@ describe("countKpiSetReportingProgress", () => {
     ];
 
     const none = countKpiSetReportingProgress(kpis, new Set());
-    assert.deepEqual(none, { reportedCount: 0, totalCount: 5 });
+    assert.deepEqual(none, { reportedCount: 0, totalCount: 8 });
 
     const onlySickHours = countKpiSetReportingProgress(
       kpis,
       new Set(["sjuktimmar"]),
     );
-    assert.deepEqual(onlySickHours, { reportedCount: 1, totalCount: 5 });
+    assert.deepEqual(onlySickHours, { reportedCount: 1, totalCount: 8 });
 
     const allDaily = countKpiSetReportingProgress(
       kpis,
       new Set([
         "resultat", // monthly — must not add
         "omsattning-mot-budget", // monthly — must not add
-        "ton-snugge",
-        "kubik-betong",
         "enheter-drift",
+        "kubik-betong",
+        "ton-snugge",
+        "ton-in-tunatorp",
+        "ton-in-tunatorp-mtd", // calculated — must not add
+        "ton-ut-tunatorp",
+        "ton-ut-tunatorp-mtd", // calculated — must not add
+        "overtid",
+        "overtid-mtd", // calculated — must not add
         "sjuktimmar",
         "ordinarie",
-        "sjukfranvaro",
+        "sjukfranvaro", // system-computed — must not add
       ]),
     );
-    assert.deepEqual(allDaily, { reportedCount: 5, totalCount: 5 });
+    assert.deepEqual(allDaily, { reportedCount: 8, totalCount: 8 });
   });
 
   it("excludes MONTHLY STATISTIC from daily progress like TARGET MONTHLY", () => {

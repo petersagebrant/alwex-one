@@ -54,6 +54,12 @@ function AoChefReportingProgress({
         reportDate={reporting.reportDate}
         items={reporting.items}
         ratioGroups={reporting.ratioGroups}
+        afterDaily={
+          <CalculatedKpiReportSection
+            items={reporting.calculatedItems}
+            reportDate={reporting.reportDate}
+          />
+        }
         header={
           <InfoPanel
             title={`KPI-rapportering ${dateLabel}`}
@@ -99,11 +105,6 @@ function AoChefReportingProgress({
           Inga KPI:er är skapade för {reporting.businessAreaName}.
         </p>
       ) : null}
-
-      <CalculatedKpiReportSection
-        items={reporting.calculatedItems}
-        reportDate={reporting.reportDate}
-      />
     </>
   );
 }

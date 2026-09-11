@@ -39,6 +39,7 @@ type DailyKpiBatchReportFormProps = {
   ratioGroups: RatioPercentReportGroup[];
   onReported?: () => void;
   header?: ReactNode;
+  afterDaily?: ReactNode;
 };
 
 function DailyKpiBatchSaveBar({ isPending }: { isPending: boolean }) {
@@ -82,6 +83,7 @@ export function DailyKpiBatchReportForm({
   ratioGroups,
   onReported,
   header,
+  afterDaily,
 }: DailyKpiBatchReportFormProps) {
   const seedKey = [
     reportDate,
@@ -96,19 +98,27 @@ export function DailyKpiBatchReportForm({
   ].join("|");
 
   if (items.length === 0 && ratioGroups.length === 0) {
-    return header ?? null;
+    return (
+      <>
+        {header ?? null}
+        {afterDaily}
+      </>
+    );
   }
 
   return (
-    <DailyKpiBatchReportFormFields
-      key={seedKey}
-      businessAreaId={businessAreaId}
-      reportDate={reportDate}
-      items={items}
-      ratioGroups={ratioGroups}
-      onReported={onReported}
-      header={header}
-    />
+    <>
+      <DailyKpiBatchReportFormFields
+        key={seedKey}
+        businessAreaId={businessAreaId}
+        reportDate={reportDate}
+        items={items}
+        ratioGroups={ratioGroups}
+        onReported={onReported}
+        header={header}
+      />
+      {afterDaily}
+    </>
   );
 }
 

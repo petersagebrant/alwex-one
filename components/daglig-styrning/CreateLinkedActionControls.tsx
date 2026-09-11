@@ -9,7 +9,6 @@ import {
   boardCancelButtonClass,
   boardEscalateButtonClass,
   boardFieldClass,
-  boardGhostButtonClass,
   boardPrimaryButtonClass,
 } from "./boardStyles";
 
@@ -140,7 +139,7 @@ export function CreateLinkedActionControls({
       <button
         type="button"
         onClick={() => setMode("create")}
-        className={boardGhostButtonClass}
+        className={boardPrimaryButtonClass}
       >
         Åtgärd
       </button>
@@ -148,7 +147,7 @@ export function CreateLinkedActionControls({
       <button
         type="button"
         onClick={() => setMode("escalate")}
-        className={boardGhostButtonClass}
+        className={boardEscalateButtonClass}
       >
         Eskalera
       </button>

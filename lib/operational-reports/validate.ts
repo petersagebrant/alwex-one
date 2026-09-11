@@ -4,13 +4,14 @@ import {
   OPERATIONAL_REPORT_PRIORITIES,
   type CreateOperationalReportInput,
   type OperationalReportPriority,
+  type PublicReportingUnitOption,
 } from "@/types/operational-report";
 import { parsePublicReportCategory } from "./category";
 
 export const OPERATIONAL_REPORT_HONEYPOT_FIELD = "website";
 
 export type OperationalReportFormFields = {
-  haulierName: string;
+  reportingUnitId: string;
   businessAreaId: string;
   body: string;
   priority: string;
@@ -33,6 +34,7 @@ export function isHoneypotFilled(value: string | null | undefined): boolean {
 export function parseOperationalReportForm(
   fields: OperationalReportFormFields,
   allowedAreaIds: ReadonlySet<string>,
+  allowedUnits: ReadonlyMap<string, PublicReportingUnitOption>,
 ):
   | { ok: true; value: CreateOperationalReportInput }
   | { ok: false; error: string } {
@@ -40,19 +42,28 @@ export function parseOperationalReportForm(
     return { ok: false, error: "honeypot" };
   }
 
-  const haulierName = fields.haulierName.trim();
+  const reportingUnitId = fields.reportingUnitId.trim();
   const body = fields.body.trim();
   const businessAreaId = fields.businessAreaId.trim();
   const priority = fields.priority.trim();
   const parsedCategory = parsePublicReportCategory(fields.category);
 
+  if (!reportingUnitId) {
+    return { ok: false, error: "Välj varifrån rapporten kommer." };
+  }
+  const unit = allowedUnits.get(reportingUnitId);
+  if (!unit) {
+    return { ok: false, error: "Ogiltig rapportenhet." };
+  }
+
+  const haulierName = unit.name.trim();
   if (!haulierName) {
-    return { ok: false, error: "Ange åkeri." };
+    return { ok: false, error: "Välj varifrån rapporten kommer." };
   }
   if (haulierName.length > OPERATIONAL_REPORT_HAULIER_MAX) {
     return {
       ok: false,
-      error: `Åkeri får vara högst ${OPERATIONAL_REPORT_HAULIER_MAX} tecken.`,
+      error: `Namnet får vara högst ${OPERATIONAL_REPORT_HAULIER_MAX} tecken.`,
     };
   }
   if (!body) {

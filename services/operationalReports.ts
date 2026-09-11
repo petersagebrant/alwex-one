@@ -14,12 +14,14 @@ import {
   listPublicOperationalReportAreas,
   updateOperationalReportStatusRow,
 } from "@/lib/supabase/operational-reports";
+import { listPublicReportingUnits } from "@/lib/supabase/reporting-units";
 import { fetchAreaNoticeAreaLabels } from "@/lib/supabase/area-notices";
 import type {
   CreateOperationalReportInput,
   OperationalReport,
   OperationalReportAreaOption,
   OperationalReportStatus,
+  PublicReportingUnitOption,
 } from "@/types/operational-report";
 
 export type OperationalReportListItem = OperationalReport & {
@@ -50,6 +52,17 @@ export async function getPublicOperationalReportAreas(): Promise<
   OperationalReportAreaOption[]
 > {
   return listPublicOperationalReportAreas();
+}
+
+export async function getPublicReportingUnits(): Promise<
+  PublicReportingUnitOption[]
+> {
+  const rows = await listPublicReportingUnits();
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    defaultBusinessAreaId: row.default_business_area_id,
+  }));
 }
 
 export async function submitPublicOperationalReport(

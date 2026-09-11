@@ -13,6 +13,7 @@ import {
 import { consumeOperationalReportRateLimit } from "@/lib/supabase/operational-reports";
 import {
   getPublicOperationalReportAreas,
+  getPublicReportingUnits,
   submitPublicOperationalReport,
 } from "@/services/operationalReports";
 
@@ -22,7 +23,7 @@ function firstParam(value: FormDataEntryValue | null): string {
 
 export async function submitOperationalReportAction(formData: FormData) {
   const fields = {
-    haulierName: firstParam(formData.get("haulierName")),
+    reportingUnitId: firstParam(formData.get("reportingUnitId")),
     businessAreaId: firstParam(formData.get("businessAreaId")),
     body: firstParam(formData.get("body")),
     priority: firstParam(formData.get("priority")),
@@ -35,16 +36,25 @@ export async function submitOperationalReportAction(formData: FormData) {
   }
 
   let areas: Awaited<ReturnType<typeof getPublicOperationalReportAreas>>;
+  let units: Awaited<ReturnType<typeof getPublicReportingUnits>>;
   try {
-    areas = await getPublicOperationalReportAreas();
+    [areas, units] = await Promise.all([
+      getPublicOperationalReportAreas(),
+      getPublicReportingUnits(),
+    ]);
   } catch {
     redirect(
-      `/rapportera?fel=${encodeURIComponent("Kunde inte hämta affärsområden. Försök igen.")}`,
+      `/rapportera?fel=${encodeURIComponent("Kunde inte hämta underlag. Försök igen.")}`,
     );
   }
 
-  const allowed = new Set(areas.map((area) => area.id));
-  const validated = parseOperationalReportForm(fields, allowed);
+  const allowedAreas = new Set(areas.map((area) => area.id));
+  const allowedUnits = new Map(units.map((unit) => [unit.id, unit]));
+  const validated = parseOperationalReportForm(
+    fields,
+    allowedAreas,
+    allowedUnits,
+  );
 
   if (!validated.ok) {
     if (validated.error === "honeypot") {

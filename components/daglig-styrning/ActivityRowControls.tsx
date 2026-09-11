@@ -2,70 +2,76 @@
 
 import { useState } from "react";
 import { patchSteeringActivityAction } from "@/app/daglig-styrning/actions";
-import {
-  nextSteeringBoardStatus,
-  steeringBoardStatusLabel,
-} from "@/lib/operational-reports/boardPresentation";
+import { nextSteeringBoardStatus } from "@/lib/operational-reports/boardPresentation";
+import { hasAnsweredEscalation } from "@/lib/operational-reports/escalation";
 import type { ActivityStatus } from "@/types/activity";
+import type { ActivityEscalation } from "@/types/activity-escalation";
 import {
   boardActionClusterClass,
   boardCancelButtonClass,
   boardEscalateButtonClass,
   boardFieldClass,
-  boardGhostButtonClass,
-  boardStatusBadgeClass,
+  boardNextStatusButtonClass,
 } from "./boardStyles";
 
 type ActivityRowControlsProps = {
   activityId: string;
   status: ActivityStatus;
   requiresEscalation: boolean;
+  escalations: ActivityEscalation[];
   canUpdate: boolean;
+  canComplete: boolean;
 };
 
 export function ActivityRowControls({
   activityId,
   status,
   requiresEscalation,
+  escalations,
   canUpdate,
+  canComplete,
 }: ActivityRowControlsProps) {
   const [escalateOpen, setEscalateOpen] = useState(false);
-  const currentLabel = steeringBoardStatusLabel(status);
   const nextStatus = nextSteeringBoardStatus(status);
+  const showEscalate =
+    !requiresEscalation && !hasAnsweredEscalation(escalations);
+  const showKlar = Boolean(nextStatus) && canComplete;
 
   if (!canUpdate) {
-    return (
-      <div className={boardActionClusterClass}>
-        <span className={boardStatusBadgeClass}>{currentLabel}</span>
-      </div>
-    );
+    return null;
+  }
+
+  if (!showKlar && !showEscalate && !escalateOpen) {
+    return null;
   }
 
   return (
     <div className="flex shrink-0 flex-col items-end gap-1">
       <div className={boardActionClusterClass}>
-        <span className={boardStatusBadgeClass}>{currentLabel}</span>
-        {nextStatus ? (
+        {showKlar && nextStatus ? (
           <form action={patchSteeringActivityAction} className="inline-flex">
             <input type="hidden" name="id" value={activityId} />
             <input type="hidden" name="intent" value="status" />
             <input type="hidden" name="status" value={nextStatus.value} />
-            <button type="submit" className={boardGhostButtonClass}>
+            <button
+              type="submit"
+              className={boardNextStatusButtonClass(nextStatus.value)}
+            >
               {nextStatus.label}
             </button>
           </form>
         ) : null}
-        {!requiresEscalation && !escalateOpen ? (
+        {showEscalate && !escalateOpen ? (
           <button
             type="button"
             onClick={() => setEscalateOpen(true)}
-            className={boardGhostButtonClass}
+            className={boardEscalateButtonClass}
           >
             Eskalera
           </button>
         ) : null}
       </div>
-      {escalateOpen && !requiresEscalation ? (
+      {escalateOpen && showEscalate ? (
         <form
           action={async (formData) => {
             await patchSteeringActivityAction(formData);

@@ -15,7 +15,7 @@ import { SectionHeader } from "@/components/ui";
 import { canWriteOperational } from "@/lib/auth/roles";
 import { requireProfile } from "@/lib/auth/require-user";
 import { formatDateSv, formatDateTimeSv } from "@/lib/format/date";
-import { toGoalOwnerOptions } from "@/lib/goals/owner";
+import { toGoalOwnerOptions, type GoalOwnerOption } from "@/lib/goals/owner";
 import { stockholmCalendarDate } from "@/lib/kpi/dailyReportDate";
 import { dailySteeringAttentionKpis } from "@/lib/operational-reports/attentionKpis";
 import {
@@ -33,8 +33,14 @@ import {
   sortEscalatedActivities,
   sortOpenActivities,
 } from "@/lib/operational-reports/openActivities";
-import { canWriteOperationalForArea } from "@/lib/operational-reports/permissions";
-import { filterActiveMorningReports } from "@/lib/operational-reports/status";
+import {
+  canCompleteFollowUpActivity,
+  canWriteOperationalForArea,
+} from "@/lib/operational-reports/permissions";
+import {
+  filterFollowUpBoardReports,
+  filterIncomingBoardReports,
+} from "@/lib/operational-reports/status";
 import {
   countSafetyIncidentsForDay,
   formatSafetyIncidentLine,
@@ -44,7 +50,10 @@ import { getDashboardAreaNotices } from "@/services/areaNotices";
 import { getActivities } from "@/services/activities";
 import { getBusinessAreaOptions } from "@/services/businessAreas";
 import { getKPIs } from "@/services/kpis";
-import { getDailySteeringReports } from "@/services/operationalReports";
+import {
+  getDailySteeringReports,
+  type OperationalReportListItem,
+} from "@/services/operationalReports";
 import type { OperationalReportPriority } from "@/types/operational-report";
 
 export const metadata: Metadata = {
@@ -57,6 +66,53 @@ const priorityTone: Record<OperationalReportPriority, string> = {
   follow_up: "border-l-amber-400",
   info: "border-l-sky-500",
 };
+
+function DailySteeringReportRow({
+  report,
+  today,
+  owners,
+  canWrite,
+}: {
+  report: OperationalReportListItem;
+  today: string;
+  owners: GoalOwnerOption[];
+  canWrite: (areaId: string) => boolean;
+}) {
+  return (
+    <li
+      className={`rounded-xl border border-slate-200 bg-white border-l-4 ${boardCardPadClass} ${priorityTone[report.priority]}`}
+    >
+      <div className={boardRowClass}>
+        <div className="relative z-0 min-w-0 flex-1 overflow-hidden">
+          <p className="text-sm leading-snug text-slate-800">
+            <span className="font-semibold text-slate-900">
+              {COMPACT_PRIORITY_LABELS[report.priority]}
+            </span>
+            <span className="text-slate-400"> · </span>
+            {report.businessAreaName}
+            <span className="text-slate-400"> · </span>
+            {report.haulierName}
+            <span className="text-slate-400"> · </span>
+            <span className="text-slate-600">
+              {formatDateTimeSv(report.createdAt)}
+            </span>
+          </p>
+          <p className="mt-0.5 text-sm leading-snug text-slate-800">
+            {report.body}
+          </p>
+        </div>
+        <ReportRowActions
+          reportId={report.id}
+          businessAreaId={report.businessAreaId}
+          status={report.status}
+          canUpdate={canWrite(report.businessAreaId)}
+          defaultDeadline={today}
+          owners={owners}
+        />
+      </div>
+    </li>
+  );
+}
 
 export default async function DagligStyrningPage() {
   const profile = await requireProfile();
@@ -78,8 +134,12 @@ export default async function DagligStyrningPage() {
   const attentionKpis = dailySteeringAttentionKpis(kpis);
   const relevantNotices = filterDailySteeringNotices(notices);
   const meetingDate = formatStockholmMeetingDate();
-  const incomingReports = filterActiveMorningReports(reports.active, {
-    linkedReportIds: activities.map((activity) => activity.operationalReportId),
+  const linkedReportIds = activities.map((activity) => activity.operationalReportId);
+  const incomingReports = filterIncomingBoardReports(reports.active, {
+    linkedReportIds,
+  });
+  const followUpReports = filterFollowUpBoardReports(reports.active, {
+    linkedReportIds,
   });
   const reportById = new Map(
     [...reports.active, ...reports.handledToday].map((report) => [
@@ -170,7 +230,7 @@ export default async function DagligStyrningPage() {
                     <div className={boardRowClass}>
                       <Link
                         href={kpi.href}
-                        className="min-w-0 flex-1 hover:opacity-80"
+                        className="relative z-0 min-w-0 flex-1 overflow-hidden hover:opacity-80"
                       >
                         <p className="text-sm font-semibold leading-snug text-slate-900">
                           {kpi.titleLabel}
@@ -207,39 +267,13 @@ export default async function DagligStyrningPage() {
             ) : (
               <ul className="mt-3 space-y-1.5">
                 {incomingReports.map((report) => (
-                  <li
+                  <DailySteeringReportRow
                     key={report.id}
-                    className={`rounded-xl border border-slate-200 bg-white border-l-4 ${boardCardPadClass} ${priorityTone[report.priority]}`}
-                  >
-                    <div className={boardRowClass}>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm leading-snug text-slate-800">
-                          <span className="font-semibold text-slate-900">
-                            {COMPACT_PRIORITY_LABELS[report.priority]}
-                          </span>
-                          <span className="text-slate-400"> · </span>
-                          {report.businessAreaName}
-                          <span className="text-slate-400"> · </span>
-                          {report.haulierName}
-                          <span className="text-slate-400"> · </span>
-                          <span className="text-slate-600">
-                            {formatDateTimeSv(report.createdAt)}
-                          </span>
-                        </p>
-                        <p className="mt-0.5 text-sm leading-snug text-slate-800">
-                          {report.body}
-                        </p>
-                      </div>
-                      <ReportRowActions
-                        reportId={report.id}
-                        businessAreaId={report.businessAreaId}
-                        status={report.status}
-                        canUpdate={canWrite(report.businessAreaId)}
-                        defaultDeadline={today}
-                        owners={owners}
-                      />
-                    </div>
-                  </li>
+                    report={report}
+                    today={today}
+                    owners={owners}
+                    canWrite={canWrite}
+                  />
                 ))}
               </ul>
             )}
@@ -271,7 +305,7 @@ export default async function DagligStyrningPage() {
             <h2 id="follow-up-heading" className="sr-only">
               Att följa upp
             </h2>
-            {followUpActivities.length === 0 ? (
+            {followUpActivities.length === 0 && followUpReports.length === 0 ? (
               <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
                 <p className="text-sm text-slate-500">
                   Inget att följa upp just nu.
@@ -297,6 +331,15 @@ export default async function DagligStyrningPage() {
                   />
                 ) : null}
                 <ul className="mt-3 space-y-1.5">
+                  {followUpReports.map((report) => (
+                    <DailySteeringReportRow
+                      key={report.id}
+                      report={report}
+                      today={today}
+                      owners={owners}
+                      canWrite={canWrite}
+                    />
+                  ))}
                   {followUpActivities.map((activity) => {
                     const overdue = isOverdueActivity(activity, today);
                     const escalated = activity.requiresEscalation;
@@ -319,7 +362,7 @@ export default async function DagligStyrningPage() {
                         }`}
                       >
                         <div className={boardRowClass}>
-                          <div className="min-w-0 flex-1">
+                          <div className="relative z-0 min-w-0 flex-1 overflow-hidden">
                             <p className="text-sm font-semibold leading-snug text-slate-900">
                               {escalated ? (
                                 <span className="mr-2 inline-flex items-center rounded-md bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-900 ring-1 ring-inset ring-amber-200/80">
@@ -349,7 +392,14 @@ export default async function DagligStyrningPage() {
                             activityId={activity.id}
                             status={activity.status}
                             requiresEscalation={activity.requiresEscalation}
+                            escalations={activity.escalations}
                             canUpdate={canWrite(activity.businessAreaId)}
+                            canComplete={canCompleteFollowUpActivity({
+                              role: profile.role,
+                              profileBusinessAreaId: profile.businessAreaId,
+                              activityBusinessAreaId: activity.businessAreaId,
+                              escalations: activity.escalations,
+                            })}
                           />
                         </div>
                       </li>

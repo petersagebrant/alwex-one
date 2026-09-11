@@ -31,6 +31,7 @@ import {
 } from "./openActivities";
 import {
   canAnswerEscalation,
+  canCompleteFollowUpActivity,
   canEscalateActivity,
   canReadActivityEscalation,
   canReadOperationalReport,
@@ -45,6 +46,8 @@ import {
 import { sortOperationalReportsByPriority } from "./sort";
 import {
   filterActiveMorningReports,
+  filterFollowUpBoardReports,
+  filterIncomingBoardReports,
   isActiveMorningReport,
   statusAfterCreatingLinkedAction,
 } from "./status";
@@ -53,6 +56,11 @@ import { parseOperationalReportForm } from "./validate";
 const AREA_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const AREA_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const TOTALT = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const UNIT_A = {
+  id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+  name: "TESTÅKERI",
+  defaultBusinessAreaId: AREA_A,
+};
 
 function sliceExport(source: string, name: string): string {
   const markers = [
@@ -199,6 +207,61 @@ describe("operational report permissions", () => {
     assert.equal(canViewLeadershipEscalations("lasbehorighet"), false);
     assert.equal(canAnswerEscalation("lasbehorighet"), false);
   });
+
+  it("lets the area AO-chef mark Klar after VD answers, but not VD", () => {
+    const unanswered = [{ status: "open" as const }];
+    const answered = [{ status: "answered" as const }];
+
+    assert.equal(
+      canCompleteFollowUpActivity({
+        role: "vd",
+        profileBusinessAreaId: null,
+        activityBusinessAreaId: AREA_A,
+        escalations: unanswered,
+      }),
+      true,
+    );
+    assert.equal(
+      canCompleteFollowUpActivity({
+        role: "vd",
+        profileBusinessAreaId: null,
+        activityBusinessAreaId: AREA_A,
+        escalations: answered,
+      }),
+      false,
+    );
+    assert.equal(
+      canCompleteFollowUpActivity({
+        role: "vice_vd",
+        profileBusinessAreaId: null,
+        activityBusinessAreaId: AREA_A,
+        escalations: answered,
+      }),
+      false,
+    );
+    assert.equal(
+      canCompleteFollowUpActivity({
+        role: "ao_chef",
+        profileBusinessAreaId: AREA_A,
+        activityBusinessAreaId: AREA_A,
+        escalations: answered,
+      }),
+      true,
+    );
+    assert.equal(
+      canCompleteFollowUpActivity({
+        role: "ao_chef",
+        profileBusinessAreaId: AREA_B,
+        activityBusinessAreaId: AREA_A,
+        escalations: answered,
+      }),
+      false,
+    );
+    assert.equal(
+      canWriteOperationalForArea("vd", null, AREA_A),
+      true,
+    );
+  });
 });
 
 describe("report vs activity status isolation", () => {
@@ -343,6 +406,40 @@ describe("operational report status and sort", () => {
     assert.equal(reports.length, 4);
   });
 
+  it("places ny in Inkommet and unlinked hanteras in Att följa upp without duplicates", () => {
+    const reports = [
+      { id: "rep-new", status: "ny" as const },
+      { id: "rep-handling", status: "hanteras" as const },
+      { id: "rep-linked", status: "hanteras" as const },
+      { id: "rep-closed", status: "klar" as const },
+    ];
+    const linkedReportIds = ["rep-linked"];
+    const incoming = filterIncomingBoardReports(reports, { linkedReportIds });
+    const followUp = filterFollowUpBoardReports(reports, { linkedReportIds });
+
+    assert.deepEqual(
+      incoming.map((row) => row.id),
+      ["rep-new"],
+    );
+    assert.deepEqual(
+      followUp.map((row) => row.id),
+      ["rep-handling"],
+    );
+    assert.equal(
+      incoming.some((row) => row.id === "rep-handling"),
+      false,
+    );
+    assert.equal(
+      followUp.some((row) => row.id === "rep-linked"),
+      false,
+    );
+    assert.equal(
+      incoming.some((row) => row.id === "rep-closed") ||
+        followUp.some((row) => row.id === "rep-closed"),
+      false,
+    );
+  });
+
   it("keeps the FK when creating an action and then drops the source from incoming", () => {
     const unlinked = {
       id: "rep-new",
@@ -363,7 +460,10 @@ describe("operational report status and sort", () => {
     const nextStatus = statusAfterCreatingLinkedAction(report.status);
     storedReports[1] = { ...report, status: nextStatus };
 
-    const incoming = filterActiveMorningReports(storedReports, {
+    const incoming = filterIncomingBoardReports(storedReports, {
+      linkedReportIds: [createdActivity.operationalReportId],
+    });
+    const followUpReports = filterFollowUpBoardReports(storedReports, {
       linkedReportIds: [createdActivity.operationalReportId],
     });
     const followUp = filterOpenActivities([createdActivity]);
@@ -374,6 +474,10 @@ describe("operational report status and sort", () => {
     assert.deepEqual(
       incoming.map((row) => row.id),
       ["rep-new"],
+    );
+    assert.deepEqual(
+      followUpReports.map((row) => row.id),
+      [],
     );
     assert.deepEqual(
       followUp.map((row) => row.id),
@@ -396,7 +500,7 @@ describe("operational report status and sort", () => {
         escalations: [],
       },
     ];
-    const incoming = filterActiveMorningReports(reports, {
+    const incoming = filterIncomingBoardReports(reports, {
       linkedReportIds: activities.map((activity) => activity.operationalReportId),
     });
 
@@ -423,47 +527,38 @@ describe("operational report status and sort", () => {
 
 describe("operational report validation", () => {
   const allowed = new Set([AREA_A]);
+  const units = new Map([[UNIT_A.id, UNIT_A]]);
+  const fields = {
+    reportingUnitId: UNIT_A.id,
+    businessAreaId: AREA_A,
+    body: "Hända",
+    priority: "info" as const,
+    category: "ovrigt",
+    honeypot: "",
+  };
 
   it("rejects empty body, invalid AO and totalt", () => {
     assert.equal(
       parseOperationalReportForm(
-        {
-          haulierName: "Åkeri",
-          businessAreaId: AREA_A,
-          body: "",
-          priority: "info",
-          category: "ovrigt",
-          honeypot: "",
-        },
+        { ...fields, body: "" },
         allowed,
+        units,
       ).ok,
       false,
     );
     assert.equal(
       parseOperationalReportForm(
-        {
-          haulierName: "Åkeri",
-          businessAreaId: AREA_B,
-          body: "Hända",
-          priority: "info",
-          category: "ovrigt",
-          honeypot: "",
-        },
+        { ...fields, businessAreaId: AREA_B },
         allowed,
+        units,
       ).ok,
       false,
     );
     assert.equal(
       parseOperationalReportForm(
-        {
-          haulierName: "Åkeri",
-          businessAreaId: TOTALT,
-          body: "Hända",
-          priority: "urgent",
-          category: "ovrigt",
-          honeypot: "",
-        },
+        { ...fields, businessAreaId: TOTALT, priority: "urgent" },
         allowed,
+        units,
       ).ok,
       false,
     );
@@ -471,15 +566,9 @@ describe("operational report validation", () => {
 
   it("treats a filled honeypot as discard", () => {
     const result = parseOperationalReportForm(
-      {
-        haulierName: "Åkeri",
-        businessAreaId: AREA_A,
-        body: "Hända",
-        priority: "info",
-        category: "ovrigt",
-        honeypot: "http://spam.example",
-      },
+      { ...fields, honeypot: "http://spam.example" },
       allowed,
+      units,
     );
     assert.equal(result.ok, false);
     if (!result.ok) {
@@ -487,36 +576,56 @@ describe("operational report validation", () => {
     }
   });
 
-  it("accepts a valid public report", () => {
+  it("accepts a valid public report and snapshots the unit name", () => {
     const result = parseOperationalReportForm(
       {
-        haulierName: "Åkeri AB",
-        businessAreaId: AREA_A,
+        ...fields,
         body: "Lastbil stannade",
         priority: "urgent",
         category: "sakerhet",
-        honeypot: "",
       },
       allowed,
+      units,
     );
     assert.equal(result.ok, true);
     if (result.ok) {
+      assert.equal(result.value.haulierName, "TESTÅKERI");
       assert.equal(result.value.category, "sakerhet");
       assert.equal(result.value.incidentKind, "tillbud");
+    }
+  });
+
+  it("rejects a missing or unknown reporting unit", () => {
+    const missing = parseOperationalReportForm(
+      { ...fields, reportingUnitId: "" },
+      allowed,
+      units,
+    );
+    assert.equal(missing.ok, false);
+    if (!missing.ok) {
+      assert.equal(missing.error, "Välj varifrån rapporten kommer.");
+    }
+
+    const unknown = parseOperationalReportForm(
+      { ...fields, reportingUnitId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee" },
+      allowed,
+      units,
+    );
+    assert.equal(unknown.ok, false);
+    if (!unknown.ok) {
+      assert.equal(unknown.error, "Ogiltig rapportenhet.");
     }
   });
 
   it("rejects a missing category", () => {
     const result = parseOperationalReportForm(
       {
-        haulierName: "Åkeri AB",
-        businessAreaId: AREA_A,
+        ...fields,
         body: "Lastbil stannade",
-        priority: "info",
         category: "",
-        honeypot: "",
       },
       allowed,
+      units,
     );
     assert.equal(result.ok, false);
   });
@@ -589,12 +698,12 @@ describe("daily steering compact presentation", () => {
     assert.equal(isSteeringBoardStatusSelected("Försenad", "Ej påbörjad"), true);
     assert.equal(isSteeringBoardStatusSelected("Pågår", "Ej påbörjad"), false);
     assert.deepEqual(nextSteeringBoardStatus("Ej påbörjad"), {
-      value: "Pågår",
-      label: "Starta",
+      value: "Klar",
+      label: "Klar",
     });
     assert.deepEqual(nextSteeringBoardStatus("Försenad"), {
-      value: "Pågår",
-      label: "Starta",
+      value: "Klar",
+      label: "Klar",
     });
     assert.deepEqual(nextSteeringBoardStatus("Pågår"), {
       value: "Klar",
@@ -604,9 +713,9 @@ describe("daily steering compact presentation", () => {
     assert.equal(
       followUpReportSourceLabel({
         operationalReportId: "rep-1",
-        haulierName: "Åkeri AB",
+        haulierName: "TESTÅKERI",
       }),
-      "Från rapport · Åkeri AB",
+      "Från rapport · TESTÅKERI",
     );
     assert.equal(
       followUpReportSourceLabel({ operationalReportId: "rep-1" }),

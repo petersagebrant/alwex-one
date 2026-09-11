@@ -74,6 +74,13 @@ export default async function AdminUsersPage({
               <span>Admin</span>
               <span aria-hidden>/</span>
               <span className="text-neutral-800">Användare</span>
+              <span aria-hidden>·</span>
+              <Link
+                href="/admin/reporting-units"
+                className="hover:text-neutral-800"
+              >
+                Rapportenheter
+              </Link>
             </div>
             <h1 className="mt-3 text-2xl font-semibold tracking-tight text-neutral-900">
               Administrera användare

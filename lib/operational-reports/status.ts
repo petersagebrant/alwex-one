@@ -20,6 +20,60 @@ export function isActiveMorningReport(status: OperationalReportStatus): boolean 
   return status === "ny" || status === "hanteras";
 }
 
+function linkedIdSet(
+  linkedReportIds?: Iterable<string | null | undefined>,
+): Set<string> | null {
+  if (!linkedReportIds) {
+    return null;
+  }
+  return new Set(
+    [...linkedReportIds].filter(
+      (id): id is string => typeof id === "string" && id.length > 0,
+    ),
+  );
+}
+
+/** Inkommet: only new reports. Linked reports never stay here. */
+export function filterIncomingBoardReports<
+  T extends { status: OperationalReportStatus; id?: string },
+>(
+  reports: T[],
+  options?: { linkedReportIds?: Iterable<string | null | undefined> },
+): T[] {
+  const linkedIds = linkedIdSet(options?.linkedReportIds);
+  return reports.filter((report) => {
+    if (report.status !== "ny") {
+      return false;
+    }
+    if (linkedIds && report.id && linkedIds.has(report.id)) {
+      return false;
+    }
+    return true;
+  });
+}
+
+/**
+ * Att följa upp: handled reports without a linked activity.
+ * Linked hanteras reports appear as the activity, not twice.
+ */
+export function filterFollowUpBoardReports<
+  T extends { status: OperationalReportStatus; id?: string },
+>(
+  reports: T[],
+  options?: { linkedReportIds?: Iterable<string | null | undefined> },
+): T[] {
+  const linkedIds = linkedIdSet(options?.linkedReportIds);
+  return reports.filter((report) => {
+    if (report.status !== "hanteras") {
+      return false;
+    }
+    if (linkedIds && report.id && linkedIds.has(report.id)) {
+      return false;
+    }
+    return true;
+  });
+}
+
 /** Linked action from a report: ny → hanteras. Never downgrade hanteras/klar. */
 export function statusAfterCreatingLinkedAction(
   current: OperationalReportStatus,
@@ -33,13 +87,7 @@ export function filterActiveMorningReports<
   reports: T[],
   options?: { linkedReportIds?: Iterable<string | null | undefined> },
 ): T[] {
-  const linkedIds = options?.linkedReportIds
-    ? new Set(
-        [...options.linkedReportIds].filter(
-          (id): id is string => typeof id === "string" && id.length > 0,
-        ),
-      )
-    : null;
+  const linkedIds = linkedIdSet(options?.linkedReportIds);
 
   return reports.filter((report) => {
     if (!isActiveMorningReport(report.status)) {

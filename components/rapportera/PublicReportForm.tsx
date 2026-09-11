@@ -4,28 +4,32 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   OPERATIONAL_REPORT_BODY_MAX,
-  OPERATIONAL_REPORT_HAULIER_MAX,
   OPERATIONAL_REPORT_PRIORITY_LABELS,
   OPERATIONAL_REPORT_PRIORITIES,
   type OperationalReportAreaOption,
+  type PublicReportingUnitOption,
 } from "@/types/operational-report";
 import { OPERATIONAL_REPORT_HONEYPOT_FIELD } from "@/lib/operational-reports/validate";
 import { submitOperationalReportAction } from "@/app/rapportera/actions";
 
 type PublicReportFormProps = {
   areas: OperationalReportAreaOption[];
+  units: PublicReportingUnitOption[];
   initialSent: boolean;
   error: string | null;
 };
 
 export function PublicReportForm({
   areas,
+  units,
   initialSent,
   error,
 }: PublicReportFormProps) {
   const router = useRouter();
   const [sent, setSent] = useState(initialSent);
   const [formKey, setFormKey] = useState(0);
+  const [unitId, setUnitId] = useState("");
+  const [areaId, setAreaId] = useState("");
 
   useEffect(() => {
     setSent(initialSent);
@@ -33,8 +37,21 @@ export function PublicReportForm({
 
   function reportAnother() {
     setSent(false);
+    setUnitId("");
+    setAreaId("");
     setFormKey((current) => current + 1);
     router.replace("/rapportera", { scroll: false });
+  }
+
+  function onUnitChange(nextId: string) {
+    setUnitId(nextId);
+    const unit = units.find((item) => item.id === nextId);
+    if (
+      unit?.defaultBusinessAreaId &&
+      areas.some((area) => area.id === unit.defaultBusinessAreaId)
+    ) {
+      setAreaId(unit.defaultBusinessAreaId);
+    }
   }
 
   if (sent) {
@@ -79,20 +96,28 @@ export function PublicReportForm({
 
       <div>
         <label
-          htmlFor="haulierName"
+          htmlFor="reportingUnitId"
           className="block text-xs font-medium text-neutral-500"
         >
-          Åkeri
+          Rapporterat från
         </label>
-        <input
-          id="haulierName"
-          name="haulierName"
-          type="text"
+        <select
+          id="reportingUnitId"
+          name="reportingUnitId"
           required
-          maxLength={OPERATIONAL_REPORT_HAULIER_MAX}
-          autoComplete="organization"
+          value={unitId}
+          onChange={(event) => onUnitChange(event.target.value)}
           className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-base text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
-        />
+        >
+          <option value="" disabled>
+            Välj varifrån
+          </option>
+          {units.map((unit) => (
+            <option key={unit.id} value={unit.id}>
+              {unit.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div>
@@ -106,7 +131,8 @@ export function PublicReportForm({
           id="businessAreaId"
           name="businessAreaId"
           required
-          defaultValue=""
+          value={areaId}
+          onChange={(event) => setAreaId(event.target.value)}
           className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-base text-neutral-900 outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[#5b5bd6]/20"
         >
           <option value="" disabled>

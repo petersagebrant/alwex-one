@@ -1,13 +1,9 @@
-import { updateOperationalReportStatusAction } from "@/app/daglig-styrning/actions";
 import {
   OPERATIONAL_REPORT_STATUS_LABELS,
   type OperationalReportStatus,
 } from "@/types/operational-report";
-import {
-  boardNewStatusBadgeClass,
-  boardPrimaryButtonClass,
-  boardStatusBadgeClass,
-} from "./boardStyles";
+import { HandleReportStatusButton } from "./HandleReportStatusButton";
+import { boardReportStatusBadgeClass } from "./boardStyles";
 
 type ReportStatusControlsProps = {
   reportId: string;
@@ -20,22 +16,20 @@ export function ReportStatusControls({
   status,
   canUpdate,
 }: ReportStatusControlsProps) {
-  const badgeClass =
-    status === "ny" ? boardNewStatusBadgeClass : boardStatusBadgeClass;
+  const showHandle = canUpdate && status === "ny";
+  const showStatusBadge = status !== "hanteras";
 
   return (
     <>
-      <span className={badgeClass}>
-        {OPERATIONAL_REPORT_STATUS_LABELS[status]}
-      </span>
-      {canUpdate && status === "ny" ? (
-        <form action={updateOperationalReportStatusAction} className="inline-flex">
-          <input type="hidden" name="id" value={reportId} />
-          <input type="hidden" name="status" value="hanteras" />
-          <button type="submit" className={boardPrimaryButtonClass}>
-            Hanteras
-          </button>
-        </form>
+      {showStatusBadge ? (
+        <span className={boardReportStatusBadgeClass(status)}>
+          {OPERATIONAL_REPORT_STATUS_LABELS[status]}
+        </span>
+      ) : null}
+      {showHandle ? (
+        <span className="relative z-10 inline-flex">
+          <HandleReportStatusButton reportId={reportId} />
+        </span>
       ) : null}
     </>
   );

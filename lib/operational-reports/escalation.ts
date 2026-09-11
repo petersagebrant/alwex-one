@@ -18,6 +18,12 @@ export function canStartNewEscalation(
   return !requiresEscalationFromHistory(escalations);
 }
 
+export function hasAnsweredEscalation(
+  escalations: Array<{ status: ActivityEscalation["status"] }>,
+): boolean {
+  return escalations.some((item) => item.status === "answered");
+}
+
 export function sortEscalationHistory<T extends { askedAt: string }>(
   escalations: T[],
 ): T[] {

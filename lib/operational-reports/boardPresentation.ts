@@ -81,8 +81,5 @@ export function nextSteeringBoardStatus(
   if (current === "Klar") {
     return null;
   }
-  if (current === "Pågår") {
-    return { value: "Klar", label: "Klar" };
-  }
-  return { value: "Pågår", label: "Starta" };
+  return { value: "Klar", label: "Klar" };
 }

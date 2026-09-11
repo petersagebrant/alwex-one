@@ -7,6 +7,7 @@ import {
   appendEscalationHistory,
   canStartNewEscalation,
   filterOpenLeadershipEscalations,
+  hasAnsweredEscalation,
   requiresEscalationFromHistory,
   sortEscalationHistory,
 } from "./escalation";
@@ -82,6 +83,13 @@ describe("escalation history helpers", () => {
     assert.notEqual(answered.status, "Klar");
   });
 
+  it("hides Eskalera on the board after VD has answered", () => {
+    assert.equal(hasAnsweredEscalation([]), false);
+    assert.equal(hasAnsweredEscalation([second]), false);
+    assert.equal(hasAnsweredEscalation([first]), true);
+    assert.equal(hasAnsweredEscalation([first, second]), true);
+  });
+
   it("allows a new escalation after the previous one is answered", () => {
     assert.equal(canStartNewEscalation([first]), true);
     assert.equal(canStartNewEscalation([first, second]), false);
@@ -137,6 +145,7 @@ describe("escalation wiring", () => {
     assert.match(history, /Eskalerat av/);
     assert.match(history, /Besvarat av/);
     assert.match(history, /Beslut\/svar:/);
+    assert.doesNotMatch(history, /canCompleteFollowUpActivity|profile\.role|ao_chef/);
     assert.match(history, /formatDateTimeSv\(item\.askedAt\)/);
     assert.match(history, /formatDateTimeSv\(item\.repliedAt\)/);
     assert.match(reply, /Beslut \/ svar/);
@@ -150,5 +159,12 @@ describe("escalation wiring", () => {
     assert.doesNotMatch(section, /Eskalerat till ledningen/);
     assert.match(create, /requiresEscalation" value="1"/);
     assert.match(create, /escalationNote/);
+    const page = read("../../app/daglig-styrning/page.tsx");
+    const controls = read(
+      "../../components/daglig-styrning/ActivityRowControls.tsx",
+    );
+    assert.match(page, /canCompleteFollowUpActivity/);
+    assert.match(controls, /showKlar = Boolean\(nextStatus\) && canComplete/);
+    assert.match(controls, /hasAnsweredEscalation\(escalations\)/);
   });
 });

@@ -40,6 +40,31 @@ body {
   font-family: var(--font-geist-sans), ui-sans-serif, sans-serif;
 }
 
+/* Literal fills for board submit buttons. Safari UA `appearance: button` ignores var()/color-mix backgrounds. */
+.ds-btn-start {
+  background-color: #0369a1;
+  color: #fff;
+}
+.ds-btn-start:hover {
+  background-color: #075985;
+}
+.ds-btn-escalate {
+  background-color: #c2410c;
+  color: #fff;
+}
+.ds-btn-escalate:hover {
+  background-color: #9a3412;
+}
+.ds-btn-done {
+  background-color: #047857;
+  color: #fff;
+}
+.ds-btn-done:hover {
+  background-color: #065f46;
+}
+
+/* safelist so Tailwind also emits literal hex utilities: bg-[#0369a1] hover:bg-[#075985] bg-[#c2410c] hover:bg-[#9a3412] bg-[#047857] hover:bg-[#065f46] */
+
 /* Clickable controls: pointer. Text fields keep the I-beam. Unlayered so this beats Tailwind cursor-default. */
 button:not(:disabled):not([aria-disabled="true"]),
 a[href]:not([aria-disabled="true"]),

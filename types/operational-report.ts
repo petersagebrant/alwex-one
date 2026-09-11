@@ -57,7 +57,7 @@ export const OPERATIONAL_REPORT_PRIORITY_LABELS: Record<
 > = {
   info: "Information",
   follow_up: "Behöver följas upp",
-  urgent: "Akut",
+  urgent: "Akut/allvarligt",
 };
 
 export const OPERATIONAL_REPORT_STATUS_LABELS: Record<
@@ -95,4 +95,11 @@ export type CreateOperationalReportInput = {
 export type OperationalReportAreaOption = {
   id: string;
   name: string;
+};
+
+/** Public /rapportera dropdown. Unique `code` is for a future /rapportera/[code]. */
+export type PublicReportingUnitOption = {
+  id: string;
+  name: string;
+  defaultBusinessAreaId: string | null;
 };

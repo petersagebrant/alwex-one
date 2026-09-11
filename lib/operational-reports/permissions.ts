@@ -3,6 +3,8 @@ import {
   isVdEquivalent,
   type AppRole,
 } from "@/lib/auth/roles";
+import { hasAnsweredEscalation } from "@/lib/operational-reports/escalation";
+import type { ActivityEscalation } from "@/types/activity-escalation";
 
 /**
  * Matches RLS can_read_business_area: VD / Vice VD / admin / läsbehörighet
@@ -86,4 +88,29 @@ export function canReadActivityEscalation(
     profileBusinessAreaId,
     activityBusinessAreaId,
   );
+}
+
+/**
+ * After leadership answers an AO follow-up, only the area AO-chef closes it.
+ * VD / Vice VD keep write access for escalate/answer, but not Klar on the board.
+ */
+export function canCompleteFollowUpActivity(input: {
+  role: AppRole;
+  profileBusinessAreaId: string | null;
+  activityBusinessAreaId: string;
+  escalations: Array<{ status: ActivityEscalation["status"] }>;
+}): boolean {
+  if (
+    !canWriteOperationalForArea(
+      input.role,
+      input.profileBusinessAreaId,
+      input.activityBusinessAreaId,
+    )
+  ) {
+    return false;
+  }
+  if (isVdEquivalent(input.role) && hasAnsweredEscalation(input.escalations)) {
+    return false;
+  }
+  return true;
 }
